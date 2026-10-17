@@ -1,0 +1,12 @@
+[Unit]
+Description=Home Panel Kiosk
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/homepanel-kiosk
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

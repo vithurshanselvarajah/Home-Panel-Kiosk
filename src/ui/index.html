@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
+    <title>Home Panel</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <button id="return-home" class="return-home" hidden>⌂ <span>Return to Home</span></button>
+    <div id="side-panel-backdrop" class="side-panel-backdrop" hidden></div>
+    <main id="notice" class="notice" aria-live="polite" hidden>
+      <div class="notice-icon">⌁</div><div class="notice-copy"><strong id="notice-title"></strong><span id="notice-message"></span></div>
+      <button class="notice-close" data-action="dismiss_notification" aria-label="Dismiss">×</button>
+    </main>
+    <aside id="side-panel" class="side-panel" aria-hidden="true">
+      <header class="drawer-heading"><div><span class="eyebrow">HOME PANEL</span><h2>Quick controls</h2></div><button id="close-drawer" class="close-button" aria-label="Close controls">×</button></header>
+      <section class="service-status" aria-label="Service status">
+        <div class="service-row"><i class="service-led" data-service="mqtt"></i><span>MQTT</span><b id="mqtt-state">Checking</b></div>
+        <div class="service-row"><i class="service-led" data-service="immich"></i><span>Immich Kiosk</span><b id="immich-state">Checking</b></div>
+        <div class="service-row"><i class="service-led" data-service="dashboard"></i><span>Dashboard</span><b id="dashboard-state">Checking</b></div>
+      </section>
+      <div class="drawer-actions">
+        <button class="drawer-button" data-action="dashboard"><span>⌂</span><span id="dashboard-action-label" class="button-label">Dashboard</span></button>
+        <button class="drawer-button" data-action="slideshow" id="slideshow-action"><span>▧</span>Photo slideshow</button>
+        <button id="settings-button" class="drawer-button"><span>⚙</span>Settings</button>
+      </div>
+      <footer id="mode-label">Dashboard</footer>
+    </aside>
+    <section id="keyboard" class="keyboard" aria-label="Touch keyboard" hidden></section>
+    <section id="settings-panel" class="settings-panel" hidden>
+      <div class="panel-heading"><div><span class="eyebrow">DEVICE SETUP</span><h1>Home Panel</h1></div><button id="close-settings" class="close-button" aria-label="Close">×</button></div>
+      <p class="panel-intro">Connect your dashboard, Immich Kiosk, and Home Assistant controls.</p>
+      <form id="settings-form">
+        <label>Home Assistant dashboard URL<input name="dashboardUrl" type="url" placeholder="http://homeassistant.local:8123" required /></label>
+        <label>Immich Kiosk URL <span class="optional">optional</span><input name="slideshowUrl" type="url" placeholder="http://immich-kiosk.local:3000" /></label>
+        <div class="two-col"><label>Idle before slideshow <span class="field-unit">minutes · 0 disables</span><input name="idleToSlideshowMinutes" type="number" min="0" max="1440" /></label><label>Slideshow before screen off <span class="field-unit">minutes · 0 disables</span><input name="slideshowToOffMinutes" type="number" min="0" max="1440" /></label></div>
+        <label class="setting-toggle"><input name="touchKeyboardEnabled" type="checkbox" /> Enable automatic touch keyboard</label>
+        <div class="section-label"><span>HOME ASSISTANT COMMANDS</span><span class="line"></span></div>
+        <label>MQTT broker URL <span class="optional">optional</span><input name="mqttUrl" type="url" placeholder="mqtt://192.168.1.10:1883" /></label>
+        <div class="two-col"><label>MQTT username<input name="mqttUsername" autocomplete="username" /></label><label>MQTT password<input name="mqttPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" /></label></div>
+        <div class="two-col"><label>Topic prefix<input name="mqttPrefix" placeholder="homepanel" /></label><label>Device name<input name="deviceName" placeholder="Kitchen Display" /></label></div>
+        <div id="form-error" class="form-error" role="alert"></div>
+        <div class="form-footer"><span>Settings are stored on this device.</span><button class="save-button" type="submit">Save settings <span>→</span></button></div>
+      </form>
+    </section>
+    <script src="./renderer.js"></script>
+  </body>
+</html>
