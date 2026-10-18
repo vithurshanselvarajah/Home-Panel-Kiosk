@@ -1,6 +1,6 @@
 {
   "name": "homepanel-kiosk",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "A lightweight Home Assistant display kiosk for Linux and Raspberry Pi",
   "main": "src/main.js",

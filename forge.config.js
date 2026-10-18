@@ -25,7 +25,7 @@ module.exports = {
     name: "@electron-forge/publisher-github",
     config: {
       repository: Object.fromEntries(["owner", "name"].map((key, index) => [key, process.env.GITHUB_REPOSITORY.split("/")[index]])),
-      draft: true,
+      draft: false,
     },
   }] : [],
 };
