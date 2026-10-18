@@ -75,37 +75,103 @@ configure_pi_touch() {
     return 1
   }
 
+  # Pull defaults from any existing settings.json so re-running the installer
+  # pre-fills the prompts with the user's previous values.
+  local existing_dashboard_url="" existing_slideshow_url="" existing_mqtt_url=""
+  local existing_mqtt_user="" existing_mqtt_prefix="" existing_device_name=""
+  local existing_idle_slideshow_min="" existing_slideshow_off_min="" existing_touch_keyboard=""
+  if [[ -f "$settings_file" ]] && command -v python3 >/dev/null 2>&1; then
+    read_existing() {
+      PITOUCH_SETTINGS_PATH="$settings_file" python3 - "$1" <<'PY'
+import json, os, sys
+key = sys.argv[1]
+try:
+    with open(os.environ["PITOUCH_SETTINGS_PATH"]) as fh:
+        data = json.load(fh)
+    value = data.get(key, "")
+    if isinstance(value, bool):
+        print("true" if value else "false")
+    else:
+        print(value)
+except (OSError, ValueError):
+    print("")
+PY
+    }
+    existing_dashboard_url=$(read_existing dashboardUrl)
+    existing_slideshow_url=$(read_existing slideshowUrl)
+    existing_mqtt_url=$(read_existing mqttUrl)
+    existing_mqtt_user=$(read_existing mqttUsername)
+    existing_mqtt_prefix=$(read_existing mqttPrefix)
+    existing_device_name=$(read_existing deviceName)
+    existing_idle_slideshow_min=$(read_existing idleToSlideshowMinutes)
+    existing_slideshow_off_min=$(read_existing slideshowToOffMinutes)
+    existing_touch_keyboard=$(read_existing touchKeyboardEnabled)
+  fi
+
   local dashboard_url slideshow_url mqtt_url mqtt_user mqtt_pass mqtt_prefix device_name
   local idle_slideshow_min slideshow_off_min touch_keyboard
+
+  # Fall back to the documented defaults if no prior value is recorded.
+  local def_dashboard=${existing_dashboard_url:-http://homeassistant.local:8123}
+  local def_slideshow=${existing_slideshow_url:-}
+  local def_mqtt=${existing_mqtt_url:-}
+  local def_mqtt_user=${existing_mqtt_user:-}
+  local def_mqtt_prefix=${existing_mqtt_prefix:-homepanel}
+  local def_device_name=${existing_device_name:-Home Panel}
+  local def_idle_slideshow_min=${existing_idle_slideshow_min:-5}
+  local def_slideshow_off_min=${existing_slideshow_off_min:-15}
+  local def_touch_keyboard=${existing_touch_keyboard:-true}
 
   if $interactive; then
     echo ""
     echo "PiTouch initial setup"
     echo "Press Enter to accept the default shown in [brackets]; leave fields blank to skip optional ones."
     echo "Set PITOUCH_SKIP_SETUP=1 to skip this step and configure later from the app UI."
+    if [[ -f "$settings_file" ]]; then
+      echo "Existing settings found at $settings_file — defaults are pre-filled from those."
+    fi
     echo ""
     while true; do
-      read -r -p "Home Assistant dashboard URL [http://homeassistant.local:8123]: " dashboard_url
-      dashboard_url=${dashboard_url:-http://homeassistant.local:8123}
+      read -r -p "Home Assistant dashboard URL [$def_dashboard]: " dashboard_url
+      dashboard_url=${dashboard_url:-$def_dashboard}
       validate_url "$dashboard_url" "dashboard" "https?" && break
     done
-    read -r -p "Immich Kiosk URL (optional): " slideshow_url
+    if [[ -n "$def_slideshow" ]]; then
+      read -r -p "Immich Kiosk URL (optional) [$def_slideshow]: " slideshow_url
+    else
+      read -r -p "Immich Kiosk URL (optional): " slideshow_url
+    fi
+    slideshow_url=${slideshow_url:-$def_slideshow}
     if [[ -n "$slideshow_url" ]]; then validate_url "$slideshow_url" "slideshow" "https?" || slideshow_url=""; fi
-    read -r -p "Idle minutes before slideshow (0 disables) [5]: " idle_slideshow_min
-    idle_slideshow_min=${idle_slideshow_min:-5}
-    read -r -p "Slideshow minutes before screen off (0 disables) [15]: " slideshow_off_min
-    slideshow_off_min=${slideshow_off_min:-15}
-    read -r -p "Enable automatic touch keyboard? [Y/n]: " touch_keyboard_input
-    if [[ "${touch_keyboard_input:-y}" =~ ^[Yy]$ ]]; then touch_keyboard=true; else touch_keyboard=false; fi
-    read -r -p "MQTT broker URL (optional, e.g. mqtt://192.168.1.10:1883): " mqtt_url
+    read -r -p "Idle minutes before slideshow (0 disables) [$def_idle_slideshow_min]: " idle_slideshow_min
+    idle_slideshow_min=${idle_slideshow_min:-$def_idle_slideshow_min}
+    read -r -p "Slideshow minutes before screen off (0 disables) [$def_slideshow_off_min]: " slideshow_off_min
+    slideshow_off_min=${slideshow_off_min:-$def_slideshow_off_min}
+    local tk_prompt="[Y/n]"
+    [[ "$def_touch_keyboard" == "false" ]] && tk_prompt="[y/N]"
+    read -r -p "Enable automatic touch keyboard? $tk_prompt: " touch_keyboard_input
+    if [[ -z "$touch_keyboard_input" ]]; then
+      [[ "$def_touch_keyboard" == "false" ]] && touch_keyboard=false || touch_keyboard=true
+    elif [[ "$touch_keyboard_input" =~ ^[Yy]$ ]]; then touch_keyboard=true; else touch_keyboard=false; fi
+    if [[ -n "$def_mqtt" ]]; then
+      read -r -p "MQTT broker URL (optional) [$def_mqtt]: " mqtt_url
+    else
+      read -r -p "MQTT broker URL (optional, e.g. mqtt://192.168.1.10:1883): " mqtt_url
+    fi
+    mqtt_url=${mqtt_url:-$def_mqtt}
     if [[ -n "$mqtt_url" ]] && ! validate_url "$mqtt_url" "MQTT" "mqtts?"; then mqtt_url=""; fi
     if [[ -n "$mqtt_url" ]]; then
-      read -r -p "MQTT username (optional): " mqtt_user
-      read -r -s -p "MQTT password (optional, input hidden): " mqtt_pass; echo ""
-      read -r -p "MQTT topic prefix [homepanel]: " mqtt_prefix
-      mqtt_prefix=${mqtt_prefix:-homepanel}
-      read -r -p "Device name shown in Home Assistant [Home Panel]: " device_name
-      device_name=${device_name:-Home Panel}
+      local user_prompt="MQTT username (optional)"
+      [[ -n "$def_mqtt_user" ]] && user_prompt="MQTT username [$def_mqtt_user]"
+      read -r -p "$user_prompt: " mqtt_user
+      mqtt_user=${mqtt_user:-$def_mqtt_user}
+      read -r -s -p "MQTT password (optional, input hidden — leave blank to keep existing): " mqtt_pass; echo ""
+      read -r -p "MQTT topic prefix [$def_mqtt_prefix]: " mqtt_prefix
+      mqtt_prefix=${mqtt_prefix:-$def_mqtt_prefix}
+      local name_prompt="Device name shown in Home Assistant"
+      [[ -n "$def_device_name" && "$def_device_name" != "Home Panel" ]] && name_prompt="Device name shown in Home Assistant [$def_device_name]"
+      read -r -p "$name_prompt: " device_name
+      device_name=${device_name:-$def_device_name}
     fi
   else
     dashboard_url=${PITOUCH_DASHBOARD_URL:-http://homeassistant.local:8123}
