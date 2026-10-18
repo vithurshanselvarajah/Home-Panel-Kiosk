@@ -517,7 +517,7 @@ function connectMqtt() {
 function publishDiscovery() {
   const device = {
     identifiers: [deviceId], name: settings.deviceName || "Home Panel",
-    manufacturer: "Home Panel", model: "Electron kiosk", sw_version: app.getVersion(),
+    manufacturer: "Vithurshan Selvarajah", model: "Home Panel", sw_version: app.getVersion(),
   };
   const common = { availability_topic: `${settings.mqttPrefix}/availability`, device };
   const publishEntity = (component, objectId, config) => mqttClient.publish(
