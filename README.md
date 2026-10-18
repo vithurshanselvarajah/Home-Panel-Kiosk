@@ -47,7 +47,40 @@ From a terminal in a graphical desktop session, run the installer directly from 
 bash <(wget -qO- https://raw.githubusercontent.com/vithurshanselvarajah/Home-Panel-Kiosk/main/install.sh)
 ```
 
-It downloads the latest stable release for 64-bit Raspberry Pi OS (`arm64`) or Intel/AMD Linux (`amd64`). It installs the package, creates and starts a systemd user service, and saves the current `DISPLAY` and `WAYLAND_DISPLAY` values in that service (defaulting `DISPLAY` to `:0` when needed). The first launch opens the app settings so you can enter the Home Assistant dashboard URL and optional Immich Kiosk and MQTT settings. Set `PITOUCH_REPOSITORY` to override the default repository.
+It downloads the latest stable release for 64-bit Raspberry Pi OS (`arm64`) or Intel/AMD Linux (`amd64`). It installs the package, creates and starts a systemd user service, and saves the current `DISPLAY` and `WAYLAND_DISPLAY` values in that service (defaulting `DISPLAY` to `:0` when needed). On first install the script asks a few questions so the kiosk can launch preconfigured; you can also pre-fill those values via environment variables (see below) or set `PITOUCH_SKIP_SETUP=1` to fall back to the in-app settings UI. Set `PITOUCH_REPOSITORY` to override the default repository.
+
+### Pre-configuring the install
+
+The installer writes a `settings.json` into Electron's per-user app config directory (`${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk/settings.json`) so the kiosk launches with your settings applied. Any of the following `PITOUCH_*` environment variables can be supplied — when at least one is set, the installer skips its interactive prompts:
+
+| Variable | Description |
+|----------|-------------|
+| `PITOUCH_DASHBOARD_URL` | Home Assistant dashboard URL (default `http://homeassistant.local:8123`). |
+| `PITOUCH_SLIDESHOW_URL` | Optional Immich Kiosk URL. Leave empty to disable the slideshow. |
+| `PITOUCH_IDLE_SLIDESHOW_MINUTES` | Idle minutes before the slideshow opens (`0` disables). |
+| `PITOUCH_SLIDESHOW_OFF_MINUTES` | Slideshow minutes before the screen turns off (`0` disables). |
+| `PITOUCH_TOUCH_KEYBOARD` | `true` / `false` — enable the automatic touch keyboard. |
+| `PITOUCH_MQTT_URL` | Optional MQTT broker URL (`mqtt://` or `mqtts://`). |
+| `PITOUCH_MQTT_USERNAME` | MQTT username. |
+| `PITOUCH_MQTT_PASSWORD` | MQTT password (written in plain text; the app re-encrypts it on first save with Electron `safeStorage`). |
+| `PITOUCH_MQTT_PREFIX` | MQTT topic prefix (default `homepanel`). |
+| `PITOUCH_DEVICE_NAME` | Device name shown in Home Assistant (default `Home Panel`). |
+| `PITOUCH_SKIP_SETUP` | Set to `1` to skip install-time setup entirely; the app will open its settings UI on first launch. |
+
+Example fully unattended install:
+
+```sh
+PITOUCH_DASHBOARD_URL="https://homeassistant.example.com" \
+PITOUCH_SLIDESHOW_URL="https://immich-kiosk.example.com" \
+PITOUCH_MQTT_URL="mqtt://10.0.0.10:1883" \
+PITOUCH_MQTT_USERNAME="home-panel" \
+PITOUCH_MQTT_PASSWORD="$MQTT_PASSWORD" \
+PITOUCH_MQTT_PREFIX="homepanel_kitchen" \
+PITOUCH_DEVICE_NAME="Kitchen Display" \
+bash <(wget -qO- https://raw.githubusercontent.com/vithurshanselvarajah/Home-Panel-Kiosk/main/install.sh)
+```
+
+To re-run setup on an existing install, delete the file at `${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk/settings.json` (or remove the `configured` key) and re-run the installer; the UI settings panel can still be used at any time to change values after installation.
 
 To install without the script, download the `.deb` for your architecture from GitHub Releases and run `sudo apt install ./homepanel-kiosk_*.deb`. To disable automatic launch, run `systemctl --user disable --now homepanel-kiosk.service`. To update, run `bash install.sh` again.
 

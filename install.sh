@@ -48,6 +48,135 @@ wget --show-progress -q -O "$DEB_FILE" "$ASSET_URL"
 echo "Installing PiTouch..."
 sudo apt-get install -y "$DEB_FILE"
 
+# Resolve the per-user config directory used by the Electron app
+APP_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk
+
+# configure_pi_touch writes the initial settings.json so the app does not need
+# to be configured from its UI. Values may be supplied via PITOUCH_* env vars
+# (useful for automation) or gathered with read -p prompts.
+configure_pi_touch() {
+  local settings_file="${APP_CONFIG_DIR}/settings.json"
+  local interactive=true
+  if [[ -n "${PITOUCH_DASHBOARD_URL:-}${PITOUCH_SLIDESHOW_URL:-}${PITOUCH_MQTT_URL:-}${PITOUCH_MQTT_USERNAME:-}${PITOUCH_MQTT_PASSWORD:-}${PITOUCH_MQTT_PREFIX:-}${PITOUCH_DEVICE_NAME:-}${PITOUCH_IDLE_SLIDESHOW_MINUTES:-}${PITOUCH_SLIDESHOW_OFF_MINUTES:-}${PITOUCH_TOUCH_KEYBOARD:-}" ]]; then
+    interactive=false
+  fi
+
+  if [[ "${PITOUCH_SKIP_SETUP:-0}" == "1" ]]; then
+    echo "Skipping initial setup (PITOUCH_SKIP_SETUP=1). The app will open its settings UI on first launch."
+    return 0
+  fi
+
+  # Validate a URL; accept http(s) for dashboard/slideshow and mqtt(s) for the broker.
+  validate_url() {
+    local value=$1 label=$2 scheme=$3
+    if [[ -z "$value" ]]; then return 0; fi
+    if [[ "$value" =~ ^${scheme}:// ]]; then return 0; fi
+    echo "Invalid $label URL: '$value' (must start with ${scheme}://)" >&2
+    return 1
+  }
+
+  local dashboard_url slideshow_url mqtt_url mqtt_user mqtt_pass mqtt_prefix device_name
+  local idle_slideshow_min slideshow_off_min touch_keyboard
+
+  if $interactive; then
+    echo ""
+    echo "PiTouch initial setup"
+    echo "Press Enter to accept the default shown in [brackets]; leave fields blank to skip optional ones."
+    echo "Set PITOUCH_SKIP_SETUP=1 to skip this step and configure later from the app UI."
+    echo ""
+    while true; do
+      read -r -p "Home Assistant dashboard URL [http://homeassistant.local:8123]: " dashboard_url
+      dashboard_url=${dashboard_url:-http://homeassistant.local:8123}
+      validate_url "$dashboard_url" "dashboard" "https?" && break
+    done
+    read -r -p "Immich Kiosk URL (optional): " slideshow_url
+    if [[ -n "$slideshow_url" ]]; then validate_url "$slideshow_url" "slideshow" "https?" || slideshow_url=""; fi
+    read -r -p "Idle minutes before slideshow (0 disables) [5]: " idle_slideshow_min
+    idle_slideshow_min=${idle_slideshow_min:-5}
+    read -r -p "Slideshow minutes before screen off (0 disables) [15]: " slideshow_off_min
+    slideshow_off_min=${slideshow_off_min:-15}
+    read -r -p "Enable automatic touch keyboard? [Y/n]: " touch_keyboard_input
+    if [[ "${touch_keyboard_input:-y}" =~ ^[Yy]$ ]]; then touch_keyboard=true; else touch_keyboard=false; fi
+    read -r -p "MQTT broker URL (optional, e.g. mqtt://192.168.1.10:1883): " mqtt_url
+    if [[ -n "$mqtt_url" ]] && ! validate_url "$mqtt_url" "MQTT" "mqtts?"; then mqtt_url=""; fi
+    if [[ -n "$mqtt_url" ]]; then
+      read -r -p "MQTT username (optional): " mqtt_user
+      read -r -s -p "MQTT password (optional, input hidden): " mqtt_pass; echo ""
+      read -r -p "MQTT topic prefix [homepanel]: " mqtt_prefix
+      mqtt_prefix=${mqtt_prefix:-homepanel}
+      read -r -p "Device name shown in Home Assistant [Home Panel]: " device_name
+      device_name=${device_name:-Home Panel}
+    fi
+  else
+    dashboard_url=${PITOUCH_DASHBOARD_URL:-http://homeassistant.local:8123}
+    slideshow_url=${PITOUCH_SLIDESHOW_URL:-}
+    idle_slideshow_min=${PITOUCH_IDLE_SLIDESHOW_MINUTES:-5}
+    slideshow_off_min=${PITOUCH_SLIDESHOW_OFF_MINUTES:-15}
+    touch_keyboard=${PITOUCH_TOUCH_KEYBOARD:-true}
+    mqtt_url=${PITOUCH_MQTT_URL:-}
+    mqtt_user=${PITOUCH_MQTT_USERNAME:-}
+    mqtt_pass=${PITOUCH_MQTT_PASSWORD:-}
+    mqtt_prefix=${PITOUCH_MQTT_PREFIX:-homepanel}
+    device_name=${PITOUCH_DEVICE_NAME:-Home Panel}
+    validate_url "$dashboard_url" "dashboard" "https?" || { echo "PITOUCH_DASHBOARD_URL is invalid." >&2; exit 1; }
+    [[ -z "$slideshow_url" ]] || validate_url "$slideshow_url" "slideshow" "https?" || { echo "PITOUCH_SLIDESHOW_URL is invalid." >&2; exit 1; }
+    [[ -z "$mqtt_url" ]] || validate_url "$mqtt_url" "MQTT" "mqtts?" || { echo "PITOUCH_MQTT_URL is invalid." >&2; exit 1; }
+  fi
+
+  mkdir -p "$APP_CONFIG_DIR"
+
+  # Build the JSON file using python3 (already a hard dependency for this script)
+  # so values are escaped properly. The MQTT password is written in plaintext;
+  # the app will encrypt it on next save via Electron safeStorage.
+  PITOUCH_DASHBOARD_URL="$dashboard_url" \
+  PITOUCH_SLIDESHOW_URL="$slideshow_url" \
+  PITOUCH_IDLE_SLIDESHOW_MINUTES="$idle_slideshow_min" \
+  PITOUCH_SLIDESHOW_OFF_MINUTES="$slideshow_off_min" \
+  PITOUCH_TOUCH_KEYBOARD="$touch_keyboard" \
+  PITOUCH_MQTT_URL="$mqtt_url" \
+  PITOUCH_MQTT_USERNAME="$mqtt_user" \
+  PITOUCH_MQTT_PASSWORD="$mqtt_pass" \
+  PITOUCH_MQTT_PREFIX="$mqtt_prefix" \
+  PITOUCH_DEVICE_NAME="$device_name" \
+  python3 - "$settings_file" <<'PY'
+import json, os, sys
+
+def int_env(name, default):
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+out_path = sys.argv[1]
+settings = {
+    "configured": True,
+    "dashboardUrl": os.environ["PITOUCH_DASHBOARD_URL"],
+    "slideshowUrl": os.environ["PITOUCH_SLIDESHOW_URL"],
+    "idleToSlideshowMinutes": int_env("PITOUCH_IDLE_SLIDESHOW_MINUTES", 5),
+    "slideshowToOffMinutes": int_env("PITOUCH_SLIDESHOW_OFF_MINUTES", 15),
+    "startInKiosk": True,
+    "touchKeyboardEnabled": os.environ.get("PITOUCH_TOUCH_KEYBOARD", "true").lower() not in ("0", "false", "no"),
+    "mqttUrl": os.environ.get("PITOUCH_MQTT_URL", ""),
+    "mqttUsername": os.environ.get("PITOUCH_MQTT_USERNAME", ""),
+    "mqttPassword": os.environ.get("PITOUCH_MQTT_PASSWORD", ""),
+    "mqttPrefix": os.environ.get("PITOUCH_MQTT_PREFIX", "homepanel") or "homepanel",
+    "deviceName": os.environ.get("PITOUCH_DEVICE_NAME", "Home Panel") or "Home Panel",
+}
+
+with open(out_path, "w", encoding="utf-8") as fh:
+    json.dump(settings, fh, indent=2)
+    fh.write("\n")
+os.chmod(out_path, 0o600)
+PY
+
+  echo "Initial settings written to $settings_file."
+}
+
+configure_pi_touch
+
 DISPLAY_VALUE=${DISPLAY:-:0}
 WAYLAND_VALUE=${WAYLAND_DISPLAY:-}
 if [[ -z "$WAYLAND_VALUE" && -n "${XDG_RUNTIME_DIR:-}" && -S "$XDG_RUNTIME_DIR/wayland-0" ]]; then
@@ -87,4 +216,8 @@ else
 fi
 
 echo "PiTouch is installed and its user service is running."
-echo "The first launch opens the app settings so you can enter your Home Assistant URL."
+if [[ "${PITOUCH_SKIP_SETUP:-0}" == "1" ]]; then
+  echo "Initial setup was skipped; open Settings from the side panel to configure the dashboard."
+else
+  echo "If you skipped setup, open Settings from the side panel to update the dashboard URL or MQTT settings."
+fi
