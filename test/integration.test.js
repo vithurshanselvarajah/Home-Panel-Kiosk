@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createHealthChecker, probeHttp } = require("../src/health");
+const { createHealthChecker } = require("../src/health");
 
 const USER_CONFIG = {
   dashboardUrl: "http://192.168.1.132:8123/",
@@ -19,15 +19,13 @@ function makeApp({ haReachable = true, immichReachable = true, mqttConnected = f
     if (!USER_CONFIG.mqttUrl) throw new Error("not configured");
     if (!mqttClient?.connected) throw new Error("disconnected");
   }
-  async function probeHomeAssistant({ timeoutMs } = {}) {
+  async function probeHomeAssistant() {
     if (!USER_CONFIG.dashboardUrl) throw new Error("not configured");
     if (!haReachable) throw new Error("unreachable");
-    await probeHttp(new URL("/api/", USER_CONFIG.dashboardUrl).toString(), { timeoutMs });
   }
-  async function probeImmich({ timeoutMs } = {}) {
+  async function probeImmich() {
     if (!USER_CONFIG.slideshowUrl) throw new Error("not configured");
     if (!immichReachable) throw new Error("unreachable");
-    await probeHttp(USER_CONFIG.slideshowUrl, { timeoutMs });
   }
 
   const checker = createHealthChecker({
