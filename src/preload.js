@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld("homePanel", {
   getSettings: () => ipcRenderer.invoke("app:get-settings"),
   saveSettings: (settings) => ipcRenderer.invoke("app:save-settings", settings),
   command: (command) => ipcRenderer.invoke("app:command", command),
-  activity: () => ipcRenderer.send("app:activity"),
+  activity: (source) => ipcRenderer.send("app:activity", source),
   setOverlayExpanded: (expanded) => ipcRenderer.send("app:overlay-expanded", expanded),
   setSidePanel: (open) => ipcRenderer.send("app:side-panel", open),
   setKeyboard: (visible) => ipcRenderer.send("app:keyboard", visible),

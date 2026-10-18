@@ -27,13 +27,13 @@ function setDrawer(open) {
   drawer.setAttribute("aria-hidden", String(!open));
   drawerBackdrop.hidden = !open;
   window.homePanel.setSidePanel(open);
-  if (open) window.homePanel.activity();
+  if (open) window.homePanel.activity("keydown");
 }
 
 function openSettings() {
   panel.hidden = false;
   window.homePanel.setOverlayExpanded(true);
-  window.homePanel.activity();
+  window.homePanel.activity("keydown");
 }
 
 function renderKeyboard() {
@@ -68,7 +68,7 @@ function renderKeyboard() {
 function setKeyboard(visible) {
   keyboard.hidden = !visible;
   window.homePanel.setKeyboard(visible);
-  if (visible) { renderKeyboard(); window.homePanel.activity(); }
+  if (visible) { renderKeyboard(); window.homePanel.activity("keydown"); }
 }
 
 $("#close-drawer").addEventListener("click", () => setDrawer(false));
@@ -143,7 +143,7 @@ window.homePanel.onDismissNotification(() => {
 window.addEventListener("pointerdown", (event) => {
   if (!keyboard.hidden && !event.target.closest?.("#keyboard")) { setKeyboard(false); return; }
   touchStart = { x: event.clientX, y: event.clientY };
-  window.homePanel.activity();
+  window.homePanel.activity("keydown");
 }, { passive: true });
 window.addEventListener("pointerup", (event) => {
   if (!touchStart) return;
@@ -152,9 +152,9 @@ window.addEventListener("pointerup", (event) => {
   else if (dy < 90 && drawer.classList.contains("open") && dx > 65) setDrawer(false);
   touchStart = null;
 }, { passive: true });
-window.addEventListener("keydown", () => window.homePanel.activity());
+window.addEventListener("keydown", () => window.homePanel.activity("keydown"));
 window.addEventListener("pointermove", () => {
-  if (Date.now() - activitySentAt > 5000) { activitySentAt = Date.now(); window.homePanel.activity(); }
+  if (Date.now() - activitySentAt > 5000) { activitySentAt = Date.now(); window.homePanel.activity("pointermove"); }
 }, { passive: true });
 
 window.homePanel.getSettings().then((settings) => {

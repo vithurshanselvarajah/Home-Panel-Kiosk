@@ -6,6 +6,7 @@ const { execFile } = require("node:child_process");
 const os = require("node:os");
 const mqtt = require("mqtt");
 const { safeUrl, cameraObjectId } = require("./utils");
+const { createHealthChecker, probeHttp } = require("./health");
 
 const DEFAULTS = {
   configured: false,
@@ -56,6 +57,61 @@ let cameraRefreshTimer;
 let wasFullscreenBeforeCamera = null;
 const deviceId = `homepanel_${os.hostname().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) || "display"}`;
 const configPath = () => path.join(app.getPath("userData"), "settings.json");
+
+const healthChecker = createHealthChecker({
+  onChange: (name, status) => {
+    if (serviceStatus[name] === status) return;
+    serviceStatus[name] = status;
+    sendState();
+  },
+});
+
+function probeMqtt() {
+  if (!settings.mqttUrl) throw new Error("not configured");
+  if (!mqttClient?.connected) throw new Error("disconnected");
+}
+
+async function probeHomeAssistant({ timeoutMs } = {}) {
+  if (!settings.dashboardUrl) throw new Error("not configured");
+  await probeHttp(new URL("/api/", settings.dashboardUrl).toString(), { timeoutMs });
+}
+
+async function probeImmich({ timeoutMs } = {}) {
+  if (!settings.slideshowUrl) throw new Error("not configured");
+  await probeHttp(settings.slideshowUrl, { timeoutMs });
+}
+
+function registerHealthProbes() {
+  healthChecker.setProbes({
+    mqtt: probeMqtt,
+    dashboard: probeHomeAssistant,
+    immich: probeImmich,
+  });
+}
+
+function enableTouchEmulation(webContents) {
+  if (!webContents || webContents.isDestroyed()) return;
+  try {
+    if (!webContents.debugger.isAttached()) webContents.debugger.attach("1.3");
+    webContents.debugger.sendCommand("Emulation.setEmitTouchEventsForMouse", {
+      configuration: "mobile",
+      enabled: true,
+    }).catch(() => {});
+  } catch (error) {
+    console.warn("Touch emulation unavailable:", error.message);
+  }
+}
+
+async function injectScrollbarCSS(webContents) {
+  if (!webContents || webContents.isDestroyed()) return;
+  try {
+    await webContents.insertCSS(
+      "html, body { scrollbar-width: none !important; -ms-overflow-style: none !important; overscroll-behavior: contain; touch-action: pan-y; } ::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; } ::-webkit-scrollbar-thumb { background: transparent !important; }"
+    );
+  } catch (error) {
+    console.warn("Scrollbar CSS injection failed:", error.message);
+  }
+}
 
 function decodeSettings(data) {
   if (data.mqttPasswordEncrypted && safeStorage.isEncryptionAvailable()) {
@@ -126,10 +182,12 @@ function scheduleIdle() {
   }
 }
 
+const EXPLICIT_ACTIVITY_SOURCES = new Set(["mouseDown", "keyDown", "char", "pointer-down", "overlay-key"]);
+
 function recordActivity(source = "local") {
   lastActivity = Date.now();
   if (displayIsOff || requestedDisplayStatus === "off") turnDisplayOn();
-  if (mode === "slideshow" && source !== "home-assistant") openMode("dashboard");
+  if (mode === "slideshow" && EXPLICIT_ACTIVITY_SOURCES.has(source)) openMode("dashboard");
   scheduleIdle();
   sendState();
 }
@@ -157,6 +215,7 @@ function openMode(nextMode, target = "") {
   }
   if (mode === "camera" && nextMode !== "camera") cameraSelection = "Select camera";
   mode = nextMode;
+  if (mode === "slideshow") setKeyboardVisible(false);
   resizeOverlay();
   if (nextMode === "url") {
     clearTimeout(urlTimer);
@@ -170,7 +229,8 @@ function openMode(nextMode, target = "") {
     }, 30_000);
   }
   if (nextMode === "dashboard" || nextMode === "slideshow") {
-    serviceStatus[nextMode === "dashboard" ? "dashboard" : "immich"] = "connecting";
+    const key = nextMode === "dashboard" ? "dashboard" : "immich";
+    healthChecker.probe(key).catch(() => {});
   }
   remoteView.webContents.loadURL(url).catch((error) => console.error("View load failed:", error.message));
   if (nextMode === "camera") {
@@ -212,7 +272,9 @@ function resizeOverlay() {
 }
 
 function setKeyboardVisible(visible) {
-  keyboardVisible = Boolean(visible) && settings.touchKeyboardEnabled;
+  const next = Boolean(visible) && settings.touchKeyboardEnabled && mode !== "slideshow";
+  if (keyboardVisible === next) return;
+  keyboardVisible = next;
   resizeOverlay();
   sendState();
 }
@@ -410,9 +472,17 @@ function clearOpenUrlText() {
   mqttClient.publish(`${settings.mqttPrefix}/open_url/state`, " ", { qos: 1, retain: true });
 }
 
+function setServiceStatus(name, status) {
+  if (serviceStatus[name] === status) return;
+  serviceStatus[name] = status;
+  sendState();
+}
+
 function connectMqtt() {
-  if (!settings.mqttUrl) { serviceStatus.mqtt = "offline"; sendState(); return; }
-  serviceStatus.mqtt = "connecting";
+  if (!settings.mqttUrl) {
+    setServiceStatus("mqtt", "offline");
+    return;
+  }
   try {
     mqttClient = mqtt.connect(settings.mqttUrl, {
       username: settings.mqttUsername || undefined,
@@ -425,22 +495,23 @@ function connectMqtt() {
     });
     mqttClient.on("connect", () => {
       console.info("MQTT connected");
-      serviceStatus.mqtt = "online";
       mqttClient.publish(`${settings.mqttPrefix}/availability`, "online", { retain: true, qos: 1 });
       mqttClient.subscribe(`${settings.mqttPrefix}/command`, { qos: 1 });
       mqttClient.subscribe("homeassistant/status", { qos: 1 });
       publishDiscovery();
+      healthChecker.probe("mqtt").catch(() => {});
       sendState();
     });
     mqttClient.on("message", (topic, payload) => {
       if (topic === "homeassistant/status") { if (payload.toString() === "online") publishDiscovery(); return; }
       handleCommand(payload.toString());
     });
-    mqttClient.on("reconnect", () => { serviceStatus.mqtt = "connecting"; sendState(); });
-    mqttClient.on("offline", () => { serviceStatus.mqtt = "offline"; sendState(); });
-    mqttClient.on("close", () => { serviceStatus.mqtt = "offline"; sendState(); });
-    mqttClient.on("error", (error) => { serviceStatus.mqtt = "offline"; sendState(); console.warn("MQTT error:", error.message); });
-  } catch (error) { serviceStatus.mqtt = "offline"; sendState(); console.error("MQTT setup failed:", error.message); }
+    mqttClient.on("close", () => { healthChecker.probe("mqtt").catch(() => {}); });
+    mqttClient.on("error", () => { healthChecker.probe("mqtt").catch(() => {}); });
+  } catch (error) {
+    setServiceStatus("mqtt", "offline");
+    console.error("MQTT setup failed:", error.message);
+  }
 }
 
 function publishDiscovery() {
@@ -518,6 +589,7 @@ async function saveSettings(next) {
   await fs.writeFile(configPath(), JSON.stringify(persisted, null, 2), { mode: 0o600 });
   settings = { ...clean };
   if (!settings.touchKeyboardEnabled) setKeyboardVisible(false);
+  registerHealthProbes();
   if (mqttClient) { mqttClient.end(true); mqttClient = null; }
   connectMqtt();
   openMode(mode === "slideshow" ? "slideshow" : "dashboard");
@@ -548,16 +620,13 @@ function createWindow() {
     if (!safeUrl(url)) event.preventDefault();
   });
   remoteView.webContents.on("did-finish-load", () => {
-    if (["dashboard", "camera"].includes(mode)) serviceStatus.dashboard = "online";
-    if (mode === "slideshow") serviceStatus.immich = "online";
+    enableTouchEmulation(remoteView.webContents);
+    injectScrollbarCSS(remoteView.webContents).catch(() => {});
     if (mode === "camera") setTimeout(() => expandCameraDialog(), 250);
     sendState();
     scheduleCameraRefresh();
   });
-  remoteView.webContents.on("did-fail-load", (_event, code, _description, _url, isMainFrame) => {
-    if (!isMainFrame || code === -3) return;
-    if (mode === "dashboard") serviceStatus.dashboard = "offline";
-    if (mode === "slideshow") serviceStatus.immich = "offline";
+  remoteView.webContents.on("did-fail-load", () => {
     sendState();
   });
   remoteView.webContents.on("before-input-event", (_event, input) => {
@@ -596,7 +665,7 @@ function registerIpc() {
     if (!command || typeof command.action !== "string") return false;
     handleCommand(command); return true;
   });
-  ipcMain.on("app:activity", (event) => { assertOverlaySender(event); recordActivity("overlay"); });
+  ipcMain.on("app:activity", (event, source) => { assertOverlaySender(event); recordActivity(source === "keydown" ? "overlay-key" : "overlay"); });
   ipcMain.on("app:overlay-expanded", (event, expanded) => {
     assertOverlaySender(event);
     overlayExpanded = Boolean(expanded);
@@ -627,6 +696,8 @@ if (!hasLock) app.quit();
 app.whenReady().then(async () => {
   if (!hasLock) return;
   await loadSettings();
+  registerHealthProbes();
+  healthChecker.start();
   registerIpc();
   createWindow();
   connectMqtt();
@@ -639,6 +710,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
+  healthChecker.stop();
   cancelIdleTimers(); clearTimeout(cameraRefreshTimer); clearTimeout(urlTimer); clearTimeout(cameraTimer); clearTimeout(notificationTimer);
   if (mqttClient) {
     mqttClient.publish(`${settings.mqttPrefix}/availability`, "offline", { retain: true, qos: 1 });

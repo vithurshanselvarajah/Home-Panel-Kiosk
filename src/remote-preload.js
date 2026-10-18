@@ -25,7 +25,6 @@ function checkFocus() {
   focusCheckQueued = false;
   const active = deepestActiveElement();
   const next = isEditableElement(active) || active?.getAttribute?.("role") === "textbox";
-  if (next === focusedEditable) return;
   focusedEditable = next;
   ipcRenderer.send("remote:text-input", focusedEditable);
 }
