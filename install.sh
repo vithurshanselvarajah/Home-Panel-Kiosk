@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPOSITORY=${PITOUCH_REPOSITORY:-vithurshanselvarajah/pitouch}
+REPOSITORY=${PITOUCH_REPOSITORY:-vithurshanselvarajah/Home-Panel-Kiosk}
 if [[ -z "$REPOSITORY" ]] && command -v git >/dev/null 2>&1; then
   REMOTE=$(git config --get remote.origin.url 2>/dev/null || true)
   if [[ "$REMOTE" =~ github\.com[:/]([^/]+/[^/.]+)(\.git)?$ ]]; then

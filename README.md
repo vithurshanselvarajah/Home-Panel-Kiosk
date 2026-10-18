@@ -44,7 +44,7 @@ The view selector appears only when a slideshow URL is configured. Screen power 
 From a terminal in a graphical desktop session, run the installer directly from GitHub:
 
 ```sh
-bash <(wget -qO- https://raw.githubusercontent.com/vithurshanselvarajah/pitouch/main/install.sh)
+bash <(wget -qO- https://raw.githubusercontent.com/vithurshanselvarajah/Home-Panel-Kiosk/main/install.sh)
 ```
 
 It downloads the latest stable release for 64-bit Raspberry Pi OS (`arm64`) or Intel/AMD Linux (`amd64`). It installs the package, creates and starts a systemd user service, and saves the current `DISPLAY` and `WAYLAND_DISPLAY` values in that service (defaulting `DISPLAY` to `:0` when needed). The first launch opens the app settings so you can enter the Home Assistant dashboard URL and optional Immich Kiosk and MQTT settings. Set `PITOUCH_REPOSITORY` to override the default repository.
