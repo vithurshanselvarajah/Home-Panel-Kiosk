@@ -37,7 +37,7 @@ The app publishes JSON state to `<prefix>/state` and online status to `<prefix>/
 
 Home Assistant MQTT discovery entities use the default `homeassistant` discovery prefix. Configure the broker and prefix in the app before expecting entities to appear. The configured topic prefix only changes the app's command and state topics; it does not change Home Assistant's discovery prefix.
 
-The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`), and brightness requires a writable Linux backlight interface. Enter an HTTP(S) URL in **Open display URL** to show it on the display. The MQTT text value clears after use and the display returns to the dashboard after 30 seconds. Home Assistant camera entities appear in one dropdown automatically; selecting an option opens that entity’s native more-info camera view in full screen. Camera views return to the dashboard automatically after 30 seconds. A **Return to Home** button appears over custom URLs and camera views; Home Assistant automations can also send `{"action":"dashboard"}`.
+The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface. Enter an HTTP(S) URL in **Open display URL** to show it on the display. The MQTT text value clears after use and the display returns to the dashboard after 30 seconds. Home Assistant camera entities appear in one dropdown automatically; selecting an option opens that entity’s native more-info camera view in full screen. Camera views return to the dashboard automatically after 30 seconds. A **Return to Home** button appears over custom URLs and camera views; Home Assistant automations can also send `{"action":"dashboard"}`.
 
 ## Install on Debian or Raspberry Pi OS
 
@@ -67,6 +67,7 @@ The installer writes a `settings.json` into Electron's per-user app config direc
 | `PITOUCH_DEVICE_NAME` | Device name shown in Home Assistant (default `Home Panel`). |
 | `PITOUCH_SKIP_SETUP` | Set to `1` to skip install-time setup entirely; the app will open its settings UI on first launch. |
 | `PITOUCH_SKIP_SERVICE` | Set to `1` to skip installing, enabling, or starting the systemd user service. |
+| `PITOUCH_INSTALL_WLOPM` | Set to `0` to skip installing the optional Wayland display power helper. |
 
 Example fully unattended install:
 

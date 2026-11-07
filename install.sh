@@ -49,6 +49,12 @@ wget --show-progress -q -O "$DEB_FILE" "$ASSET_URL"
 
 echo "Installing PiTouch..."
 sudo apt-get install -y "$DEB_FILE"
+if [[ "${PITOUCH_INSTALL_WLOPM:-1}" != "0" ]] && command -v apt-cache >/dev/null 2>&1 && apt-cache show wlopm >/dev/null 2>&1; then
+  echo "Installing optional Wayland display power helper..."
+  if ! sudo apt-get install -y wlopm; then
+    echo "Warning: wlopm could not be installed; screen power controls may remain unavailable." >&2
+  fi
+fi
 
 # Resolve the per-user config directory used by the Electron app
 APP_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk
