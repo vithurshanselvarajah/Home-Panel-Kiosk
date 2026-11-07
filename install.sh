@@ -24,7 +24,9 @@ esac
 command -v wget >/dev/null 2>&1 || { echo "wget is required." >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required to read the GitHub release metadata." >&2; exit 1; }
 command -v apt-get >/dev/null 2>&1 || { echo "This installer requires Debian or Raspberry Pi OS with apt-get." >&2; exit 1; }
-command -v systemctl >/dev/null 2>&1 || { echo "systemd is required." >&2; exit 1; }
+if [[ "${PITOUCH_SKIP_SERVICE:-0}" != "1" ]]; then
+  command -v systemctl >/dev/null 2>&1 || { echo "systemd is required unless PITOUCH_SKIP_SERVICE=1." >&2; exit 1; }
+fi
 
 echo "Finding the latest PiTouch release for $DEB_ARCH..."
 API_URL="https://api.github.com/repos/$REPOSITORY/releases/latest"
@@ -249,11 +251,14 @@ if [[ -z "$WAYLAND_VALUE" && -n "${XDG_RUNTIME_DIR:-}" && -S "$XDG_RUNTIME_DIR/w
   WAYLAND_VALUE=wayland-0
 fi
 
-SERVICE_DIR="$HOME/.config/systemd/user"
-SERVICE_FILE="$SERVICE_DIR/homepanel-kiosk.service"
-mkdir -p "$SERVICE_DIR"
-{
-  cat <<'UNIT'
+if [[ "${PITOUCH_SKIP_SERVICE:-0}" == "1" ]]; then
+  echo "Skipping user service setup (PITOUCH_SKIP_SERVICE=1)."
+else
+  SERVICE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+  SERVICE_FILE="$SERVICE_DIR/homepanel-kiosk.service"
+  mkdir -p "$SERVICE_DIR"
+  {
+    cat <<'UNIT'
 [Unit]
 Description=Home Panel Kiosk
 After=graphical-session.target network-online.target
@@ -264,24 +269,31 @@ ExecStart=/usr/bin/homepanel-kiosk
 Restart=on-failure
 RestartSec=5
 UNIT
-  printf 'Environment="DISPLAY=%s"\n' "$DISPLAY_VALUE"
-  if [[ -n "$WAYLAND_VALUE" ]]; then printf 'Environment="WAYLAND_DISPLAY=%s"\n' "$WAYLAND_VALUE"; fi
-  if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then printf 'Environment="XDG_RUNTIME_DIR=%s"\n' "$XDG_RUNTIME_DIR"; fi
-  cat <<'UNIT'
+    printf 'Environment="DISPLAY=%s"\n' "$DISPLAY_VALUE"
+    if [[ -n "$WAYLAND_VALUE" ]]; then printf 'Environment="WAYLAND_DISPLAY=%s"\n' "$WAYLAND_VALUE"; fi
+    if [[ -n "${XDG_RUNTIME_DIR:-}" ]]; then printf 'Environment="XDG_RUNTIME_DIR=%s"\n' "$XDG_RUNTIME_DIR"; fi
+    cat <<'UNIT'
 
 [Install]
 WantedBy=default.target
 UNIT
-} > "$SERVICE_FILE"
+  } > "$SERVICE_FILE"
 
-systemctl --user daemon-reload
-if systemctl --user --quiet is-active homepanel-kiosk.service; then
-  systemctl --user restart homepanel-kiosk.service
-else
-  systemctl --user enable --now homepanel-kiosk.service
+  systemctl --user daemon-reload
+  systemctl --user enable homepanel-kiosk.service
+  if systemctl --user --quiet is-active homepanel-kiosk.service; then
+    systemctl --user restart homepanel-kiosk.service
+  else
+    systemctl --user start homepanel-kiosk.service
+  fi
+  if ! systemctl --user --quiet is-active homepanel-kiosk.service; then
+    echo "Home Panel Kiosk user service did not become active." >&2
+    systemctl --user status homepanel-kiosk.service --no-pager >&2 || true
+    exit 1
+  fi
+
+  echo "PiTouch is installed and its user service is running."
 fi
-
-echo "PiTouch is installed and its user service is running."
 if [[ "${PITOUCH_SKIP_SETUP:-0}" == "1" ]]; then
   echo "Initial setup was skipped; open Settings from the side panel to configure the dashboard."
 else

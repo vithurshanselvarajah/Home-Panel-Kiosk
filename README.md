@@ -47,7 +47,7 @@ From a terminal in a graphical desktop session, run the installer directly from 
 bash <(wget -qO- https://raw.githubusercontent.com/vithurshanselvarajah/Home-Panel-Kiosk/main/install.sh)
 ```
 
-It downloads the latest stable release for 64-bit Raspberry Pi OS (`arm64`) or Intel/AMD Linux (`amd64`). It installs the package, creates and starts a systemd user service, and saves the current `DISPLAY` and `WAYLAND_DISPLAY` values in that service (defaulting `DISPLAY` to `:0` when needed). On first install the script asks a few questions so the kiosk can launch preconfigured; you can also pre-fill those values via environment variables (see below) or set `PITOUCH_SKIP_SETUP=1` to fall back to the in-app settings UI. Set `PITOUCH_REPOSITORY` to override the default repository.
+It downloads the latest stable release for 64-bit Raspberry Pi OS (`arm64`) or Intel/AMD Linux (`amd64`). It installs the package, creates and starts a systemd user service, and saves the current `DISPLAY` and `WAYLAND_DISPLAY` values in that service (defaulting `DISPLAY` to `:0` when needed). The unit is stored under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user`; the installer verifies it is active and reports its status if startup fails. On first install the script asks a few questions so the kiosk can launch preconfigured; you can also pre-fill those values via environment variables (see below) or set `PITOUCH_SKIP_SETUP=1` to fall back to the in-app settings UI. Set `PITOUCH_SKIP_SERVICE=1` to install or update the package without changing the user service. Set `PITOUCH_REPOSITORY` to override the default repository.
 
 ### Pre-configuring the install
 
@@ -66,6 +66,7 @@ The installer writes a `settings.json` into Electron's per-user app config direc
 | `PITOUCH_MQTT_PREFIX` | MQTT topic prefix (default `homepanel`). |
 | `PITOUCH_DEVICE_NAME` | Device name shown in Home Assistant (default `Home Panel`). |
 | `PITOUCH_SKIP_SETUP` | Set to `1` to skip install-time setup entirely; the app will open its settings UI on first launch. |
+| `PITOUCH_SKIP_SERVICE` | Set to `1` to skip installing, enabling, or starting the systemd user service. |
 
 Example fully unattended install:
 
