@@ -20,7 +20,7 @@
         <div class="service-row"><i class="service-led" data-service="mqtt"></i><span>MQTT</span><b id="mqtt-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="immich"></i><span>Immich Kiosk</span><b id="immich-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="dashboard"></i><span>Dashboard</span><b id="dashboard-state">Checking</b></div>
-        <div class="service-row" id="echomuse-row" hidden><i class="service-led" data-service="echomuse"></i><span>EchoMuse</span><em class="listen-badge" id="echomuse-listen" hidden>unknown</em><b id="echomuse-state">Unknown</b></div>
+        <div class="service-row" id="echomuse-row" hidden><i class="service-led" data-service="echomuse"></i><span>EchoMuse</span><b id="echomuse-state">Unknown</b></div>
       </section>
       <div class="drawer-actions">
         <button class="drawer-button" data-action="dashboard"><span>⌂</span><span id="dashboard-action-label" class="button-label">Dashboard</span></button>
@@ -30,7 +30,7 @@
       <footer id="mode-label">Dashboard</footer>
     </aside>
     <section id="keyboard" class="keyboard" aria-label="Touch keyboard" hidden></section>
-    <canvas id="voice-wave" class="voice-wave" aria-hidden="true" hidden></canvas>
+    <canvas id="voice-indicator" class="voice-indicator" aria-hidden="true" hidden></canvas>
     <section id="settings-panel" class="settings-panel" hidden>
       <div class="panel-heading"><div><span class="eyebrow">DEVICE SETUP</span><h1>Home Panel</h1></div><button id="close-settings" class="close-button" aria-label="Close">×</button></div>
       <nav class="settings-tabs" role="tablist">
@@ -53,32 +53,30 @@
       </form>
       </div>
       <div class="settings-view" id="settings-view-echomuse" role="tabpanel" aria-labelledby="tab-echomuse" hidden>
+        <div class="echomuse-status" id="echomuse-status">
+          <i class="service-led" data-service="echomuse-settings"></i>
+          <div>
+            <strong id="echomuse-status-label">Unknown</strong>
+            <span id="echomuse-status-reason">Not connected to a controller.</span>
+          </div>
+        </div>
         <p class="panel-intro">Join the EchoMuse controller and choose how this device listens.</p>
         <form id="echomuse-form">
-          <div class="section-label"><span>CONNECTION</span><span class="line"></span></div>
-          <label>Controller URL <span class="optional">optional · blank discovers by mDNS</span><input name="echomuseControllerUrl" type="url" placeholder="ws://192.168.1.10:8767" /></label>
-          <div class="two-col"><label>Controller TLS port <span class="field-unit">0 when none</span><input name="echomuseControllerTlsPort" type="number" min="0" max="65535" placeholder="0" /></label><label>Device ID <span class="field-unit">must stay stable</span><input name="echomuseDeviceId" type="text" placeholder="homepanel-kitchen" /></label></div>
-          <div class="two-col"><label>Board <span class="field-unit">named in Home Assistant</span><input name="echomuseBoard" type="text" placeholder="home-panel" /></label><label>Base OS<select name="echomuseBaseOs"><option value="linux">Linux</option><option value="other">Other</option></select></label></div>
-          <div class="section-label"><span>LISTENING</span><span class="line"></span></div>
+          <div class="section-label"><span>DEVICE</span><span class="line"></span></div>
+          <label>Board <span class="optional">named in Home Assistant</span><input name="echomuseBoard" type="text" placeholder="home-panel" /></label>
+          <div class="section-label"><span>WAKE WORD</span><span class="line"></span></div>
           <label>Wake word mode<select name="echomuseWakeMode"><option value="on">On device — nothing is sent until it fires</option><option value="off">On controller — audio streams continuously</option><option value="shadow">Shadow — both score, diagnostic only</option></select></label>
-          <div class="two-col"><label>Wake threshold <span class="field-unit">0 to 1</span><input name="echomuseWakeThreshold" type="number" min="0" max="1" step="0.01" placeholder="0.5" /></label><label>Startup volume <span class="field-unit">0 to 100</span><input name="echomuseStartupVolume" type="number" min="0" max="100" placeholder="50" /></label></div>
+          <div class="two-col"><label>Wake threshold <span class="field-unit">0 to 1</span><input name="echomuseWakeThreshold" type="number" min="0" max="1" step="0.01" placeholder="0.5" /></label><label>Wake sound<select name="echomuseWakeSound"><option value="on">On</option><option value="off">Off</option></select></label></div>
           <label class="setting-toggle"><input name="echomuseWakeWordEnabled" type="checkbox" checked /> Wake word enabled</label>
           <label class="setting-toggle"><input name="echomuseBargeIn" type="checkbox" /> Allow barge-in during a response</label>
-          <label class="setting-toggle"><input name="echomuseMuteButton" type="checkbox" checked /> The device has its own mute switch</label>
-          <div class="section-label"><span>AUDIO</span><span class="line"></span></div>
-          <div class="two-col"><label>Microphone gain <span class="field-unit">dB</span><input name="echomuseMicGainDb" type="number" min="-30" max="30" placeholder="0" /></label><label>Ducking <span class="field-unit">dB under a response</span><input name="echomuseDuckDb" type="number" min="-30" max="0" step="0.5" placeholder="-6" /></label></div>
+          <div class="section-label"><span>MICROPHONE</span><span class="line"></span></div>
+          <div class="two-col"><label>Microphone gain <span class="field-unit">dB</span><input name="echomuseMicGainDb" type="number" min="-30" max="30" placeholder="0" /></label><label>Startup volume <span class="field-unit">0 to 100</span><input name="echomuseStartupVolume" type="number" min="0" max="100" placeholder="50" /></label></div>
           <div class="two-col"><label>VAD threshold <span class="field-unit">0 to 1</span><input name="echomuseVadThreshold" type="number" min="0" max="1" step="0.01" placeholder="0.5" /></label><label>VAD speech time <span class="field-unit">ms</span><input name="echomuseVadSpeechMs" type="number" min="0" max="2000" placeholder="300" /></label></div>
           <label>VAD silence time <span class="field-unit">ms</span><input name="echomuseVadSilenceMs" type="number" min="0" max="5000" placeholder="700" /></label>
-          <div class="section-label"><span>CAPABILITIES</span><span class="line"></span></div>
-          <div class="capability-grid" id="echomuse-capabilities">
-            <label class="setting-toggle"><input name="cap_mic" type="checkbox" checked /> Microphone</label>
-            <label class="setting-toggle"><input name="cap_speaker" type="checkbox" checked /> Speaker</label>
-            <label class="setting-toggle"><input name="cap_buttons" type="checkbox" checked /> Buttons</label>
-            <label class="setting-toggle"><input name="cap_pairing" type="checkbox" checked /> Pairing</label>
-            <label class="setting-toggle"><input name="cap_oww_local_only" type="checkbox" /> Wake word stays on device</label>
-            <label class="setting-toggle"><input name="cap_leds" type="checkbox" /> LED ring</label>
-            <label class="setting-toggle"><input name="cap_sendspin" type="checkbox" /> Sendspin music</label>
-          </div>
+          <div class="section-label"><span>SPEAKER</span><span class="line"></span></div>
+          <div class="two-col"><label>Output volume <span class="field-unit">0 to 100</span><input name="echomuseVolume" type="number" min="0" max="100" placeholder="50" /></label><label>Ducking <span class="field-unit">dB under a response</span><input name="echomuseDuckDb" type="number" min="-30" max="0" step="0.5" placeholder="-6" /></label></div>
+          <label class="setting-toggle"><input name="echomuseMuteButton" type="checkbox" checked /> The device has its own mute switch</label>
+          <label class="setting-toggle"><input name="echomuseVolumeButtonSound" type="checkbox" checked /> Play a sound on the volume buttons</label>
           <div id="echomuse-error" class="form-error" role="alert"></div>
           <div class="form-footer"><span>EchoMuse settings are stored on this device.</span><button class="save-button" type="submit">Save EchoMuse <span>→</span></button></div>
         </form>
