@@ -121,11 +121,26 @@ either a block of PCM samples over IPC, or a small spectrum (a few bands).
 **Why dots and not a bar chart.** A row of bars reads as a measurement; a row
 of dots reads as a voice assistant. The second is what this is.
 
+**The rainbow.** The dots and the label cycle through a spectrum rather than
+sitting in one colour. Google colours its voice assistant the same way, and a
+single flat colour does not read as "the assistant is working" nearly as well.
+The two colours either side of a position are blended, so the row shows a
+smooth sweep rather than seven separate colours, and the whole thing drifts
+slowly rather than flickering.
+
+Both the dots and the label glow. The label takes the colour of the middle
+dot, so the text and the dots are the same moment of the same rainbow, and the
+glow on each is the colour of the dot it belongs to.
+
 **Placement:** bottom-centre of the view, in the *overlay* web contents (the
 one that already hosts the drawer and keyboard) rather than injected into the
 Home Assistant page. That way it survives HA re-renders and needs no CSS
 injection into a page we do not control. It lifts above the on-screen keyboard
 when that is up.
+
+**The rest of the display dims** while the assistant is working, so the eye
+goes to the indicator rather than the dashboard. The dim is a separate layer
+that fades in and out rather than switching, so it does not flash.
 
 It must never show when the device is not actually listening or speaking.
 Showing an indicator that is not measuring anything is the same class of lie as
@@ -215,13 +230,17 @@ the ring, so the natural shape is for the SDK to publish a comparable
 2. **Dots, not a ring.** The ring is the Echo's language and this device has
    no ring. A row of dots reads as a voice assistant, which is what this is.
 
-3. **The indicator only appears when the device is doing something.** It is
+3. **The rainbow, like Google.** The dots and the label cycle through a
+   spectrum, and the display dims behind them. A single flat colour does not
+   read as "the assistant is working" nearly as well.
+
+4. **The indicator only appears when the device is doing something.** It is
    not a permanent row of status LEDs.
 
-4. **Unknown is drawn as unknown.** Never as the opposite. A grey "Unknown"
+5. **Unknown is drawn as unknown.** Never as the opposite. A grey "Unknown"
    is correct; a green "Connected" when the device has not said is a lie.
 
-5. **The settings page is short on purpose.** Board, wake word, microphone
+6. **The settings page is short on purpose.** Board, wake word, microphone
    and speaker. Everything else is either constant or a deployment concern.
 
 ## Prototype

@@ -7,6 +7,7 @@ const form = $("#settings-form");
 const echomuseForm = $("#echomuse-form");
 const echomuseUI = window.EchoMuseUI ? window.EchoMuseUI.create({
   container: $("#voice-indicator"),
+  dim: $("#voice-dim"),
   row: $("#echomuse-row"),
   state: $("#echomuse-state"),
   led: document.querySelector('[data-service="echomuse"]'),

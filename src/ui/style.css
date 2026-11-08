@@ -16,10 +16,13 @@
 
 /* The voice indicator is an overlay on the view, so it never depends on the
    Home Assistant page re-rendering to stay put. */
+.voice-dim{position:absolute;inset:0;z-index:7;background:rgba(4,7,12,.55);pointer-events:none;opacity:0;transition:opacity .28s ease}
+.voice-dim[hidden]{display:none}
+.voice-dim.is-active{opacity:1}
 .voice-indicator{position:absolute;left:0;right:0;bottom:0;z-index:8;display:flex;flex-direction:column;align-items:center;gap:9px;padding-bottom:16px;pointer-events:none;transition:bottom .16s ease}
 .voice-indicator[hidden]{display:none}
-.voice-indicator__label{color:var(--accent);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;line-height:1}
-.voice-indicator__canvas{width:100%;height:34px}
+.voice-indicator__label{color:var(--accent);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;line-height:1;transition:color .28s ease}
+.voice-indicator__canvas{display:block;width:100%;height:34px}
 
 /* Settings tabs */
 .settings-tabs{display:flex;gap:4px;flex:none;margin:0 0 16px;padding:3px;border:1px solid rgba(255,255,255,.08);border-radius:11px;background:rgba(255,255,255,.03)}
