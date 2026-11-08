@@ -7,10 +7,6 @@ function safeUrl(raw) {
   }
 }
 
-function cameraObjectId(name) {
-  return `camera_${String(name).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 48)}`;
-}
-
 const NAMED_KEYS = new Set(["BACKSPACE", "SPACE", "ENTER", "SHIFT", "TAB", "LEFT", "RIGHT"]);
 
 // Applies an on-screen keyboard key to a text-like field descriptor and
@@ -44,4 +40,4 @@ function insertText(field, current, text) {
   return { value: current.slice(0, start) + text + current.slice(end), caret: start + text.length };
 }
 
-module.exports = { safeUrl, cameraObjectId, editFieldValue };
+module.exports = { safeUrl, editFieldValue };

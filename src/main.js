@@ -4,8 +4,7 @@ const fsSync = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const os = require("node:os");
-const mqtt = require("mqtt");
-const { safeUrl, cameraObjectId } = require("./utils");
+const { safeUrl } = require("./utils");
 const { createHealthChecker, probeHttp } = require("./health");
 
 const DEFAULTS = {
@@ -35,7 +34,6 @@ let offTimer;
 let displayIsOff = false;
 let notificationTimer;
 let urlTimer;
-let cameraTimer;
 let overlayAttached = false;
 let overlayExpanded = false;
 let sidePanelOpen = false;
@@ -47,14 +45,12 @@ let lastPublishedMode;
 let lastPublishedPower;
 let lastPublishedServiceStatus = "";
 let lastPublishedAt = 0;
+let lastSentState = "";
 let displayCommandId = 0;
 let requestedDisplayStatus = null;
-let cameraSelection = "Select camera";
-let lastPublishedCameraSelection;
-let homeAssistantCameras = [];
 let legacyCameraNames = [];
-let cameraRefreshTimer;
-let wasFullscreenBeforeCamera = null;
+let overlayRecycleTimer;
+const OVERLAY_RECYCLE_DELAY_MS = 60_000;
 const deviceId = `homepanel_${os.hostname().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) || "display"}`;
 const configPath = () => path.join(app.getPath("userData"), "settings.json");
 
@@ -73,7 +69,9 @@ function probeMqtt() {
 
 async function probeHomeAssistant({ timeoutMs } = {}) {
   if (!settings.dashboardUrl) throw new Error("not configured");
-  await probeHttp(new URL("/api/", settings.dashboardUrl).toString(), { timeoutMs });
+  // Use the manifest endpoint rather than /api/, which returns the whole state
+  // database and is far heavier to fetch and parse.
+  await probeHttp(new URL("/manifest.json", settings.dashboardUrl).toString(), { timeoutMs });
 }
 
 async function probeImmich({ timeoutMs } = {}) {
@@ -120,7 +118,6 @@ async function decodeSettings(data) {
       data.mqttPassword = result;
     } catch {}
   }
-  legacyCameraNames = Array.isArray(data.cameras) ? data.cameras.map((camera) => camera?.name).filter(Boolean) : [];
   delete data.cameras;
   delete data.mqttPasswordEncrypted;
   return { ...DEFAULTS, ...data };
@@ -131,19 +128,23 @@ function assertOverlaySender(event) {
 }
 
 function sendState() {
-  const state = { mode, cameraSelection, displayIsOff, keyboardVisible, sidePanelOpen, serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
-  if (overlayView?.webContents && !overlayView.webContents.isDestroyed()) overlayView.webContents.send("app:state", state);
+  const state = { mode, displayIsOff, keyboardVisible, sidePanelOpen, serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
+  // Only message the overlay when something it renders has actually changed.
+  const fingerprint = `${state.mode}|${state.displayIsOff}|${state.keyboardVisible}|${state.sidePanelOpen}|${JSON.stringify(state.serviceStatus)}`;
+  if (fingerprint !== lastSentState) {
+    lastSentState = fingerprint;
+    if (overlayView?.webContents && !overlayView.webContents.isDestroyed()) overlayView.webContents.send("app:state", state);
+  }
   publishState(state);
 }
 
 function publishState(state) {
   if (!mqttClient?.connected) return;
   const currentServiceStatus = JSON.stringify(state.serviceStatus);
-  const stateChanged = state.mode !== lastPublishedMode || state.cameraSelection !== lastPublishedCameraSelection || state.displayIsOff !== lastPublishedPower || currentServiceStatus !== lastPublishedServiceStatus;
+  const stateChanged = state.mode !== lastPublishedMode || state.displayIsOff !== lastPublishedPower || currentServiceStatus !== lastPublishedServiceStatus;
   if (!stateChanged && Date.now() - lastPublishedAt < 30_000) return;
   lastPublishedMode = state.mode;
   lastPublishedPower = state.displayIsOff;
-  lastPublishedCameraSelection = state.cameraSelection;
   lastPublishedServiceStatus = currentServiceStatus;
   lastPublishedAt = Date.now();
   mqttClient.publish(`${settings.mqttPrefix}/state`, JSON.stringify(state), { qos: 1, retain: true });
@@ -151,6 +152,7 @@ function publishState(state) {
 
 function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {
   const safeDuration = Math.max(1000, Math.min(Number(duration) || 8000, 120000));
+  ensureOverlayView();
   overlayView?.webContents?.send("app:notification", {
     title: String(title).slice(0, 100),
     message: String(message).slice(0, 500),
@@ -170,7 +172,6 @@ function cancelIdleTimers() {
 
 function scheduleIdle() {
   cancelIdleTimers();
-  if (mode === "camera") return;
   const slideMinutes = Math.max(0, Number(settings.idleToSlideshowMinutes) || 0);
   const offMinutes = Math.max(0, Number(settings.slideshowToOffMinutes) || 0);
   const elapsed = Date.now() - lastActivity;
@@ -200,25 +201,16 @@ function openMode(nextMode, target = "") {
     clearTimeout(urlTimer);
     urlTimer = undefined;
   }
-  clearTimeout(cameraTimer);
-  cameraTimer = undefined;
   const url = nextMode === "dashboard" ? safeUrl(settings.dashboardUrl)
     : nextMode === "slideshow" ? safeUrl(settings.slideshowUrl)
-      : ["camera", "url"].includes(nextMode) ? safeUrl(target) : null;
+      : nextMode === "url" ? safeUrl(target) : null;
   if (!url) {
     showNotice({ title: "View unavailable", message: nextMode === "slideshow" ? "Set an Immich Kiosk URL in settings." : "The configured URL is invalid." });
     return false;
   }
-  if (nextMode === "camera" && mode !== "camera" && win && !win.isDestroyed()) {
-    wasFullscreenBeforeCamera = win.isFullScreen();
-    if (!wasFullscreenBeforeCamera) win.setFullScreen(true);
-  } else if (mode === "camera" && nextMode !== "camera" && wasFullscreenBeforeCamera !== null) {
-    if (win && !win.isDestroyed() && !wasFullscreenBeforeCamera) win.setFullScreen(false);
-    wasFullscreenBeforeCamera = null;
-  }
-  if (mode === "camera" && nextMode !== "camera") cameraSelection = "Select camera";
   mode = nextMode;
   if (mode === "slideshow") setKeyboardVisible(false);
+  if (mode === "url") ensureOverlayView();
   resizeOverlay();
   if (nextMode === "url") {
     clearTimeout(urlTimer);
@@ -226,27 +218,28 @@ function openMode(nextMode, target = "") {
       if (mode === "url") openMode("dashboard");
     }, 30_000);
   }
-  if (nextMode === "camera") {
-    cameraTimer = setTimeout(() => {
-      if (mode === "camera") openMode("dashboard");
-    }, 30_000);
-  }
   if (nextMode === "dashboard" || nextMode === "slideshow") {
     const key = nextMode === "dashboard" ? "dashboard" : "immich";
     healthChecker.probe(key).catch(() => {});
   }
-  remoteView.webContents.loadURL(url).catch((error) => console.error("View load failed:", error.message));
-  if (nextMode === "camera") {
-    cancelIdleTimers();
-  } else {
-    scheduleIdle();
-  }
+  loadView(url);
+  scheduleIdle();
   sendState();
   return true;
 }
 
+// Reloads the view only when the target actually differs from what is already
+// loaded. Home Assistant is heavy to boot, so avoid reloading it needlessly.
+function loadView(url) {
+  if (!remoteView?.webContents || remoteView.webContents.isDestroyed()) return;
+  const current = remoteView.webContents.getURL();
+  if (current === url) return;
+  remoteView.webContents.loadURL(url).catch((error) => console.error("View load failed:", error.message));
+}
+
 function setSidePanel(open) {
   sidePanelOpen = Boolean(open);
+  if (open) ensureOverlayView();
   resizeOverlay();
   sendState();
 }
@@ -254,15 +247,18 @@ function setSidePanel(open) {
 function resizeOverlay() {
   if (!win || win.isDestroyed() || !overlayView) return;
   const { width, height } = win.getContentBounds();
-  const homeButtonVisible = ["url", "camera"].includes(mode);
+  const homeButtonVisible = mode === "url";
   const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible;
   if (!needsOverlay) {
     if (overlayAttached) {
       win.contentView.removeChildView(overlayView);
       overlayAttached = false;
     }
+    scheduleOverlayRecycle();
     return;
   }
+  clearTimeout(overlayRecycleTimer);
+  overlayRecycleTimer = undefined;
   if (!overlayAttached) {
     win.contentView.addChildView(overlayView);
     overlayAttached = true;
@@ -274,10 +270,29 @@ function resizeOverlay() {
   } else overlayView.setBounds({ x: Math.max(0, width - 210), y: 0, width: Math.min(210, width), height: Math.min(58, height) });
 }
 
+// The overlay is a whole renderer process. Once nothing needs it for a while,
+// close it so the memory is released on a small device, and rebuild it on the
+// next use.
+function scheduleOverlayRecycle() {
+  if (overlayRecycleTimer) return;
+  overlayRecycleTimer = setTimeout(() => {
+    overlayRecycleTimer = undefined;
+    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url") return;
+    destroyOverlayView();
+  }, OVERLAY_RECYCLE_DELAY_MS);
+}
+
+function ensureOverlayView() {
+  if (overlayView) return;
+  createOverlayView();
+  resizeOverlay();
+}
+
 function setKeyboardVisible(visible) {
   const next = Boolean(visible) && settings.touchKeyboardEnabled && mode !== "slideshow";
   if (keyboardVisible === next) return;
   keyboardVisible = next;
+  if (next) ensureOverlayView();
   resizeOverlay();
   sendState();
 }
@@ -292,30 +307,6 @@ function sendKeyboardKey(key) {
   remoteView.webContents.sendInputEvent({ type: "keyDown", keyCode });
   if (key === "SPACE" || key.length === 1) remoteView.webContents.sendInputEvent({ type: "char", keyCode: key === "SPACE" ? " " : key });
   remoteView.webContents.sendInputEvent({ type: "keyUp", keyCode });
-}
-
-function expandCameraDialog(attempt = 0) {
-  if (mode !== "camera" || !remoteView?.webContents || remoteView.webContents.isDestroyed()) return;
-  remoteView.webContents.executeJavaScript(`(() => {
-    const findDeep = (root, selector) => {
-      const direct = root.querySelector?.(selector);
-      if (direct) return direct;
-      for (const element of root.querySelectorAll?.("*") || []) {
-        if (element.shadowRoot) {
-          const found = findDeep(element.shadowRoot, selector);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-    const moreInfo = findDeep(document, "ha-more-info-dialog");
-    const dialog = moreInfo && findDeep(moreInfo.shadowRoot, "ha-dialog");
-    if (!dialog) return false;
-    dialog.dispatchEvent(new CustomEvent("dialog-set-fullscreen", { detail: true, bubbles: true, composed: true }));
-    return true;
-  })()`, true).then((expanded) => {
-    if (!expanded && attempt < 40 && mode === "camera") setTimeout(() => expandCameraDialog(attempt + 1), 250);
-  }).catch((error) => console.warn("Could not expand camera stream:", error.message));
 }
 
 function runDisplayCommand(operation) {
@@ -376,59 +367,6 @@ async function setBrightness(value) {
   showNotice({ title: "Brightness control unavailable", message: "No writable Linux backlight device was found." });
 }
 
-function openCamera(name) {
-  const camera = homeAssistantCameras.find((item) => item.option === name || item.entityId === name);
-  if (!camera) {
-    showNotice({ title: "Camera unavailable", message: "No matching Home Assistant camera entity is available." });
-    return;
-  }
-  cameraSelection = camera.option;
-  const cameraUrl = new URL(settings.dashboardUrl);
-  cameraUrl.searchParams.set("more-info-entity-id", camera.entityId);
-  openMode("camera", cameraUrl.toString());
-}
-
-async function refreshHomeAssistantCameras() {
-  if (!remoteView?.webContents || !["dashboard", "camera"].includes(mode)) return true;
-  const dashboard = safeUrl(settings.dashboardUrl);
-  const current = safeUrl(remoteView.webContents.getURL());
-  if (!dashboard || !current || new URL(dashboard).origin !== new URL(current).origin) return true;
-  try {
-    const result = await remoteView.webContents.executeJavaScript(`(() => {
-      const hass = document.querySelector("home-assistant")?.hass;
-      if (!hass?.states || !hass.connection?.connected) return null;
-      return Object.entries(hass.states)
-        .filter(([entityId]) => entityId.startsWith("camera."))
-        .map(([entityId, state]) => ({ entityId, name: state.attributes?.friendly_name || entityId }));
-    })()`, true);
-    if (!Array.isArray(result)) return false;
-    const entities = result;
-    const counts = new Map();
-    for (const entity of entities) counts.set(entity.name, (counts.get(entity.name) || 0) + 1);
-    const next = entities.map(({ entityId, name }) => ({
-      entityId,
-      option: counts.get(name) > 1 ? `${name} (${entityId})` : name,
-    })).sort((left, right) => left.option.localeCompare(right.option));
-    if (JSON.stringify(next) === JSON.stringify(homeAssistantCameras)) return true;
-    homeAssistantCameras = next;
-    if (!homeAssistantCameras.some((camera) => camera.option === cameraSelection)) cameraSelection = "Select camera";
-    if (mqttClient?.connected) publishDiscovery();
-    sendState();
-    return true;
-  } catch (error) {
-    console.warn("Could not read Home Assistant cameras:", error.message);
-    return false;
-  }
-}
-
-function scheduleCameraRefresh(delay = 1200) {
-  clearTimeout(cameraRefreshTimer);
-  cameraRefreshTimer = setTimeout(async () => {
-    const ready = await refreshHomeAssistantCameras();
-    scheduleCameraRefresh(ready ? 60_000 : 3_000);
-  }, delay);
-}
-
 function handleCommand(command) {
   if (typeof command === "string") {
     try { command = JSON.parse(command); } catch { command = { action: command }; }
@@ -452,12 +390,6 @@ function handleCommand(command) {
       clearOpenUrlText();
       break;
     case "brightness": recordActivity("home-assistant"); setBrightness(command.value); break;
-    case "camera": {
-      if (command.name === "Select camera") break;
-      recordActivity("home-assistant");
-      openCamera(command.name);
-      break;
-    }
     case "notification": recordActivity("home-assistant"); showNotice(command); break;
     case "dismiss_notification": overlayView?.webContents?.send("app:dismiss-notification"); break;
     case "set_mode":
@@ -487,6 +419,8 @@ function connectMqtt() {
     return;
   }
   try {
+    // Loaded on demand so installs without MQTT do not parse the client.
+    const mqtt = require("mqtt");
     mqttClient = mqtt.connect(settings.mqttUrl, {
       username: settings.mqttUsername || undefined,
       password: settings.mqttPassword || undefined,
@@ -562,11 +496,10 @@ function publishDiscovery() {
   clearOpenUrlText();
   removeEntity("button", "exit_view"); removeEntity("button", "keyboard_toggle");
   publishEntity("button", "dashboard", { name: "Return to Home", command_topic: `${settings.mqttPrefix}/command`, payload_press: '{"action":"dashboard"}', icon: "mdi:home" });
-  if (homeAssistantCameras.length) {
-    publishEntity("select", "camera", { name: "Camera", options: ["Select camera", ...homeAssistantCameras.map((camera) => camera.option)], command_topic: `${settings.mqttPrefix}/command`, command_template: '{{ {"action":"camera","name":value} | tojson }}', state_topic: `${settings.mqttPrefix}/state`, value_template: "{{ value_json.cameraSelection }}", optimistic: false, qos: 1, icon: "mdi:video" });
-  } else removeEntity("select", "camera");
+  // The camera picker has been removed, so clear any entity it left behind.
+  removeEntity("select", "camera");
   for (const name of legacyCameraNames) {
-    removeEntity("button", cameraObjectId(name));
+    removeEntity("button", `camera_${String(name).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 48)}`);
   }
   legacyCameraNames = [];
 }
@@ -603,6 +536,28 @@ function publicSettings() {
   return { ...settings, mqttPassword: settings.mqttPassword ? "••••••••" : "" };
 }
 
+function createOverlayView() {
+  overlayView = new WebContentsView({ webPreferences: {
+    // The overlay loads a bundled local page, so it is trusted enough to run
+    // unsandboxed and share the field editing helper with the main process.
+    preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: false,
+  } });
+  overlayView.setBackgroundColor("#00000000");
+  overlayView.webContents.loadFile(path.join(__dirname, "ui", "index.html"));
+  overlayView.webContents.on("did-finish-load", sendState);
+}
+
+function destroyOverlayView() {
+  if (!overlayView) return;
+  if (overlayAttached && win && !win.isDestroyed()) {
+    win.contentView.removeChildView(overlayView);
+  }
+  overlayAttached = false;
+  overlayView.webContents.close();
+  overlayView = null;
+  lastSentState = "";
+}
+
 function createWindow() {
   const primary = screen.getPrimaryDisplay();
   win = new BrowserWindow({
@@ -613,13 +568,7 @@ function createWindow() {
   // Use the BrowserWindow's own webContents for the dashboard: avoid a second,
   // hidden blank renderer process just to host the window.
   remoteView = { webContents: win.webContents };
-  overlayView = new WebContentsView({ webPreferences: {
-    // The overlay loads a bundled local page, so it is trusted enough to run
-    // unsandboxed and share the field editing helper with the main process.
-    preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: false,
-  } });
-  overlayView.setBackgroundColor("#00000000");
-  overlayView.webContents.loadFile(path.join(__dirname, "ui", "index.html"));
+  createOverlayView();
   remoteView.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   remoteView.webContents.on("will-navigate", (event, url) => {
     if (!safeUrl(url)) event.preventDefault();
@@ -627,9 +576,7 @@ function createWindow() {
   remoteView.webContents.on("did-finish-load", () => {
     enableTouchEmulation(remoteView.webContents);
     injectScrollbarCSS(remoteView.webContents).catch(() => {});
-    if (mode === "camera") setTimeout(() => expandCameraDialog(), 250);
     sendState();
-    scheduleCameraRefresh();
   });
   remoteView.webContents.on("did-fail-load", () => {
     sendState();
@@ -655,7 +602,7 @@ function createWindow() {
   win.on("resize", resize);
   win.on("enter-full-screen", resize);
   win.on("leave-full-screen", resize);
-  win.on("closed", () => { cancelIdleTimers(); clearTimeout(cameraRefreshTimer); clearTimeout(urlTimer); clearTimeout(cameraTimer); });
+  win.on("closed", () => { cancelIdleTimers(); clearTimeout(urlTimer); });
   resize();
   remoteView.webContents.loadURL(safeUrl(settings.dashboardUrl) || DEFAULTS.dashboardUrl);
   mode = "dashboard";
@@ -674,6 +621,7 @@ function registerIpc() {
   ipcMain.on("app:overlay-expanded", (event, expanded) => {
     assertOverlaySender(event);
     overlayExpanded = Boolean(expanded);
+    ensureOverlayView();
     resizeOverlay();
   });
   ipcMain.on("app:side-panel", (event, open) => { assertOverlaySender(event); setSidePanel(open); });
@@ -698,6 +646,22 @@ function registerIpc() {
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) app.quit();
 
+// Trim Chromium features a kiosk never uses. Hardware acceleration is kept
+// because the target device has a GPU.
+app.commandLine.appendSwitch("disable-features", "Translate,MediaRouter,OptimizationHints,CalculateNativeWinOcclusion,InterestFeedContentSuggestions,BackForwardCache,AcceptCHFrame,AutofillServerCommunication,CertificateTransparencyComponentUpdater,DialMediaRouteProvider,GlobalMediaControls,PrivacySandboxSettings4,DiskCacheBackendInMemory");
+// Keep Chromium's disk caches out of the eMMC: they are rewritten on every
+// page load and are the main source of write wear on the target device.
+app.commandLine.appendSwitch("disk-cache-size", "0");
+app.commandLine.appendSwitch("media-cache-size", "0");
+app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
+app.commandLine.appendSwitch("password-store", "basic");
+app.commandLine.appendSwitch("disable-background-networking");
+app.commandLine.appendSwitch("disable-component-update");
+app.commandLine.appendSwitch("disable-domain-reliability");
+app.commandLine.appendSwitch("disable-sync");
+app.commandLine.appendSwitch("no-pings");
+app.commandLine.appendSwitch("no-default-browser-check");
+
 app.whenReady().then(async () => {
   if (!hasLock) return;
   await loadSettings();
@@ -716,7 +680,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   healthChecker.stop();
-  cancelIdleTimers(); clearTimeout(cameraRefreshTimer); clearTimeout(urlTimer); clearTimeout(cameraTimer); clearTimeout(notificationTimer);
+  cancelIdleTimers(); clearTimeout(urlTimer); clearTimeout(notificationTimer);
   if (mqttClient) {
     mqttClient.publish(`${settings.mqttPrefix}/availability`, "offline", { retain: true, qos: 1 });
     mqttClient.end();
