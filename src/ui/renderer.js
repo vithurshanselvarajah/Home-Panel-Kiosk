@@ -165,11 +165,16 @@ function closeSettings() {
   syncSettingsLayout();
 }
 
-$("#settings-button").addEventListener("click", openSettings);
 $("#close-settings").addEventListener("click", closeSettings);
+// Any button in the drawer dismisses it, so the panel never lingers over the
+// view once an action has been picked.
 drawer.addEventListener("click", (event) => {
-  const action = event.target.closest("[data-action]")?.dataset.action;
-  if (action) { window.homePanel.command({ action }); setDrawer(false); }
+  const button = event.target.closest("button");
+  if (!button) return;
+  const action = button.dataset.action;
+  if (action) window.homePanel.command({ action });
+  else if (button.id === "settings-button") openSettings();
+  setDrawer(false);
 });
 $("#notice").addEventListener("click", (event) => {
   if (event.target.closest("[data-action]")) window.homePanel.command({ action: "dismiss_notification" });
