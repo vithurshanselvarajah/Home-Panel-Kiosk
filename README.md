@@ -101,7 +101,7 @@ npm ci
 npm start
 ```
 
-Settings live in Electron's per-user application data directory. Use `npm run make:linux -- --arch=arm64` or `--arch=x64` to create a Linux package.
+Settings live in Electron's per-user application data directory. Use `npm run make -- --arch=arm64` or `--arch=x64` to create a Linux package.
 
 ## Suggested next improvements
 
