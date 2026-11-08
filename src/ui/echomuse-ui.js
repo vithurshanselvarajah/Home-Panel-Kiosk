@@ -1,68 +1,58 @@
 // EchoMuse UI.
 //
 // This is the shape of the EchoMuse interface, with a mock data source. The
-// SDK is not wired up yet, so the state and the level come from the mock
-// below. When the SDK lands, replace the mock source and nothing else has to
-// change.
+// SDK is not wired up yet, so the state comes from the mock below. When the
+// SDK lands, replace the mock source and nothing else has to change.
 //
-// The states and their meanings come from the SDK's `echomuse/state` package.
-// Two of its rules shape this file:
-//
-//   - Every state that is not known is reported as unknown, never as its
-//     opposite. So an unknown phase is drawn grey and says "Unknown".
-//   - What it reports about listening is what it is actually doing. So the
-//     badge only says "local" when the device really is scoring its own
-//     wake word, and never claims privacy it does not have.
+// The states come from the SDK's `echomuse/state` package, and one of its
+// rules shapes this file: every state that is not known is reported as
+// unknown, never as its opposite. So an unknown connection is drawn grey and
+// says "Unknown", not "Connected".
 
 (function () {
-  const PHASES = {
+  // Connection is what the drawer reports: whether this device can reach a
+  // controller and has been admitted by one. The phases that come with it
+  // are what the on-screen indicator reacts to.
+  const CONNECTIONS = {
     unknown: { label: "Unknown", led: "unknown" },
-    idle: { label: "Idle", led: "online" },
-    ready: { label: "Ready", led: "online" },
-    listening: { label: "Listening", led: "listening" },
-    thinking: { label: "Thinking", led: "connecting" },
-    speaking: { label: "Speaking", led: "connecting" },
-    pending: { label: "Awaiting approval", led: "connecting" },
+    connected: { label: "Connected", led: "online" },
+    unpaired: { label: "Unpaired", led: "connecting" },
+    disabled: { label: "Disabled", led: "offline" },
     refused: { label: "Refused", led: "offline" },
     disconnected: { label: "Disconnected", led: "offline" },
-    muted: { label: "Muted", led: "offline" },
   };
 
-  const LISTEN_MODES = {
-    unknown: { label: "unknown" },
-    local: { label: "local" },
-    stream: { label: "streaming" },
-    degraded: { label: "no wake word" },
+  const PHASES = {
+    unknown: { label: "Unknown" },
+    idle: { label: "Idle" },
+    listening: { label: "Listening" },
+    thinking: { label: "Thinking" },
+    speaking: { label: "Speaking" },
+    muted: { label: "Muted" },
   };
 
-  const LISTEN_TITLES = {
-    local: "The device scores its own wake word. No audio leaves it until the wake word fires.",
-    stream: "Audio is streaming to the controller continuously.",
-    degraded: "The device cannot run a wake word and works by button only.",
-    unknown: "The device has not said how it listens.",
-  };
-
-  // ── The wave ───────────────────────────────────────────────────────────
-  // A band of bars across the bottom of the view. Each bar holds the level
-  // it saw and decays, so the band reads as a wave rather than a jittering
-  // bar chart.
+  // ── The indicator ──────────────────────────────────────────────────────
+  // A row of dots along the bottom of the view, the way a voice assistant
+  // shows it is listening. The dots move and scale with the microphone
+  // level, and a different animation plays while a response is playing.
   //
-  // The SDK only exposes a peak level, not the samples, so this is a level
-  // meter shaped like a waveform rather than the waveform itself.
+  // It is an indicator, not a row of LEDs. An Echo's LEDs report the
+  // controller's own animation; these report what this device is doing, and
+  // they are only on screen while it is doing something.
 
-  const BAR_COUNT = 48;
-  const BAR_DECAY = 0.86;
+  const DOT_COUNT = 7;
+  const DOT_SPACING = 26;
 
-  class VoiceWave {
+  class VoiceIndicator {
     constructor(canvas) {
       this.canvas = canvas;
       this.context = canvas.getContext("2d");
-      this.bars = new Array(BAR_COUNT).fill(0);
+      this.dots = new Array(DOT_COUNT).fill(0);
       this.level = 0;
-      this.active = false;
-      this.handle = null;
+      this.mode = "off";
       this.timer = null;
       this.lastFrame = 0;
+      this.phase = 0;
       this.width = 0;
       this.height = 0;
     }
@@ -71,30 +61,26 @@
       this.level = Math.max(0, Math.min(1, level));
     }
 
-    // Show the wave only when the microphone is genuinely open. A wave that
-    // is not measuring anything would be the same lie as reporting a state
-    // that is not true.
-    setActive(active) {
-      if (active === this.active) return;
-      this.active = active;
-      this.canvas.hidden = !active;
-      if (active) {
-        // The canvas has to be visible before it can be measured, so the
-        // hidden attribute is cleared first and the size is taken after.
-        this.resize();
-        this.lastFrame = performance.now();
-        this.start();
-      } else {
-        this.bars.fill(0);
+    // mode is "off", "listening" or "speaking".
+    setMode(mode) {
+      if (mode === this.mode) return;
+      this.mode = mode;
+      this.canvas.hidden = mode === "off";
+      if (mode === "off") {
+        this.dots.fill(0);
         this.stop();
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        return;
       }
+      this.resize();
+      this.lastFrame = performance.now();
+      this.start();
     }
 
     // The animation is driven by a timer rather than by requestAnimationFrame.
     // A kiosk window can be occluded or unfocused, and Chromium suspends
     // animation frames entirely when that happens, which would freeze the
-    // wave on a stale reading. A timer keeps it honest.
+    // indicator on a stale reading. A timer keeps it honest.
     start() {
       if (this.timer) return;
       this.timer = setInterval(() => this.tick(performance.now()), 50);
@@ -103,11 +89,9 @@
     stop() {
       if (this.timer) clearInterval(this.timer);
       this.timer = null;
-      if (this.handle) cancelAnimationFrame(this.handle);
-      this.handle = null;
     }
 
-    // The wave sits above the on-screen keyboard when it is up.
+    // The indicator sits above the on-screen keyboard when it is up.
     lift(bottom) {
       this.canvas.style.bottom = `${bottom}px`;
     }
@@ -125,15 +109,27 @@
     }
 
     tick(now) {
-      if (!this.active) return;
+      if (this.mode === "off") return;
       const delta = Math.min(100, now - this.lastFrame || 16);
       this.lastFrame = now;
+      this.phase += delta / 1000;
 
-      // The newest bar takes the current level, and every bar decays.
-      this.bars.shift();
-      this.bars.push(this.level);
-      for (let i = 0; i < this.bars.length - 1; i++) {
-        this.bars[i] *= Math.pow(BAR_DECAY, delta / 16);
+      if (this.mode === "listening") {
+        // Each dot takes the level with a little delay, so the row reads as a
+        // wave travelling across rather than everything jumping at once.
+        this.dots.pop();
+        this.dots.unshift(this.level * (0.7 + Math.random() * 0.6));
+        for (let i = 0; i < this.dots.length; i++) {
+          const falloff = 1 - Math.abs(i - (this.dots.length - 1) / 2) / this.dots.length;
+          this.dots[i] *= 0.82 + falloff * 0.16;
+        }
+      } else {
+        // Speaking has no microphone level to show, so the dots pulse along
+        // instead, the way a voice assistant shows it is answering.
+        for (let i = 0; i < this.dots.length; i++) {
+          const offset = Math.sin(this.phase * 4 - i * 0.6);
+          this.dots[i] = 0.35 + Math.max(0, offset) * 0.65;
+        }
       }
 
       this.draw();
@@ -146,23 +142,21 @@
       if (!width || !height) return;
       context.clearRect(0, 0, width, height);
 
-      const gap = 3;
-      const barWidth = Math.max(2, (width - gap * (this.bars.length - 1)) / this.bars.length);
-      const baseline = height * 0.82;
-      const maxHeight = height * 0.66;
+      const centreX = width / 2;
+      const baseline = height * 0.5;
+      const maxRadius = 9;
+      const span = (this.dots.length - 1) * DOT_SPACING;
 
-      for (let i = 0; i < this.bars.length; i++) {
-        const value = this.bars[i];
-        if (value <= 0.001) continue;
-        const barHeight = Math.max(2, value * maxHeight);
-        const x = i * (barWidth + gap);
-        // Older bars fade, so the eye follows the leading edge.
-        const age = i / this.bars.length;
-        const alpha = 0.18 + age * 0.72;
-        context.fillStyle = `rgba(143, 227, 194, ${alpha.toFixed(3)})`;
-        const radius = Math.min(barWidth / 2, 2);
+      for (let i = 0; i < this.dots.length; i++) {
+        const value = Math.max(0, Math.min(1, this.dots[i]));
+        const x = centreX - span / 2 + i * DOT_SPACING;
+        const radius = 3 + value * maxRadius;
+        // The middle of the row is the brightest, so the eye goes there.
+        const centre = 1 - Math.abs(i - (this.dots.length - 1) / 2) / this.dots.length;
+        const alpha = 0.3 + centre * 0.6 * (0.35 + value * 0.65);
         context.beginPath();
-        context.roundRect(x, baseline - barHeight, barWidth, barHeight, radius);
+        context.fillStyle = `rgba(143, 227, 194, ${alpha.toFixed(3)})`;
+        context.arc(x, baseline, radius, 0, Math.PI * 2);
         context.fill();
       }
     }
@@ -173,11 +167,11 @@
   // can be judged on a screen before any protocol code exists.
 
   const MOCK_SCRIPT = [
-    { at: 0, phase: "ready", listen: "local", reason: "the controller admitted this device" },
-    { at: 5000, phase: "listening", listen: "local", reason: "the microphone is open" },
-    { at: 13000, phase: "thinking", listen: "local", reason: "the wake word fired" },
-    { at: 17000, phase: "speaking", listen: "local", reason: "a response is playing" },
-    { at: 21000, phase: "idle", listen: "local", reason: "" },
+    { at: 0, connection: "connected", phase: "idle", reason: "the controller admitted this device" },
+    { at: 5000, connection: "connected", phase: "listening", reason: "the controller admitted this device" },
+    { at: 13000, connection: "connected", phase: "thinking", reason: "the controller admitted this device" },
+    { at: 17000, connection: "connected", phase: "speaking", reason: "the controller admitted this device" },
+    { at: 21000, connection: "connected", phase: "idle", reason: "the controller admitted this device" },
   ];
 
   function createMockSource() {
@@ -196,9 +190,9 @@
       level += (target - level) * 0.22;
       if (level < 0.005) level = 0;
       const state = {
+        connection: entry.connection,
         phase: entry.phase,
         reason: entry.reason,
-        listen: entry.listen,
         muted: false,
         level,
       };
@@ -218,38 +212,38 @@
   // ── Wiring ─────────────────────────────────────────────────────────────
 
   function create(options) {
-    const wave = new VoiceWave(options.canvas);
+    const indicator = new VoiceIndicator(options.canvas);
 
     function paint(state) {
-      const phase = PHASES[state.phase] || PHASES.unknown;
-      const listen = LISTEN_MODES[state.listen] || LISTEN_MODES.unknown;
-
+      const connection = CONNECTIONS[state.connection] || CONNECTIONS.unknown;
       options.row.hidden = false;
-      options.phase.textContent = phase.label;
-      options.phase.title = state.reason || "";
-      options.led.dataset.status = phase.led;
+      options.state.textContent = connection.label;
+      options.state.title = state.reason || "";
+      options.led.dataset.status = connection.led;
 
-      options.listen.hidden = false;
-      options.listen.textContent = listen.label;
-      options.listen.dataset.listen = state.listen in LISTEN_MODES ? state.listen : "unknown";
-      options.listen.title = LISTEN_TITLES[options.listen.dataset.listen] || "";
+      // The same state is repeated at the top of the EchoMuse tab, so the
+      // settings page says what the drawer says.
+      if (options.statusLed) options.statusLed.dataset.status = connection.led;
+      if (options.statusLabel) options.statusLabel.textContent = connection.label;
+      if (options.statusReason) options.statusReason.textContent = state.reason || "Not connected to a controller.";
     }
-
-    // The wave shows while the microphone is open. While the device is
-    // thinking or speaking the microphone is not the story, and while it is
-    // muted or degraded there is nothing honest to draw.
-    function paintWave(state) {
-      wave.setActive(state.phase === "listening" && !state.muted);
-      if (wave.active) wave.setLevel(state.level);
+    // The indicator is only on screen while the device is listening or
+    // speaking. It is not a row of status LEDs that sits there all the time.
+    function paintIndicator(state) {
+      let mode = "off";
+      if (!state.muted && state.phase === "listening") mode = "listening";
+      else if (!state.muted && state.phase === "speaking") mode = "speaking";
+      indicator.setMode(mode);
+      if (mode === "listening") indicator.setLevel(state.level);
     }
 
     function apply(state) {
       paint(state);
-      paintWave(state);
+      paintIndicator(state);
     }
 
-    return { apply, wave };
+    return { apply, indicator };
   }
 
-  window.EchoMuseUI = { create, createMockSource, PHASES, LISTEN_MODES };
+  window.EchoMuseUI = { create, createMockSource, CONNECTIONS, PHASES };
 })();

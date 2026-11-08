@@ -11,20 +11,13 @@
 
 /* ── EchoMuse ───────────────────────────────────────────────────────── */
 
-.service-row .listen-badge{flex:none;margin-left:auto;padding:1px 6px;border-radius:5px;font-size:9px;font-style:normal;font-weight:600;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
-.service-row .listen-badge + b{margin-left:8px}
-.listen-badge[data-listen="local"]{background:rgba(117,224,168,.16);color:#75e0a8}
-.listen-badge[data-listen="stream"]{background:rgba(240,197,104,.16);color:#f0c568}
-.listen-badge[data-listen="degraded"]{background:rgba(239,119,119,.16);color:#ef7777}
-.listen-badge[data-listen="unknown"]{background:rgba(170,179,193,.12);color:#aab3c1}
 .service-led[data-status="listening"]{background:#75e0a8;box-shadow:0 0 11px rgba(117,224,168,.65);animation:echomuse-pulse 1.4s ease-in-out infinite}
 @keyframes echomuse-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
-/* The wave is an overlay on the view, so it never depends on the Home
-   Assistant page re-rendering to stay put. */
-.voice-wave{position:absolute;left:0;right:0;bottom:0;z-index:8;width:100%;height:120px;pointer-events:none;transition:bottom .16s ease}
-.voice-wave[hidden]{display:none}
-.voice-wave--lifted{bottom:0}
+/* The voice indicator is an overlay on the view, so it never depends on the
+   Home Assistant page re-rendering to stay put. */
+.voice-indicator{position:absolute;left:0;right:0;bottom:0;z-index:8;width:100%;height:64px;pointer-events:none;transition:bottom .16s ease}
+.voice-indicator[hidden]{display:none}
 
 /* Settings tabs */
 .settings-tabs{display:flex;gap:4px;flex:none;margin:0 0 16px;padding:3px;border:1px solid rgba(255,255,255,.08);border-radius:11px;background:rgba(255,255,255,.03)}
@@ -39,3 +32,9 @@
 .settings-panel select:focus{border-color:rgba(143,227,194,.8);box-shadow:0 0 0 3px rgba(143,227,194,.14)}
 .capability-grid{display:grid;gap:8px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025)}
 .capability-grid .setting-toggle{grid-template-columns:18px 1fr;min-height:30px;font-size:12px}
+
+/* The EchoMuse connection status, shown at the top of the EchoMuse tab. */
+.echomuse-status{display:flex;align-items:center;gap:12px;flex:none;margin:0 0 18px;padding:12px 14px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025)}
+.echomuse-status .service-led{width:10px;height:10px;flex:none}
+.echomuse-status strong{display:block;font-size:13px;font-weight:600;color:#f5f7fa}
+.echomuse-status span{display:block;margin-top:2px;font-size:11px;color:var(--muted)}
