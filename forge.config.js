@@ -7,6 +7,16 @@ module.exports = {
     executableName: "homepanel-kiosk",
     appBundleId: "io.homepanel.kiosk",
     extraResource: ["packaging/homepanel-kiosk.service"],
+    // The MQTT client ships a browser bundle and TypeScript build output that
+    // the Node build never loads. Leaving them out keeps the package smaller.
+    ignore: [
+      /^node_modules\/mqtt\/dist\//,
+      /^node_modules\/mqtt\/build\/.*\.(map|d\.ts)$/,
+      /^node_modules\/mqtt\/build\/.*\.tsbuildinfo$/,
+      /^node_modules\/mqtt\/help\//,
+      /^node_modules\/mqtt\/CONTRIBUTING\.md$/,
+      /^node_modules\/mqtt\/README\.md$/,
+    ],
   },
   makers: [
     { name: "@electron-forge/maker-deb", config: {} },
