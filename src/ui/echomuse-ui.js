@@ -42,15 +42,50 @@
 
   const DOT_COUNT = 7;
   const DOT_SPACING = 26;
+  const CANVAS_HEIGHT = 34;
 
   const MODE_LABELS = {
     listening: "Listening",
     speaking: "Speaking",
   };
 
+  // The rainbow the dots and the label cycle through. Google colours its
+  // voice assistant the same way, and a single flat colour does not read as
+  // "the assistant is working" nearly as well.
+  const RAINBOW = [
+    { hue: 168, sat: 72, light: 62 },
+    { hue: 196, sat: 78, light: 64 },
+    { hue: 224, sat: 76, light: 66 },
+    { hue: 268, sat: 70, light: 68 },
+    { hue: 316, sat: 72, light: 66 },
+    { hue: 350, sat: 78, light: 66 },
+    { hue: 28, sat: 84, light: 62 },
+  ];
+
+  // A hue at a position in the rainbow, wrapping around the circle. The
+  // position is fractional so the rainbow can drift rather than jump.
+  function rainbowAt(index, offset) {
+    const span = RAINBOW.length;
+    const position = (index + offset) % span;
+    const wrapped = position < 0 ? position + span : position;
+    // The two colours either side of the position are blended, so the row
+    // shows a smooth sweep rather than seven separate colours.
+    const lower = Math.floor(wrapped) % span;
+    const upper = (lower + 1) % span;
+    const blend = wrapped - Math.floor(wrapped);
+    const from = RAINBOW[lower];
+    const to = RAINBOW[upper];
+    return {
+      hue: Math.round(from.hue + (to.hue - from.hue) * blend),
+      sat: Math.round(from.sat + (to.sat - from.sat) * blend),
+      light: Math.round(from.light + (to.light - from.light) * blend),
+    };
+  }
+
   class VoiceIndicator {
-    constructor(container) {
+    constructor(container, dim) {
       this.container = container;
+      this.dim = dim || null;
       this.canvas = container.querySelector("canvas");
       this.label = container.querySelector(".voice-indicator__label");
       this.context = this.canvas.getContext("2d");
@@ -58,6 +93,7 @@
       this.level = 0;
       this.mode = "off";
       this.timer = null;
+      this.dimTimer = null;
       this.lastFrame = 0;
       this.phase = 0;
       this.width = 0;
@@ -74,6 +110,9 @@
       this.mode = mode;
       this.container.hidden = mode === "off";
       if (this.label) this.label.textContent = MODE_LABELS[mode] || "";
+      // The rest of the display dims while the assistant is working, so the
+      // eye goes to the indicator rather than the dashboard.
+      this.setDimmed(mode !== "off");
       if (mode === "off") {
         this.dots.fill(0);
         this.stop();
@@ -83,6 +122,20 @@
       this.resize();
       this.lastFrame = performance.now();
       this.start();
+    }
+
+    // The dim layer fades rather than switching, so it does not flash.
+    setDimmed(dimmed) {
+      if (!this.dim) return;
+      if (dimmed) {
+        this.dim.hidden = false;
+        // One frame with the class applied is what starts the transition.
+        requestAnimationFrame(() => this.dim.classList.add("is-active"));
+      } else {
+        this.dim.classList.remove("is-active");
+        clearTimeout(this.dimTimer);
+        this.dimTimer = setTimeout(() => { this.dim.hidden = true; }, 320);
+      }
     }
 
     // The animation is driven by a timer rather than by requestAnimationFrame.
@@ -106,8 +159,11 @@
 
     resize() {
       const ratio = window.devicePixelRatio || 1;
-      const width = this.canvas.clientWidth;
-      const height = this.canvas.clientHeight;
+      // A canvas that was hidden has no layout box yet, so the measured size
+      // can be zero. The canvas is sized from the container in that case.
+      const container = this.container.getBoundingClientRect();
+      const width = this.canvas.clientWidth || container.width || 0;
+      const height = this.canvas.clientHeight || CANVAS_HEIGHT;
       if (!width || !height) return;
       this.canvas.width = Math.round(width * ratio);
       this.canvas.height = Math.round(height * ratio);
@@ -140,13 +196,23 @@
         }
       }
 
+      this.paintLabel();
       this.draw();
+    }
+
+    // The label takes the colour of the middle dot, so the text and the
+    // dots are the same moment of the same rainbow.
+    paintLabel() {
+      if (!this.label) return;
+      const colour = rainbowAt((this.dots.length - 1) / 2, (this.phase * 1.2) % RAINBOW.length);
+      this.label.style.color = `hsl(${colour.hue} ${colour.sat}% ${colour.light}%)`;
+      this.label.style.textShadow = `0 0 10px hsla(${colour.hue}, ${colour.sat}%, ${colour.light}%, .65)`;
     }
 
     draw() {
       const context = this.context;
-      const width = this.width || this.canvas.clientWidth;
-      const height = this.height || this.canvas.clientHeight;
+      const width = this.width || this.canvas.clientWidth || this.container.getBoundingClientRect().width;
+      const height = this.height || this.canvas.clientHeight || CANVAS_HEIGHT;
       if (!width || !height) return;
       context.clearRect(0, 0, width, height);
 
@@ -154,6 +220,8 @@
       const baseline = height * 0.5;
       const maxRadius = 9;
       const span = (this.dots.length - 1) * DOT_SPACING;
+      // The rainbow turns slowly, so the colours drift rather than flicker.
+      const offset = (this.phase * 1.2) % RAINBOW.length;
 
       for (let i = 0; i < this.dots.length; i++) {
         const value = Math.max(0, Math.min(1, this.dots[i]));
@@ -162,11 +230,21 @@
         // The middle of the row is the brightest, so the eye goes there.
         const centre = 1 - Math.abs(i - (this.dots.length - 1) / 2) / this.dots.length;
         const alpha = 0.3 + centre * 0.6 * (0.35 + value * 0.65);
+        const colour = rainbowAt(i, offset);
+        const fill = `hsl(${colour.hue} ${colour.sat}% ${colour.light}%)`;
+        // The glow is the same colour as the dot, so the halo does not fight
+        // the dot it belongs to.
+        context.shadowColor = `hsla(${colour.hue}, ${colour.sat}%, ${colour.light}%, ${(alpha * 0.9).toFixed(3)})`;
+        context.shadowBlur = 6 + value * 14;
         context.beginPath();
-        context.fillStyle = `rgba(143, 227, 194, ${alpha.toFixed(3)})`;
+        context.fillStyle = fill;
+        context.globalAlpha = alpha;
         context.arc(x, baseline, radius, 0, Math.PI * 2);
         context.fill();
       }
+      context.globalAlpha = 1;
+      context.shadowBlur = 0;
+      context.shadowColor = "transparent";
     }
   }
 
@@ -220,7 +298,7 @@
   // ── Wiring ─────────────────────────────────────────────────────────────
 
   function create(options) {
-    const indicator = new VoiceIndicator(options.container);
+    const indicator = new VoiceIndicator(options.container, options.dim);
 
     function paint(state) {
       const connection = CONNECTIONS[state.connection] || CONNECTIONS.unknown;
