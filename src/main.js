@@ -283,6 +283,9 @@ function scheduleOverlayRecycle() {
 }
 
 function ensureOverlayView() {
+  // A pending recycle would close the overlay we are about to use.
+  clearTimeout(overlayRecycleTimer);
+  overlayRecycleTimer = undefined;
   if (overlayView) return;
   createOverlayView();
   resizeOverlay();
@@ -555,6 +558,7 @@ function destroyOverlayView() {
   overlayAttached = false;
   overlayView.webContents.close();
   overlayView = null;
+  // Force the next sendState to reach the rebuilt overlay.
   lastSentState = "";
 }
 
@@ -593,7 +597,6 @@ function createWindow() {
       if (Date.now() - lastActivity > 5000) recordActivity("pointer-move");
     }
   });
-  overlayView.webContents.on("did-finish-load", sendState);
   const resize = () => resizeOverlay();
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, url) => {
