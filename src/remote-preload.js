@@ -2,9 +2,12 @@ const { ipcRenderer } = require("electron");
 
 // Report only whether HA currently has a text editor focused. No kiosk command
 // API is exposed to the remote page.
-let focusedEditable = false;
+//
+// focusin is a composed event, so a single capture listener on the document
+// sees focus changes from any shadow root at any depth. That avoids walking
+// the Home Assistant DOM to discover shadow hosts, which was expensive because
+// the dashboard re-renders on every state change.
 let focusCheckQueued = false;
-const observedRoots = new WeakSet();
 
 function isEditableElement(node) {
   if (!node || node.nodeType !== 1) return false;
@@ -24,9 +27,8 @@ function deepestActiveElement(root = document) {
 function checkFocus() {
   focusCheckQueued = false;
   const active = deepestActiveElement();
-  const next = isEditableElement(active) || active?.getAttribute?.("role") === "textbox";
-  focusedEditable = next;
-  ipcRenderer.send("remote:text-input", focusedEditable);
+  const focused = isEditableElement(active) || active?.getAttribute?.("role") === "textbox";
+  ipcRenderer.send("remote:text-input", focused);
 }
 
 function queueFocusCheck() {
@@ -35,30 +37,8 @@ function queueFocusCheck() {
   setTimeout(checkFocus, 0);
 }
 
-function discoverElement(element) {
-  if (!element || element.nodeType !== 1) return;
-  if (element.shadowRoot) inspectTree(element.shadowRoot);
-  for (const child of element.querySelectorAll?.("*") || []) {
-    if (child.shadowRoot) inspectTree(child.shadowRoot);
-  }
-}
-
-function inspectTree(root) {
-  if (observedRoots.has(root)) return;
-  observedRoots.add(root);
-  root.addEventListener("focusin", queueFocusCheck, true);
-  root.addEventListener("focusout", queueFocusCheck, true);
-  for (const element of root.querySelectorAll?.("*") || []) {
-    if (element.shadowRoot) inspectTree(element.shadowRoot);
-  }
-  new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) discoverElement(node);
-    }
-  }).observe(root, { childList: true, subtree: true });
-}
-
-inspectTree(document);
+document.addEventListener("focusin", queueFocusCheck, true);
+document.addEventListener("focusout", queueFocusCheck, true);
 
 let edgeSwipeStart;
 document.addEventListener("pointerdown", (event) => {
