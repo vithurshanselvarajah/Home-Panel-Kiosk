@@ -66,201 +66,138 @@ That is enough for the wave. The emulator's `peakLevel()` walks the signed
 ### 1. Status in the drawer
 
 The drawer already has a service status block with three LED rows — MQTT,
-Immich Kiosk, Dashboard. EchoMuse joins it as a fourth row.
+Immich Kiosk, Dashboard. EchoMuse joins it as a fourth row, in exactly the same
+layout: a coloured dot, a label, and the value on the right.
 
 ```
   ●  MQTT              Online
   ●  Immich Kiosk      Online
   ●  Dashboard         Online
-  ●  EchoMuse          Ready
+  ●  EchoMuse          Connected
 ```
 
-The LED colour follows the existing scale (`online` / `connecting` /
-`offline`), but the label is the *phase*, not a generic status:
+The value is the **connection** to the controller, not the listening mode. The
+SDK's phases are about what the device is doing; what a person wants to know
+from the drawer is whether this thing is hooked up at all.
 
-| Phase | Label | LED |
+| Connection | Value | LED |
 |---|---|---|
-| `ready` | Ready | green |
-| `idle` | Idle | green |
-| `listening` | Listening | green, pulsing |
-| `thinking` | Thinking | amber |
-| `speaking` | Speaking | amber |
-| `pending` | Awaiting approval | amber |
+| `connected` | Connected | green |
+| `unpaired` | Unpaired | amber |
+| `disabled` | Disabled | red |
 | `refused` | Refused | red |
 | `disconnected` | Disconnected | red |
-| `muted` | Muted | red |
 | `unknown` | Unknown | grey |
 
-`PhaseReason` is the second line, in the muted colour. It is the difference
-between "Refused" and "Refused — the controller rejected this device's
-credentials".
+The reason is the tooltip on the value, and the second line in the settings
+tab. It is the difference between "Unpaired" and "Unpaired — the controller
+has not admitted this device".
 
-### 2. The privacy badge
+### 2. The voice indicator
 
-This is the part that matters most and it should not be buried.
+A row of dots along the bottom of the screen, the way a voice assistant shows
+it is listening. It is **not** a row of LEDs that sits there all the time — it
+appears only while the device is doing something, and disappears otherwise.
 
-The SDK's rule is that the client's listening mode is a privacy promise. The
-drawer shows it as a small badge next to the EchoMuse row:
-
-```
-  ●  EchoMuse   Ready   [ local ]
-```
-
-| `Listen` | Badge | Meaning |
-|---|---|---|
-| `local` | `local` (green) | The device scores its own wake word. **No audio leaves until it fires.** |
-| `stream` | `streaming` (amber) | Audio is streaming to the controller continuously. |
-| `degraded` | `no wake word` (red) | The device cannot run a wake word and is button-only. |
-| `unknown` | `unknown` (grey) | The device has not said. |
-
-The badge reads `streaming` in amber rather than hiding it, because the SDK
-is explicit that streaming "does not meet this repository's private-listening
-requirement". If the kiosk ever runs in `stream` mode, the user should be able
-to see that at a glance.
-
-### 3. The voice wave
-
-A wave drawn over the Home Assistant UI, showing the level the microphone is
-hearing.
+| State | Indicator |
+|---|---|
+| Listening | Seven dots, sized by the microphone level, a wave travelling across them |
+| Speaking | Seven dots, pulsing along in sequence |
+| Thinking | Nothing — the device is waiting, the microphone is not the story |
+| Everything else | Nothing |
 
 The user asked for it to "match the audio being received from mic". The SDK
 gives us a peak percentage, which is a level and not a waveform. That is the
 honest limit of what the SDK exposes today.
 
-**What we can do with a level:**
-
-- A vertical bar that grows and shrinks with the level.
-- A radial ring that pulses, with the radius driven by the level.
+**What we can do with a level:** size each dot by the level, with a short
+delay between dots so the row reads as a wave travelling rather than
+everything jumping at once.
 
 **What we cannot do** without more from the SDK: draw the actual waveform
 shape, because only the peak is exposed. Getting a real waveform would need
 either a block of PCM samples over IPC, or a small spectrum (a few bands).
 
-**Proposed compromise for now:** a **radial waveform** built from the peak
-level, rendered on a `<canvas>`, positioned over the HA view.
+**Why dots and not a bar chart.** A row of bars reads as a measurement; a row
+of dots reads as a voice assistant. The second is what this is.
 
-The design: a horizontal band of bars across the bottom of the screen, each
-bar's height driven by the current level, with a history so the bars
-smoothly fall away rather than jitter. A short decaying history per bar is
-what makes it read as a wave rather than a bar chart.
+**Placement:** bottom-centre of the view, in the *overlay* web contents (the
+one that already hosts the drawer and keyboard) rather than injected into the
+Home Assistant page. That way it survives HA re-renders and needs no CSS
+injection into a page we do not control. It lifts above the on-screen keyboard
+when that is up.
 
-```
-        ▁▂▃▅▇▅▃▂▁▂▃▄▆█▆▄▃▂▁▁▂▃▄▅▆▇▆▄▃▂▁
-```
+It must never show when the device is not actually listening or speaking.
+Showing an indicator that is not measuring anything is the same class of lie as
+reporting a state that is not true.
 
-Why a band at the bottom rather than a ring:
-
-- The kiosk already uses the bottom of the screen for the on-screen keyboard.
-  The wave needs to get out of the way when the keyboard is up.
-- A ring is the Echo's language, but this device has no ring, so a ring here
-  would be decoration pretending to be a hardware feature.
-- A band is honest: it says "this is a level meter", not "this is your
-  Echo's light ring".
-
-**Placement:** bottom-centre, above the keyboard when it is up, otherwise
-bottom-centre of the view. It should be an overlay in the *overlay* web
-contents (the one that already hosts the drawer and keyboard), not injected
-into the HA page. That way it survives HA re-renders and needs no CSS
-injection into a page we do not control.
-
-**When it shows:**
-
-| Condition | Wave |
-|---|---|
-| `Listening` is true | Visible, driven by the level |
-| `Phase` is `thinking` or `speaking` | Visible but flat/dim — the mic is not the story any more |
-| `Muted` | Hidden, or shown as a flat muted line |
-| `Listen` is `degraded` | Hidden — there is no microphone to show |
-| Link down | Hidden |
-
-It must never show when the device is not actually listening. Showing a wave
-that is not measuring anything is the same class of lie as reporting a state
-that is not true.
-
-### 4. Settings
+### 3. Settings
 
 A separate **EchoMuse** tab in the settings panel, alongside the existing
 device setup form. The settings panel is already full screen and scrolls, so
 the tab becomes a second view within it.
 
-Fields, drawn from the SDK's `Options` and `protocol.Config`:
+The tab opens with the **connection status**, so the same information is in
+the drawer and in the settings:
 
-**Connection**
-| Field | Type | Notes |
-|---|---|---|
-| Controller URL | url | Empty means discover by mDNS. Placeholder `ws://192.168.1.10:8767` |
-| Controller TLS port | number | Only for a controller that offers an encrypted port |
-| Device ID | text | **Must be stable.** The controller keys the device's row, config and credentials on it |
+```
+  ●  Connected
+     the controller admitted this device
+```
 
-**Identity**
+Then the settings, which are deliberately short. The device can do a lot, but
+a person should not have to configure it to use it.
+
+**Device**
 | Field | Type | Notes |
 |---|---|---|
 | Board | text | The controller names the model in HA from it |
-| Base OS | select | The controller uses it to pick the right profile |
 
-**Listening**
+**Wake word**
 | Field | Type | Notes |
 |---|---|---|
 | Wake word mode | select | `on` (device scores), `off` (controller scores — **streams audio**), `shadow` (developer diagnostic, not a user choice) |
-| Wake word enabled | toggle | `false` is "No wake word" — a distinct meaning from "unset" |
 | Wake threshold | number | 0–1, float |
+| Wake sound | select | On / Off |
+| Wake word enabled | toggle | `false` is "No wake word" — a distinct meaning from "unset" |
 | Barge-in | toggle | |
-| Mute button | toggle | Whether the device's own mute switch exists |
 
-**Audio**
+**Microphone**
 | Field | Type | Notes |
 |---|---|---|
 | Microphone gain | number | dB |
-| VAD threshold | number | |
+| Startup volume | number | 0–100 |
+| VAD threshold | number | 0–1 |
 | VAD speech time | number | ms |
 | VAD silence time | number | ms |
-| Startup volume | number | 0–100 |
-| Ducking | number | dB, how far the music ducks under a response |
 
-**Ring / display**
+**Speaker**
 | Field | Type | Notes |
 |---|---|---|
-| LED scene | text | |
-| Listen colour | colour | |
-| Think colour | colour | |
+| Output volume | number | 0–100 |
+| Ducking | number | dB, how far the music ducks under a response |
+| Mute switch | toggle | Whether the device has its own mute switch |
+| Volume button sound | toggle | |
 
-**Capabilities**
+**What was left out, and why.**
 
-A multi-select of the capability strings the SDK announces. These must all be
-true of the device — announcing one and not implementing it produces a device
-that scores, stays silent and looks broken.
-
-`mic`, `speaker`, `leds`, `led_anim`, `buttons`, `oww_shadow`, `oww_trigger`,
-`button_hold`, `audio_mix`, `oww_local_only`, `aec_hw_ref`, `output_chain`,
-`wake_cue`, `volume_cue`, `wake_mic`, `remote_volume_arc`, `response_level`,
-`stock_sound`, `ambient_light`, `sendspin`, `wake_word_off`, `pairing`,
-`ble_connect`.
-
-For the kiosk the sensible set is `mic`, `speaker`, `buttons`, `pairing` and
-possibly `oww_local_only`.
-
-### 5. Status detail
-
-A read-only "EchoMuse" readout, in the same dark LCD style the emulator uses:
-
-```
-  Link            up
-  Admitted        yes
-  Credential      received
-  Listen          local
-  Phase           idle
-  Volume          42
-  Features        mic, speaker, buttons
-```
-
-This mirrors the emulator's LCD block, which is the same product.
+- **Capabilities.** These are what the device announces to the controller, and
+  they are all true of this device. Exposing them in a settings page invites
+  someone to tick a box the hardware cannot honour — announcing a capability
+  and not implementing it produces a device that scores, stays silent and
+  looks broken.
+- **Controller URL, TLS port, Device ID.** The controller is found by mDNS and
+  the device identity is derived from the machine. These are deployment
+  concerns, not something a person on a wall display should be editing.
+- **Base OS.** It is a constant.
 
 ## What the SDK still needs to give us
 
 | Need | Today | Required |
 |---|---|---|
-| Mic level for the wave | `peakLevel()` exists in the emulator but is not exposed by the SDK | A level the app can read, e.g. `Device.OnMicLevel(func(int))` |
-| Actual waveform | not available | A block of samples or a small spectrum, if the band is to be a real waveform |
+| Mic level for the indicator | `peakLevel()` exists in the emulator but is not exposed by the SDK | A level the app can read, e.g. `Device.OnMicLevel(func(int))` |
+| Actual waveform | not available | A block of samples or a small spectrum, if the dots are to become a real waveform |
+| Connection state | `state.Snapshot` has `LinkUp` and `Approved`; the phases carry the rest | The app needs to map those onto connected / unpaired / disabled |
 | Ring colours | `display.Tracker` has them | Needs to reach the UI, probably as part of the state snapshot |
 | Config push | `protocol.Config` decodes it | The app needs to read the pushed config and apply it, and to send config changes back |
 
@@ -271,33 +208,33 @@ the ring, so the natural shape is for the SDK to publish a comparable
 
 ## Design decisions to argue about
 
-1. **A level, not a waveform.** The SDK only exposes a peak. The wave shows
-   a level that decays over time. If a real waveform is wanted, the SDK needs
-   to expose samples.
+1. **A level, not a waveform.** The SDK only exposes a peak. The indicator
+   sizes dots by that level. If a real waveform is wanted, the SDK needs to
+   expose samples.
 
-2. **A band, not a ring.** The ring is the Echo's language and this device
-   has no ring. A bottom band is honest and does not fight the on-screen
-   keyboard for space.
+2. **Dots, not a ring.** The ring is the Echo's language and this device has
+   no ring. A row of dots reads as a voice assistant, which is what this is.
 
-3. **The privacy badge is always visible.** `local` / `streaming` /
-   `no wake word` sits next to the EchoMuse row. It is the single most
-   important thing this UI says.
+3. **The indicator only appears when the device is doing something.** It is
+   not a permanent row of status LEDs.
 
 4. **Unknown is drawn as unknown.** Never as the opposite. A grey "Unknown"
-   is correct; a green "Ready" when the device has not said is a lie.
+   is correct; a green "Connected" when the device has not said is a lie.
 
-5. **The wave only shows when actually listening.** A wave that is not
-   measuring anything is exactly the lie the SDK's rules exist to prevent.
+5. **The settings page is short on purpose.** Board, wake word, microphone
+   and speaker. Everything else is either constant or a deployment concern.
 
 ## Prototype
 
-This branch carries a working prototype of items 1 to 3:
+This branch carries a working prototype:
 
-- The drawer shows an EchoMuse row with a status LED, a phase label and a
-  privacy badge.
-- A canvas wave draws over the view, driven by a **mock** level source, so the
-  motion can be judged without the SDK.
-- The settings panel has an EchoMuse tab with the fields above.
+- The drawer shows an EchoMuse row in the same layout as the other services,
+  with the controller connection as the value.
+- A canvas indicator draws over the view — dots sized by the microphone level
+  while listening, pulsing along while speaking — driven by a **mock** level
+  source, so the motion can be judged without the SDK.
+- The settings panel has an EchoMuse tab with the connection status and the
+  short settings list.
 
 The mock data lives in one clearly marked place so it can be swapped for the
 real SDK when it lands.

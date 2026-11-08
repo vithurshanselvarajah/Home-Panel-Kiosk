@@ -6,11 +6,13 @@ const keyboard = $("#keyboard");
 const form = $("#settings-form");
 const echomuseForm = $("#echomuse-form");
 const echomuseUI = window.EchoMuseUI ? window.EchoMuseUI.create({
-  canvas: $("#voice-wave"),
+  canvas: $("#voice-indicator"),
   row: $("#echomuse-row"),
-  phase: $("#echomuse-state"),
-  listen: $("#echomuse-listen"),
+  state: $("#echomuse-state"),
   led: document.querySelector('[data-service="echomuse"]'),
+  statusLed: document.querySelector('[data-service="echomuse-settings"]'),
+  statusLabel: $("#echomuse-status-label"),
+  statusReason: $("#echomuse-status-reason"),
 }) : null;
 let loadedSettings;
 let touchStart;
@@ -40,10 +42,10 @@ function syncSettingsLayout() {
   syncWaveLayout();
 }
 
-// Keeps the wave clear of the on-screen keyboard.
+// Keeps the voice indicator clear of the on-screen keyboard.
 function syncWaveLayout() {
   if (!echomuseUI) return;
-  echomuseUI.wave.lift(keyboardOffset());
+  echomuseUI.indicator.lift(keyboardOffset());
 }
 
 // Keeps the slide-in drawer clear of the return home bar and the keyboard.
@@ -350,7 +352,7 @@ window.addEventListener("pointercancel", () => {
 window.addEventListener("keydown", () => window.homePanel.activity("keydown"));
 window.addEventListener("resize", () => {
   syncSettingsLayout();
-  if (echomuseUI) echomuseUI.wave.resize();
+  if (echomuseUI) echomuseUI.indicator.resize();
 });
 window.visualViewport?.addEventListener("resize", syncSettingsLayout);
 window.visualViewport?.addEventListener("scroll", syncSettingsLayout);
