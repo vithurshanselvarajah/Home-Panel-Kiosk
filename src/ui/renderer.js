@@ -4,6 +4,14 @@ const drawer = $("#side-panel");
 const drawerBackdrop = $("#side-panel-backdrop");
 const keyboard = $("#keyboard");
 const form = $("#settings-form");
+const echomuseForm = $("#echomuse-form");
+const echomuseUI = window.EchoMuseUI ? window.EchoMuseUI.create({
+  canvas: $("#voice-wave"),
+  row: $("#echomuse-row"),
+  phase: $("#echomuse-state"),
+  listen: $("#echomuse-listen"),
+  led: document.querySelector('[data-service="echomuse"]'),
+}) : null;
 let loadedSettings;
 let touchStart;
 let dragState;
@@ -11,8 +19,8 @@ let shiftOn = false;
 let symbolsOn = false;
 let settingsKeyboardActive = false;
 
-function syncSettingsLayout() {
-  if (!panel || panel.hidden) return;
+// How much room the on-screen keyboard takes off the bottom of the view.
+function keyboardOffset() {
   let bottom = 0;
   if (keyboard && !keyboard.hidden) {
     const rect = keyboard.getBoundingClientRect();
@@ -22,8 +30,20 @@ function syncSettingsLayout() {
   if (viewport && viewport.height && viewport.scale === 1) {
     bottom = Math.max(bottom, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
   }
-  panel.style.bottom = `${bottom}px`;
+  return bottom;
+}
+
+function syncSettingsLayout() {
+  if (!panel || panel.hidden) return;
+  panel.style.bottom = `${keyboardOffset()}px`;
   syncDrawerLayout();
+  syncWaveLayout();
+}
+
+// Keeps the wave clear of the on-screen keyboard.
+function syncWaveLayout() {
+  if (!echomuseUI) return;
+  echomuseUI.wave.lift(keyboardOffset());
 }
 
 // Keeps the slide-in drawer clear of the return home bar and the keyboard.
@@ -165,6 +185,27 @@ function closeSettings() {
 }
 
 $("#close-settings").addEventListener("click", closeSettings);
+
+// Settings tabs. The EchoMuse tab is a separate view in the same panel so
+// the device setup form is not buried under it.
+const settingsTabs = [
+  { tab: $("#tab-device"), view: $("#settings-view-device") },
+  { tab: $("#tab-echomuse"), view: $("#settings-view-echomuse") },
+];
+
+function selectSettingsTab(index) {
+  settingsTabs.forEach((entry, position) => {
+    const selected = position === index;
+    entry.tab.setAttribute("aria-selected", String(selected));
+    entry.view.hidden = !selected;
+  });
+  syncSettingsLayout();
+}
+
+settingsTabs.forEach((entry, position) => {
+  entry.tab.addEventListener("click", () => selectSettingsTab(position));
+});
+selectSettingsTab(0);
 // Any button in the drawer dismisses it, so the panel never lingers over the
 // view once an action has been picked.
 drawer.addEventListener("click", (event) => {
@@ -206,6 +247,16 @@ form.addEventListener("submit", async (event) => {
     populate(saved); closeSettings();
   } catch (error) { $("#form-error").textContent = error.message || "Could not save settings."; }
 });
+
+// The EchoMuse form is not saved yet: there is no SDK to save it to. The
+// submit is deliberately inert for now, and says so rather than pretending
+// to have saved.
+if (echomuseForm) {
+  echomuseForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    $("#echomuse-error").textContent = "EchoMuse is not connected yet. These settings will be applied once the SDK is wired in.";
+  });
+}
 
 const statusLabels = { online: "Online", connecting: "Connecting", offline: "Offline", unknown: "Unknown" };
 window.homePanel.onState((state) => {
@@ -297,7 +348,10 @@ window.addEventListener("pointercancel", () => {
   endDrawerDrag(drawer.classList.contains("open") ? 1 : 0);
 });
 window.addEventListener("keydown", () => window.homePanel.activity("keydown"));
-window.addEventListener("resize", syncSettingsLayout);
+window.addEventListener("resize", () => {
+  syncSettingsLayout();
+  if (echomuseUI) echomuseUI.wave.resize();
+});
 window.visualViewport?.addEventListener("resize", syncSettingsLayout);
 window.visualViewport?.addEventListener("scroll", syncSettingsLayout);
 
@@ -306,3 +360,13 @@ window.homePanel.getSettings().then((settings) => {
   populate(settings);
   if (!settings.configured) openSettings();
 });
+
+// The EchoMuse SDK is not wired up yet, so the interface runs on a mock
+// source. It is started here so the wave and the status can be judged on a
+// screen. Swap the mock for the SDK's state when it lands.
+if (echomuseUI && window.EchoMuseUI.createMockSource) {
+  const mock = window.EchoMuseUI.createMockSource();
+  mock.onChange((state) => echomuseUI.apply(state));
+  mock.start();
+  syncWaveLayout();
+}
