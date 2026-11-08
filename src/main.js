@@ -113,9 +113,12 @@ async function injectScrollbarCSS(webContents) {
   }
 }
 
-function decodeSettings(data) {
-  if (data.mqttPasswordEncrypted && safeStorage.isEncryptionAvailable()) {
-    try { data.mqttPassword = safeStorage.decryptString(Buffer.from(data.mqttPasswordEncrypted, "base64")); } catch {}
+async function decodeSettings(data) {
+  if (data.mqttPasswordEncrypted && await safeStorage.isAsyncEncryptionAvailable()) {
+    try {
+      const { result } = await safeStorage.decryptStringAsync(Buffer.from(data.mqttPasswordEncrypted, "base64"));
+      data.mqttPassword = result;
+    } catch {}
   }
   legacyCameraNames = Array.isArray(data.cameras) ? data.cameras.map((camera) => camera?.name).filter(Boolean) : [];
   delete data.cameras;
@@ -129,7 +132,7 @@ function assertOverlaySender(event) {
 
 function sendState() {
   const state = { mode, cameraSelection, displayIsOff, keyboardVisible, sidePanelOpen, serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
-  if (!overlayView?.webContents.isDestroyed()) overlayView.webContents.send("app:state", state);
+  if (overlayView?.webContents && !overlayView.webContents.isDestroyed()) overlayView.webContents.send("app:state", state);
   publishState(state);
 }
 
@@ -148,14 +151,14 @@ function publishState(state) {
 
 function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {
   const safeDuration = Math.max(1000, Math.min(Number(duration) || 8000, 120000));
-  overlayView?.webContents.send("app:notification", {
+  overlayView?.webContents?.send("app:notification", {
     title: String(title).slice(0, 100),
     message: String(message).slice(0, 500),
     duration: safeDuration,
     priority: ["low", "normal", "high"].includes(priority) ? priority : "normal",
   });
   clearTimeout(notificationTimer);
-  notificationTimer = setTimeout(() => overlayView?.webContents.send("app:dismiss-notification"), safeDuration);
+  notificationTimer = setTimeout(() => overlayView?.webContents?.send("app:dismiss-notification"), safeDuration);
 }
 
 function cancelIdleTimers() {
@@ -456,7 +459,7 @@ function handleCommand(command) {
       break;
     }
     case "notification": recordActivity("home-assistant"); showNotice(command); break;
-    case "dismiss_notification": overlayView?.webContents.send("app:dismiss-notification"); break;
+    case "dismiss_notification": overlayView?.webContents?.send("app:dismiss-notification"); break;
     case "set_mode":
       recordActivity("home-assistant");
       if (["dashboard", "slideshow"].includes(command.mode)) openMode(command.mode);
@@ -569,7 +572,7 @@ function publishDiscovery() {
 }
 
 async function loadSettings() {
-  try { settings = decodeSettings(JSON.parse(await fs.readFile(configPath(), "utf8"))); }
+  try { settings = await decodeSettings(JSON.parse(await fs.readFile(configPath(), "utf8"))); }
   catch { settings = { ...DEFAULTS }; }
 }
 
@@ -581,8 +584,8 @@ async function saveSettings(next) {
   clean.dashboardUrl = safeUrl(clean.dashboardUrl) || DEFAULTS.dashboardUrl;
   clean.slideshowUrl = clean.slideshowUrl ? safeUrl(clean.slideshowUrl) || "" : "";
   const persisted = { ...clean };
-  if (safeStorage.isEncryptionAvailable() && clean.mqttPassword) {
-    persisted.mqttPasswordEncrypted = safeStorage.encryptString(clean.mqttPassword).toString("base64");
+  if (clean.mqttPassword && await safeStorage.isAsyncEncryptionAvailable()) {
+    persisted.mqttPasswordEncrypted = (await safeStorage.encryptStringAsync(clean.mqttPassword)).toString("base64");
     delete persisted.mqttPassword;
   }
   await fs.mkdir(path.dirname(configPath()), { recursive: true });
@@ -611,7 +614,9 @@ function createWindow() {
   // hidden blank renderer process just to host the window.
   remoteView = { webContents: win.webContents };
   overlayView = new WebContentsView({ webPreferences: {
-    preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true,
+    // The overlay loads a bundled local page, so it is trusted enough to run
+    // unsandboxed and share the field editing helper with the main process.
+    preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: false,
   } });
   overlayView.setBackgroundColor("#00000000");
   overlayView.webContents.loadFile(path.join(__dirname, "ui", "index.html"));
