@@ -251,6 +251,26 @@ PY
 
 configure_pi_touch
 
+# Chromium rewrites its disk caches on every page load, which is the main
+# source of write wear on eMMC storage. Point the cache directories at tmpfs
+# so they live in RAM instead.
+if [[ "${PITOUCH_SKIP_CACHE_TMPFS:-0}" != "1" && -d /dev/shm ]]; then
+  CACHE_TMPFS_DIR="/dev/shm/homepanel-kiosk-cache"
+  mkdir -p "$CACHE_TMPFS_DIR"
+  for cache_dir in Cache Cache_Data Code Cache GPUCache DawnCache GrShaderCache ShaderCache; do
+    target="$APP_CONFIG_DIR/$cache_dir"
+    if [[ -L "$target" ]]; then
+      continue
+    fi
+    if [[ -d "$target" ]]; then
+      rm -rf "$target"
+    fi
+    mkdir -p "$APP_CONFIG_DIR"
+    ln -sfn "$CACHE_TMPFS_DIR/$cache_dir" "$target"
+  done
+  echo "Chromium caches redirected to $CACHE_TMPFS_DIR."
+fi
+
 DISPLAY_VALUE=${DISPLAY:-:0}
 WAYLAND_VALUE=${WAYLAND_DISPLAY:-}
 if [[ -z "$WAYLAND_VALUE" && -n "${XDG_RUNTIME_DIR:-}" && -S "$XDG_RUNTIME_DIR/wayland-0" ]]; then
