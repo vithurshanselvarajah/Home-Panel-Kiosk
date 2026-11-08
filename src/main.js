@@ -23,7 +23,6 @@ const DEFAULTS = {
 };
 
 let win;
-let remoteView;
 let overlayView;
 let settings = { ...DEFAULTS };
 let mqttClient;
@@ -50,9 +49,17 @@ let displayCommandId = 0;
 let requestedDisplayStatus = null;
 let legacyCameraNames = [];
 let overlayRecycleTimer;
+let viewRetryTimer;
+let lastPointerMoveAt = 0;
 const OVERLAY_RECYCLE_DELAY_MS = 60_000;
+const VIEW_RETRY_INTERVAL_MS = 15_000;
+const POINTER_MOVE_INTERVAL_MS = 5_000;
 const deviceId = `homepanel_${os.hostname().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) || "display"}`;
 const configPath = () => path.join(app.getPath("userData"), "settings.json");
+
+// The dashboard is rendered by the main window itself, so there is no separate
+// view to keep track of.
+const view = () => win?.webContents;
 
 const healthChecker = createHealthChecker({
   onChange: (name, status) => {
@@ -87,16 +94,22 @@ function registerHealthProbes() {
   });
 }
 
-function enableTouchEmulation(webContents) {
+// Touch emulation needs the DevTools protocol. Attach, apply the override and
+// detach again so the protocol channel is not held open for the session.
+async function enableTouchEmulation(webContents) {
   if (!webContents || webContents.isDestroyed()) return;
   try {
     if (!webContents.debugger.isAttached()) webContents.debugger.attach("1.3");
-    webContents.debugger.sendCommand("Emulation.setEmitTouchEventsForMouse", {
+    await webContents.debugger.sendCommand("Emulation.setEmitTouchEventsForMouse", {
       configuration: "mobile",
       enabled: true,
-    }).catch(() => {});
+    });
   } catch (error) {
     console.warn("Touch emulation unavailable:", error.message);
+  } finally {
+    try {
+      if (webContents.debugger.isAttached()) webContents.debugger.detach();
+    } catch { /* the view may already be gone */ }
   }
 }
 
@@ -127,13 +140,21 @@ function assertOverlaySender(event) {
   if (event.sender !== overlayView?.webContents) throw new Error("Untrusted IPC sender");
 }
 
+// Sends to the overlay, tolerating a view that is being torn down.
+function sendToOverlay(channel, payload) {
+  if (!overlayView?.webContents || overlayView.webContents.isDestroyed()) return;
+  try {
+    overlayView.webContents.send(channel, payload);
+  } catch { /* the frame was disposed between the check and the send */ }
+}
+
 function sendState() {
   const state = { mode, displayIsOff, keyboardVisible, sidePanelOpen, serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
   // Only message the overlay when something it renders has actually changed.
   const fingerprint = `${state.mode}|${state.displayIsOff}|${state.keyboardVisible}|${state.sidePanelOpen}|${JSON.stringify(state.serviceStatus)}`;
   if (fingerprint !== lastSentState) {
     lastSentState = fingerprint;
-    if (overlayView?.webContents && !overlayView.webContents.isDestroyed()) overlayView.webContents.send("app:state", state);
+    sendToOverlay("app:state", state);
   }
   publishState(state);
 }
@@ -153,14 +174,14 @@ function publishState(state) {
 function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {
   const safeDuration = Math.max(1000, Math.min(Number(duration) || 8000, 120000));
   ensureOverlayView();
-  overlayView?.webContents?.send("app:notification", {
+  sendToOverlay("app:notification", {
     title: String(title).slice(0, 100),
     message: String(message).slice(0, 500),
     duration: safeDuration,
     priority: ["low", "normal", "high"].includes(priority) ? priority : "normal",
   });
   clearTimeout(notificationTimer);
-  notificationTimer = setTimeout(() => overlayView?.webContents?.send("app:dismiss-notification"), safeDuration);
+  notificationTimer = setTimeout(() => sendToOverlay("app:dismiss-notification"), safeDuration);
 }
 
 function cancelIdleTimers() {
@@ -201,6 +222,8 @@ function openMode(nextMode, target = "") {
     clearTimeout(urlTimer);
     urlTimer = undefined;
   }
+  clearTimeout(viewRetryTimer);
+  viewRetryTimer = undefined;
   const url = nextMode === "dashboard" ? safeUrl(settings.dashboardUrl)
     : nextMode === "slideshow" ? safeUrl(settings.slideshowUrl)
       : nextMode === "url" ? safeUrl(target) : null;
@@ -231,10 +254,36 @@ function openMode(nextMode, target = "") {
 // Reloads the view only when the target actually differs from what is already
 // loaded. Home Assistant is heavy to boot, so avoid reloading it needlessly.
 function loadView(url) {
-  if (!remoteView?.webContents || remoteView.webContents.isDestroyed()) return;
-  const current = remoteView.webContents.getURL();
+  if (!view() || view().isDestroyed()) return;
+  const current = view().getURL();
   if (current === url) return;
-  remoteView.webContents.loadURL(url).catch((error) => console.error("View load failed:", error.message));
+  view().loadURL(url).catch((error) => console.error("View load failed:", error.message));
+}
+
+// Retries the current view after a crash or a failed load. The retry waits for
+// the service to answer again, so the display recovers on its own once Home
+// Assistant or Immich comes back.
+function scheduleViewRetry(delay = VIEW_RETRY_INTERVAL_MS) {
+  clearTimeout(viewRetryTimer);
+  viewRetryTimer = setTimeout(async () => {
+    viewRetryTimer = undefined;
+    if (!view() || view().isDestroyed()) return;
+    const key = mode === "slideshow" ? "immich" : "dashboard";
+    try {
+      await healthChecker.probe(key);
+    } catch {
+      scheduleViewRetry(delay);
+      return;
+    }
+    if (healthChecker.status(key) !== "online") {
+      scheduleViewRetry(delay);
+      return;
+    }
+    const url = mode === "slideshow" ? safeUrl(settings.slideshowUrl) : safeUrl(settings.dashboardUrl);
+    if (!url) return;
+    console.info("Retrying view after the service came back online.");
+    view().loadURL(url).catch((error) => console.error("View retry failed:", error.message));
+  }, delay);
 }
 
 function setSidePanel(open) {
@@ -301,15 +350,15 @@ function setKeyboardVisible(visible) {
 }
 
 function sendKeyboardKey(key) {
-  if (!remoteView?.webContents || remoteView.webContents.isDestroyed()) return;
+  if (!view() || view().isDestroyed()) return;
   const namedKeys = { BACKSPACE: "Backspace", ENTER: "Enter", TAB: "Tab", SPACE: " ", SHIFT: "Shift", LEFT: "ArrowLeft", RIGHT: "ArrowRight" };
   const keyCode = namedKeys[key] || key;
   if (!(typeof key === "string" && (key.length === 1 || Object.hasOwn(namedKeys, key)))) return;
   keyboardKeySequence += 1;
   if (key === "SHIFT") return;
-  remoteView.webContents.sendInputEvent({ type: "keyDown", keyCode });
-  if (key === "SPACE" || key.length === 1) remoteView.webContents.sendInputEvent({ type: "char", keyCode: key === "SPACE" ? " " : key });
-  remoteView.webContents.sendInputEvent({ type: "keyUp", keyCode });
+  view().sendInputEvent({ type: "keyDown", keyCode });
+  if (key === "SPACE" || key.length === 1) view().sendInputEvent({ type: "char", keyCode: key === "SPACE" ? " " : key });
+  view().sendInputEvent({ type: "keyUp", keyCode });
 }
 
 function runDisplayCommand(operation) {
@@ -394,7 +443,7 @@ function handleCommand(command) {
       break;
     case "brightness": recordActivity("home-assistant"); setBrightness(command.value); break;
     case "notification": recordActivity("home-assistant"); showNotice(command); break;
-    case "dismiss_notification": overlayView?.webContents?.send("app:dismiss-notification"); break;
+    case "dismiss_notification": sendToOverlay("app:dismiss-notification"); break;
     case "set_mode":
       recordActivity("home-assistant");
       if (["dashboard", "slideshow"].includes(command.mode)) openMode(command.mode);
@@ -508,8 +557,14 @@ function publishDiscovery() {
 }
 
 async function loadSettings() {
-  try { settings = await decodeSettings(JSON.parse(await fs.readFile(configPath(), "utf8"))); }
-  catch { settings = { ...DEFAULTS }; }
+  try {
+    settings = await decodeSettings(JSON.parse(await fs.readFile(configPath(), "utf8")));
+    return;
+  } catch { /* fall through to the backup */ }
+  try {
+    settings = await decodeSettings(JSON.parse(await fs.readFile(`${configPath()}.bak`, "utf8")));
+    console.warn("Recovered settings from the backup copy.");
+  } catch { settings = { ...DEFAULTS }; }
 }
 
 async function saveSettings(next) {
@@ -525,7 +580,7 @@ async function saveSettings(next) {
     delete persisted.mqttPassword;
   }
   await fs.mkdir(path.dirname(configPath()), { recursive: true });
-  await fs.writeFile(configPath(), JSON.stringify(persisted, null, 2), { mode: 0o600 });
+  await writeSettingsFile(persisted);
   settings = { ...clean };
   if (!settings.touchKeyboardEnabled) setKeyboardVisible(false);
   registerHealthProbes();
@@ -533,6 +588,19 @@ async function saveSettings(next) {
   connectMqtt();
   openMode(mode === "slideshow" ? "slideshow" : "dashboard");
   return publicSettings();
+}
+
+// Writes the settings file atomically so a power cut cannot leave a half
+// written config behind, and keeps the previous file as a backup.
+async function writeSettingsFile(data) {
+  const target = configPath();
+  const temporary = `${target}.tmp`;
+  const serialized = JSON.stringify(data, null, 2);
+  try {
+    await fs.rename(target, `${target}.bak`);
+  } catch { /* no previous settings to back up */ }
+  await fs.writeFile(temporary, serialized, { mode: 0o600 });
+  await fs.rename(temporary, target);
 }
 
 function publicSettings() {
@@ -571,30 +639,51 @@ function createWindow() {
   });
   // Use the BrowserWindow's own webContents for the dashboard: avoid a second,
   // hidden blank renderer process just to host the window.
-  remoteView = { webContents: win.webContents };
   createOverlayView();
-  remoteView.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  remoteView.webContents.on("will-navigate", (event, url) => {
+  view().setWindowOpenHandler(() => ({ action: "deny" }));
+  view().on("will-navigate", (event, url) => {
     if (!safeUrl(url)) event.preventDefault();
   });
-  remoteView.webContents.on("did-finish-load", () => {
-    enableTouchEmulation(remoteView.webContents);
-    injectScrollbarCSS(remoteView.webContents).catch(() => {});
+  view().on("did-finish-load", () => {
+    enableTouchEmulation(view());
+    injectScrollbarCSS(view()).catch(() => {});
     sendState();
   });
-  remoteView.webContents.on("did-fail-load", () => {
+  view().on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    // A failed load is usually the service being down rather than a bad URL,
+    // so keep retrying quietly instead of showing an error the user cannot act on.
+    console.warn(`View load failed (${errorCode}): ${errorDescription} ${validatedURL}`);
+    scheduleViewRetry();
     sendState();
   });
-  remoteView.webContents.on("before-input-event", (_event, input) => {
+  view().on("render-process-gone", (_event, details) => {
+    // clean-exit means the page was closed on purpose, so only a genuine
+    // crash or an out of memory kill is worth recovering from.
+    if (details.reason === "clean-exit") return;
+    console.error("View renderer gone:", details.reason);
+    showNotice({
+      title: "Display reloading",
+      message: "The dashboard stopped responding and is being restarted.",
+      duration: 6000,
+    });
+    scheduleViewRetry();
+    sendState();
+  });
+  view().on("before-input-event", (_event, input) => {
     if (["mouseDown", "keyDown", "char"].includes(input.type)) recordActivity(input.type);
   });
-  remoteView.webContents.on("before-mouse-event", (_event, input) => {
+  view().on("before-mouse-event", (_event, input) => {
     if (input.type === "mouseDown") {
       if (keyboardVisible) setKeyboardVisible(false);
       recordActivity("pointer-down");
     }
     if (input.type === "mouseMove") {
-      if (Date.now() - lastActivity > 5000) recordActivity("pointer-move");
+      // Throttle here so the idle timers are not reset on every mouse move.
+      if (Date.now() - lastPointerMoveAt > POINTER_MOVE_INTERVAL_MS) {
+        lastPointerMoveAt = Date.now();
+        recordActivity("pointer-move");
+      }
     }
   });
   const resize = () => resizeOverlay();
@@ -605,9 +694,9 @@ function createWindow() {
   win.on("resize", resize);
   win.on("enter-full-screen", resize);
   win.on("leave-full-screen", resize);
-  win.on("closed", () => { cancelIdleTimers(); clearTimeout(urlTimer); });
+  win.on("closed", () => { cancelIdleTimers(); clearTimeout(urlTimer); clearTimeout(viewRetryTimer); });
   resize();
-  remoteView.webContents.loadURL(safeUrl(settings.dashboardUrl) || DEFAULTS.dashboardUrl);
+  view().loadURL(safeUrl(settings.dashboardUrl) || DEFAULTS.dashboardUrl);
   mode = "dashboard";
   scheduleIdle();
 }
@@ -683,7 +772,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   healthChecker.stop();
-  cancelIdleTimers(); clearTimeout(urlTimer); clearTimeout(notificationTimer);
+  cancelIdleTimers(); clearTimeout(urlTimer); clearTimeout(viewRetryTimer); clearTimeout(notificationTimer);
   if (mqttClient) {
     mqttClient.publish(`${settings.mqttPrefix}/availability`, "offline", { retain: true, qos: 1 });
     mqttClient.end();

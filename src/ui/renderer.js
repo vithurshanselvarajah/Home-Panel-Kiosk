@@ -5,7 +5,6 @@ const drawerBackdrop = $("#side-panel-backdrop");
 const keyboard = $("#keyboard");
 const form = $("#settings-form");
 let loadedSettings;
-let activitySentAt = 0;
 let touchStart;
 let dragState;
 let shiftOn = false;
@@ -301,9 +300,6 @@ window.addEventListener("keydown", () => window.homePanel.activity("keydown"));
 window.addEventListener("resize", syncSettingsLayout);
 window.visualViewport?.addEventListener("resize", syncSettingsLayout);
 window.visualViewport?.addEventListener("scroll", syncSettingsLayout);
-window.addEventListener("pointermove", () => {
-  if (Date.now() - activitySentAt > 5000) { activitySentAt = Date.now(); window.homePanel.activity("pointermove"); }
-}, { passive: true });
 
 window.homePanel.getSettings().then((settings) => {
   loadedSettings = settings;
