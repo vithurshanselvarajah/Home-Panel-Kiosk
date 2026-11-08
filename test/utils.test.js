@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { safeUrl, cameraObjectId } = require("../src/utils");
+const { safeUrl, cameraObjectId, editFieldValue } = require("../src/utils");
 
 test("safeUrl accepts and normalizes HTTP URLs", () => {
   assert.equal(safeUrl("https://example.com/camera"), "https://example.com/camera");
@@ -20,4 +20,41 @@ test("cameraObjectId lowercases and replaces non-alphanumeric runs", () => {
 test("cameraObjectId trims separators and limits the entity suffix", () => {
   assert.equal(cameraObjectId("__Patio__"), "camera_patio");
   assert.equal(cameraObjectId("A".repeat(60)), `camera_${"a".repeat(48)}`);
+});
+
+test("editFieldValue inserts characters at the caret", () => {
+  const field = { value: "http://ha", type: "url", selectionStart: 9, selectionEnd: 9 };
+  assert.deepEqual(editFieldValue(field, "."), { value: "http://ha.", caret: 10 });
+});
+
+test("editFieldValue replaces the selected range", () => {
+  const field = { value: "mqtt://old", type: "url", selectionStart: 7, selectionEnd: 10 };
+  assert.deepEqual(editFieldValue(field, "new"), { value: "mqtt://new", caret: 10 });
+});
+
+test("editFieldValue backspace removes the preceding character", () => {
+  const field = { value: "http://ha", type: "url", selectionStart: 9, selectionEnd: 9 };
+  assert.deepEqual(editFieldValue(field, "BACKSPACE"), { value: "http://h", caret: 8 });
+});
+
+test("editFieldValue appends when no caret is reported", () => {
+  const field = { value: "abc", type: "text" };
+  assert.deepEqual(editFieldValue(field, "d"), { value: "abcd", caret: 4 });
+});
+
+test("editFieldValue inserts a space for the space key", () => {
+  const field = { value: "a b", type: "text", selectionStart: 3, selectionEnd: 3 };
+  assert.deepEqual(editFieldValue(field, "SPACE"), { value: "a b ", caret: 4 });
+});
+
+test("editFieldValue rejects non-numeric keys for number fields", () => {
+  const field = { value: "12", type: "number", selectionStart: 2, selectionEnd: 2 };
+  assert.deepEqual(editFieldValue(field, "a"), { value: "12", caret: 2, rejected: true });
+  assert.deepEqual(editFieldValue(field, "3"), { value: "123", caret: 3 });
+});
+
+test("editFieldValue ignores toggles and non-editing keys", () => {
+  assert.equal(editFieldValue({ value: "on", type: "checkbox" }, "x"), null);
+  assert.equal(editFieldValue({ value: "", type: "text" }, "ENTER"), null);
+  assert.equal(editFieldValue({ value: "", type: "text" }, "SHIFT"), null);
 });

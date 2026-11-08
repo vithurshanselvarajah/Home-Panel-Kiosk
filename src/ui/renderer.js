@@ -9,6 +9,50 @@ let activitySentAt = 0;
 let touchStart;
 let shiftOn = false;
 let symbolsOn = false;
+let settingsKeyboardActive = false;
+
+function syncSettingsLayout() {
+  if (!panel || panel.hidden) return;
+  let bottom = 0;
+  if (keyboard && !keyboard.hidden) {
+    const rect = keyboard.getBoundingClientRect();
+    bottom = Math.max(bottom, Math.round(window.innerHeight - rect.top));
+  }
+  const viewport = window.visualViewport;
+  if (viewport && viewport.height && viewport.scale === 1) {
+    bottom = Math.max(bottom, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
+  }
+  panel.style.bottom = `${bottom}px`;
+}
+
+function setCaret(field, position) {
+  if (typeof field.selectionStart !== "number") return;
+  try { field.setSelectionRange(position, position); } catch { /* number inputs do not expose a selection */ }
+}
+
+// Types into the focused settings field when the panel is open, otherwise the
+// keystroke belongs to the Home Assistant page behind the overlay.
+function applyToSettingsField(value) {
+  const field = document.activeElement;
+  if (!field || !form.contains(field) || !("value" in field)) return false;
+  if (value === "ENTER") { form.requestSubmit(); return true; }
+  const result = window.homePanel.editFieldValue({
+    value: field.value,
+    type: field.type,
+    selectionStart: field.selectionStart,
+    selectionEnd: field.selectionEnd,
+  }, value);
+  if (!result) return true;
+  field.value = result.value;
+  setCaret(field, result.caret);
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+}
+
+function sendKey(value) {
+  if (panel.hidden) { window.homePanel.keyboardKey(value); return; }
+  applyToSettingsField(value);
+}
 
 function populate(settings) {
   loadedSettings = settings;
@@ -32,6 +76,7 @@ function setDrawer(open) {
 
 function openSettings() {
   panel.hidden = false;
+  syncSettingsLayout();
   window.homePanel.setOverlayExpanded(true);
   window.homePanel.activity("keydown");
 }
@@ -48,7 +93,7 @@ function renderKeyboard() {
     const el = document.createElement("div"); el.className = "key-row";
     for (const char of row) {
       const button = document.createElement("button"); button.className = "key"; button.textContent = shiftOn && !symbolsOn ? char.toUpperCase() : char;
-      button.addEventListener("click", () => { window.homePanel.keyboardKey(shiftOn && !symbolsOn ? char.toUpperCase() : char); shiftOn = false; renderKeyboard(); });
+      button.addEventListener("click", () => { const typed = shiftOn && !symbolsOn ? char.toUpperCase() : char; shiftOn = false; sendKey(typed); renderKeyboard(); });
       el.append(button);
     }
     keyboard.append(el);
@@ -56,7 +101,7 @@ function renderKeyboard() {
   const bottom = document.createElement("div"); bottom.className = "key-row key-row-bottom";
   const addKey = (label, value, className = "") => {
     const button = document.createElement("button"); button.className = `key ${className}`; button.textContent = label;
-    button.addEventListener("click", () => window.homePanel.keyboardKey(value)); bottom.append(button);
+    button.addEventListener("click", () => sendKey(value)); bottom.append(button);
   };
   const shift = document.createElement("button"); shift.className = `key key-wide ${shiftOn ? "active" : ""}`; shift.textContent = "⇧"; shift.addEventListener("click", () => { shiftOn = !shiftOn; renderKeyboard(); }); bottom.append(shift);
   addKey("⌫", "BACKSPACE", "key-wide");
@@ -65,24 +110,45 @@ function renderKeyboard() {
   keyboard.append(bottom);
 }
 
-function setKeyboard(visible) {
+function setKeyboard(visible, { settings = false } = {}) {
+  settingsKeyboardActive = settings && visible;
   keyboard.hidden = !visible;
   window.homePanel.setKeyboard(visible);
-  if (visible) { renderKeyboard(); window.homePanel.activity("keydown"); }
+  if (visible) renderKeyboard();
+  syncSettingsLayout();
+  if (visible) { window.homePanel.activity("keydown"); }
+}
+
+function closeSettings() {
+  panel.hidden = true;
+  if (settingsKeyboardActive) setKeyboard(false);
+  window.homePanel.setOverlayExpanded(!$("#notice").hidden || !keyboard.hidden);
+  syncSettingsLayout();
 }
 
 $("#close-drawer").addEventListener("click", () => setDrawer(false));
 $("#settings-button").addEventListener("click", openSettings);
-$("#close-settings").addEventListener("click", () => {
-  panel.hidden = true;
-  window.homePanel.setOverlayExpanded(!$("#notice").hidden || !keyboard.hidden);
-});
+$("#close-settings").addEventListener("click", closeSettings);
 drawer.addEventListener("click", (event) => {
   const action = event.target.closest("[data-action]")?.dataset.action;
   if (action) { window.homePanel.command({ action }); setDrawer(false); }
 });
 $("#notice").addEventListener("click", (event) => {
   if (event.target.closest("[data-action]")) window.homePanel.command({ action: "dismiss_notification" });
+});
+
+form.addEventListener("focusin", (event) => {
+  const field = event.target;
+  if (!field || !("value" in field) || field.type === "checkbox" || field.type === "radio") return;
+  if (keyboard.hidden) setKeyboard(true, { settings: true });
+  else settingsKeyboardActive = true;
+});
+
+form.addEventListener("focusout", (event) => {
+  if (!settingsKeyboardActive) return;
+  const next = event.relatedTarget;
+  if (next && form.contains(next)) return;
+  setKeyboard(false);
 });
 
 form.addEventListener("submit", async (event) => {
@@ -95,8 +161,7 @@ form.addEventListener("submit", async (event) => {
   $("#form-error").textContent = "";
   try {
     const saved = await window.homePanel.saveSettings(data);
-    populate(saved); panel.hidden = true;
-    window.homePanel.setOverlayExpanded(!$("#notice").hidden || !keyboard.hidden);
+    populate(saved); closeSettings();
   } catch (error) { $("#form-error").textContent = error.message || "Could not save settings."; }
 });
 
@@ -112,12 +177,13 @@ window.homePanel.onState((state) => {
     led.dataset.status = value;
     $(`#${service}-state`).textContent = statusLabels[value] || "Unknown";
   }
-  if (Boolean(state.keyboardVisible) !== !keyboard.hidden) { keyboard.hidden = !state.keyboardVisible; if (state.keyboardVisible) renderKeyboard(); }
+  if (!settingsKeyboardActive && Boolean(state.keyboardVisible) !== !keyboard.hidden) { keyboard.hidden = !state.keyboardVisible; if (state.keyboardVisible) renderKeyboard(); }
   if (Boolean(state.sidePanelOpen) !== drawer.classList.contains("open")) {
     drawer.classList.toggle("open", Boolean(state.sidePanelOpen));
     drawer.setAttribute("aria-hidden", String(!state.sidePanelOpen));
     drawerBackdrop.hidden = !state.sidePanelOpen;
   }
+  syncSettingsLayout();
 });
 
 $("#return-home").addEventListener("click", () => window.homePanel.command({ action: "dashboard" }));
@@ -141,7 +207,10 @@ window.homePanel.onDismissNotification(() => {
 });
 
 window.addEventListener("pointerdown", (event) => {
-  if (!keyboard.hidden && !event.target.closest?.("#keyboard")) { setKeyboard(false); return; }
+  if (!keyboard.hidden && !event.target.closest?.("#keyboard")) {
+    const insideForm = !panel.hidden && Boolean(event.target.closest?.("#settings-form"));
+    if (!insideForm) { setKeyboard(false); return; }
+  }
   touchStart = { x: event.clientX, y: event.clientY };
   window.homePanel.activity("keydown");
 }, { passive: true });
@@ -153,6 +222,9 @@ window.addEventListener("pointerup", (event) => {
   touchStart = null;
 }, { passive: true });
 window.addEventListener("keydown", () => window.homePanel.activity("keydown"));
+window.addEventListener("resize", syncSettingsLayout);
+window.visualViewport?.addEventListener("resize", syncSettingsLayout);
+window.visualViewport?.addEventListener("scroll", syncSettingsLayout);
 window.addEventListener("pointermove", () => {
   if (Date.now() - activitySentAt > 5000) { activitySentAt = Date.now(); window.homePanel.activity("pointermove"); }
 }, { passive: true });
