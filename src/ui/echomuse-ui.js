@@ -43,10 +43,17 @@
   const DOT_COUNT = 7;
   const DOT_SPACING = 26;
 
+  const MODE_LABELS = {
+    listening: "Listening",
+    speaking: "Speaking",
+  };
+
   class VoiceIndicator {
-    constructor(canvas) {
-      this.canvas = canvas;
-      this.context = canvas.getContext("2d");
+    constructor(container) {
+      this.container = container;
+      this.canvas = container.querySelector("canvas");
+      this.label = container.querySelector(".voice-indicator__label");
+      this.context = this.canvas.getContext("2d");
       this.dots = new Array(DOT_COUNT).fill(0);
       this.level = 0;
       this.mode = "off";
@@ -65,7 +72,8 @@
     setMode(mode) {
       if (mode === this.mode) return;
       this.mode = mode;
-      this.canvas.hidden = mode === "off";
+      this.container.hidden = mode === "off";
+      if (this.label) this.label.textContent = MODE_LABELS[mode] || "";
       if (mode === "off") {
         this.dots.fill(0);
         this.stop();
@@ -93,7 +101,7 @@
 
     // The indicator sits above the on-screen keyboard when it is up.
     lift(bottom) {
-      this.canvas.style.bottom = `${bottom}px`;
+      this.container.style.bottom = `${bottom}px`;
     }
 
     resize() {
@@ -212,7 +220,7 @@
   // ── Wiring ─────────────────────────────────────────────────────────────
 
   function create(options) {
-    const indicator = new VoiceIndicator(options.canvas);
+    const indicator = new VoiceIndicator(options.container);
 
     function paint(state) {
       const connection = CONNECTIONS[state.connection] || CONNECTIONS.unknown;

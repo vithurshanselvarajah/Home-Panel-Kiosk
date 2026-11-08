@@ -6,7 +6,7 @@ const keyboard = $("#keyboard");
 const form = $("#settings-form");
 const echomuseForm = $("#echomuse-form");
 const echomuseUI = window.EchoMuseUI ? window.EchoMuseUI.create({
-  canvas: $("#voice-indicator"),
+  container: $("#voice-indicator"),
   row: $("#echomuse-row"),
   state: $("#echomuse-state"),
   led: document.querySelector('[data-service="echomuse"]'),
@@ -36,10 +36,12 @@ function keyboardOffset() {
 }
 
 function syncSettingsLayout() {
+  // The indicator is not part of the settings panel, so it is lifted whether
+  // or not the panel is open.
+  syncWaveLayout();
   if (!panel || panel.hidden) return;
   panel.style.bottom = `${keyboardOffset()}px`;
   syncDrawerLayout();
-  syncWaveLayout();
 }
 
 // Keeps the voice indicator clear of the on-screen keyboard.

@@ -30,7 +30,10 @@
       <footer id="mode-label">Dashboard</footer>
     </aside>
     <section id="keyboard" class="keyboard" aria-label="Touch keyboard" hidden></section>
-    <canvas id="voice-indicator" class="voice-indicator" aria-hidden="true" hidden></canvas>
+    <div id="voice-indicator" class="voice-indicator" hidden>
+      <span class="voice-indicator__label" id="voice-indicator-label" role="status"></span>
+      <canvas id="voice-indicator-canvas" class="voice-indicator__canvas" aria-hidden="true"></canvas>
+    </div>
     <section id="settings-panel" class="settings-panel" hidden>
       <div class="panel-heading"><div><span class="eyebrow">DEVICE SETUP</span><h1>Home Panel</h1></div><button id="close-settings" class="close-button" aria-label="Close">×</button></div>
       <nav class="settings-tabs" role="tablist">
