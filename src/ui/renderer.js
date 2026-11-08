@@ -210,9 +210,9 @@ form.addEventListener("submit", async (event) => {
 
 const statusLabels = { online: "Online", connecting: "Connecting", offline: "Offline", unknown: "Unknown" };
 window.homePanel.onState((state) => {
-  $("#mode-label").textContent = state.displayIsOff ? "Screen off" : ({ dashboard: "Dashboard", slideshow: "Slideshow", camera: "Camera" }[state.mode] || state.mode);
+  $("#mode-label").textContent = state.displayIsOff ? "Screen off" : ({ dashboard: "Dashboard", slideshow: "Slideshow" }[state.mode] || state.mode);
   $("#dashboard-action-label").textContent = state.mode === "dashboard" ? "Dashboard" : "Exit to dashboard";
-  $("#return-home").hidden = !["url", "camera"].includes(state.mode);
+  $("#return-home").hidden = state.mode !== "url";
   $("#slideshow-action").hidden = !loadedSettings?.slideshowUrl;
   for (const service of ["mqtt", "immich", "dashboard"]) {
     const value = state.serviceStatus?.[service] || "unknown";
