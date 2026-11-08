@@ -23,6 +23,21 @@ function syncSettingsLayout() {
     bottom = Math.max(bottom, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
   }
   panel.style.bottom = `${bottom}px`;
+  syncDrawerLayout();
+}
+
+// Keeps the slide-in drawer clear of the return home bar and the keyboard.
+function syncDrawerLayout() {
+  if (!drawer) return;
+  const homeBar = $("#return-home");
+  const homeBarVisible = homeBar && !homeBar.hidden;
+  drawer.classList.toggle("with-home-bar", Boolean(homeBarVisible));
+  let bottom = 0;
+  if (keyboard && !keyboard.hidden) {
+    const rect = keyboard.getBoundingClientRect();
+    bottom = Math.max(0, Math.round(window.innerHeight - rect.top));
+  }
+  drawer.style.bottom = `${bottom}px`;
 }
 
 function setCaret(field, position) {
@@ -70,6 +85,7 @@ function setDrawer(open) {
   drawer.classList.toggle("open", open);
   drawer.setAttribute("aria-hidden", String(!open));
   drawerBackdrop.hidden = !open;
+  syncDrawerLayout();
   window.homePanel.setSidePanel(open);
   if (open) window.homePanel.activity("keydown");
 }
@@ -116,6 +132,7 @@ function setKeyboard(visible, { settings = false } = {}) {
   window.homePanel.setKeyboard(visible);
   if (visible) renderKeyboard();
   syncSettingsLayout();
+  syncDrawerLayout();
   if (visible) { window.homePanel.activity("keydown"); }
 }
 
@@ -184,6 +201,7 @@ window.homePanel.onState((state) => {
     drawerBackdrop.hidden = !state.sidePanelOpen;
   }
   syncSettingsLayout();
+  syncDrawerLayout();
 });
 
 $("#return-home").addEventListener("click", () => window.homePanel.command({ action: "dashboard" }));
