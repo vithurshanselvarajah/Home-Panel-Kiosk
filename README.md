@@ -106,6 +106,41 @@ npm start
 
 Settings live in Electron's per-user application data directory. Use `npm run make -- --arch=arm64` or `--arch=x64` to create a Linux package.
 
+### Running against a mock controller
+
+The EchoMuse sidecar needs a controller to talk to. For development there is
+one: a mock controller in the SDK that speaks enough of the protocol to
+register a device, approve it and hold a link.
+
+```sh
+npm run dev
+```
+
+That builds the mock controller from the SDK, starts it, and starts the app
+pointed at it. The EchoMuse row in the drawer goes green and the settings tab
+shows the device as connected.
+
+The SDK checkout is expected at `~/Documents/GitHub/EchoMuse-SDK-upstream`.
+Set `ECHOMUSE_SDK` to point somewhere else:
+
+```sh
+ECHOMUSE_SDK=/path/to/EchoMuse-SDK npm run dev
+```
+
+`npm run dev -- --pending` starts the controller in pending mode, so the
+device registers but is not admitted — which is what an unapproved device
+looks like.
+
+To point the app at a real controller instead, set the URL yourself:
+
+```sh
+ECHOMUSE_CONTROLLER_URL=ws://192.168.1.10:8767 npm start
+```
+
+The environment variable wins over the device's own setting, and it is not
+written to the settings file. It also turns the EchoMuse link on, so a
+development run does not need the settings panel.
+
 ## Suggested next improvements
 
 - Add per-command acknowledgements and error reporting to MQTT so automations can confirm that a URL opened.
