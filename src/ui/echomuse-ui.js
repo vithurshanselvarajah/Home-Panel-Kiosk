@@ -304,14 +304,14 @@
       const connection = CONNECTIONS[state.connection] || CONNECTIONS.unknown;
       options.row.hidden = false;
       options.state.textContent = connection.label;
-      options.state.title = state.reason || "";
+      options.state.title = state.connection_reason || "";
       options.led.dataset.status = connection.led;
 
       // The same state is repeated at the top of the EchoMuse tab, so the
       // settings page says what the drawer says.
       if (options.statusLed) options.statusLed.dataset.status = connection.led;
       if (options.statusLabel) options.statusLabel.textContent = connection.label;
-      if (options.statusReason) options.statusReason.textContent = state.reason || "Not connected to a controller.";
+      if (options.statusReason) options.statusReason.textContent = state.connection_reason || "Not connected to a controller.";
     }
     // The indicator is only on screen while the device is listening or
     // speaking. It is not a row of status LEDs that sits there all the time.
@@ -320,7 +320,8 @@
       if (!state.muted && state.phase === "listening") mode = "listening";
       else if (!state.muted && state.phase === "speaking") mode = "speaking";
       indicator.setMode(mode);
-      if (mode === "listening") indicator.setLevel(state.level);
+      // The sidecar reports the level as a percentage of full scale.
+      if (mode === "listening") indicator.setLevel((state.level || 0) / 100);
     }
 
     function apply(state) {

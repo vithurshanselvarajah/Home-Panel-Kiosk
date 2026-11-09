@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# The EchoMuse sidecar is a compiled binary. Git must not treat it as text.
+vendor/echomuse-sidecar-linux-* binary
