@@ -38,6 +38,10 @@ const DEFAULT_STATE = {
   level: 0,
   pattern: "",
   palette: [],
+  audio_inputs: [],
+  audio_outputs: [],
+  selected_audio_input: "",
+  selected_audio_output: "",
   last_error: "",
 };
 
@@ -67,7 +71,7 @@ function findSidecar(appPath, resourcesPath) {
  * EchoMuseClient runs the sidecar and reads the state it reports.
  */
 class EchoMuseClient {
-  constructor({ binary, stateFile, configFile, credentialsDir, deviceId, board, controllerUrl, onState, onLog }) {
+  constructor({ binary, stateFile, configFile, credentialsDir, deviceId, board, controllerUrl, pair, onState, onLog }) {
     this.binary = binary;
     this.stateFile = stateFile;
     this.configFile = configFile;
@@ -75,6 +79,7 @@ class EchoMuseClient {
     this.deviceId = deviceId;
     this.board = board;
     this.controllerUrl = controllerUrl;
+    this.pair = Boolean(pair);
     this.onState = onState || (() => {});
     this.onLog = onLog || (() => {});
     this.child = null;
@@ -106,6 +111,9 @@ class EchoMuseClient {
     ];
     if (this.configFile) args.push("--config-file", this.configFile);
     if (this.controllerUrl) args.push("--controller", this.controllerUrl);
+    // Pairing asks the controller to admit the device, which puts the
+    // request in front of an administrator in the dashboard.
+    if (this.pair) args.push("--pair");
 
     this.child = spawn(this.binary, args, { stdio: ["ignore", "ignore", "pipe"] });
     this.child.stderr.on("data", (chunk) => this.onLog(String(chunk).trim()));
