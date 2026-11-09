@@ -21,7 +21,7 @@ const POLL_INTERVAL_MS = 250;
 
 // Where the sidecar lives. It is beside the Electron binary when the app is
 // packaged, and in the repository's vendor directory when it is not.
-const BINARY_NAME = "echomuse-sidecar";
+const BINARY_NAME = "echomuse-device";
 
 // The state the sidecar reports. These are the fields the interface draws.
 const DEFAULT_STATE = {
@@ -66,7 +66,7 @@ function findSidecar(appPath, resourcesPath, execPath) {
     path.join(resourcesPath, BINARY_NAME),
     path.join(path.dirname(appPath), BINARY_NAME),
     // The repository's own copy, for a development run.
-    path.join(appPath, "vendor", `echomuse-sidecar-linux-${process.arch === "x64" ? "amd64" : process.arch}`),
+    path.join(appPath, "vendor", `echomuse-device-linux-${process.arch === "x64" ? "amd64" : process.arch}`),
   ];
   for (const candidate of candidates) {
     try {
@@ -81,7 +81,7 @@ function findSidecar(appPath, resourcesPath, execPath) {
  * EchoMuseClient runs the sidecar and reads the state it reports.
  */
 class EchoMuseClient {
-  constructor({ binary, stateFile, configFile, credentialsDir, deviceId, board, controllerUrl, pair, onState, onLog }) {
+  constructor({ binary, stateFile, configFile, credentialsDir, deviceId, board, controllerUrl, pair, mic, speaker, onState, onLog }) {
     this.binary = binary;
     this.stateFile = stateFile;
     this.configFile = configFile;
@@ -90,6 +90,8 @@ class EchoMuseClient {
     this.board = board;
     this.controllerUrl = controllerUrl;
     this.pair = Boolean(pair);
+    this.mic = mic || "";
+    this.speaker = speaker || "";
     this.onState = onState || (() => {});
     this.onLog = onLog || (() => {});
     this.child = null;
@@ -124,6 +126,10 @@ class EchoMuseClient {
     // Pairing asks the controller to admit the device, which puts the
     // request in front of an administrator in the dashboard.
     if (this.pair) args.push("--pair");
+    // The audio devices are named here as well as in the configuration, so
+    // the device opens the right ones before the configuration is read.
+    if (this.mic) args.push("--mic", this.mic);
+    if (this.speaker) args.push("--speaker", this.speaker);
 
     // The spawn is guarded, because a path that is not executable throws
     // here rather than arriving as an error event, and a throw in here

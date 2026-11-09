@@ -4,3 +4,8 @@ dist/
 .DS_Store
 npm-debug.log*
 pnpm-debug.log*
+
+# The Go modules build their own output.
+audio/echomuse-device
+device/echomuse-device
+/device/device
