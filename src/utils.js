@@ -40,4 +40,25 @@ function insertText(field, current, text) {
   return { value: current.slice(0, start) + text + current.slice(end), caret: start + text.length };
 }
 
-module.exports = { safeUrl, editFieldValue };
+// Reads a number from the settings, or nothing when it was not set.
+//
+// The distinction matters. A setting that was never chosen has to be left
+// out of the configuration, so the device keeps what it had. A setting that
+// was chosen as zero has to be sent as zero. A fallback of zero would turn
+// "not set" into "off", and a fallback of any other value would overwrite a
+// real choice with a default nobody asked for.
+function settingNumber(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+// Reads a checkbox from the settings, or nothing when it was not set.
+//
+// A checkbox that was never touched is not the same as one that was
+// unticked: the first means "leave it as it is" and the second means "off".
+function settingBoolean(value) {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+module.exports = { safeUrl, editFieldValue, settingNumber, settingBoolean };
