@@ -249,6 +249,10 @@ $("#notice").addEventListener("click", (event) => {
 form.addEventListener("focusin", (event) => {
   const field = event.target;
   if (!field || !("value" in field) || field.type === "checkbox" || field.type === "radio") return;
+  // The keyboard is only for the settings form, and only when the setting
+  // says it should appear. The main process vetoes it as well, but the
+  // keyboard is drawn here, so the check has to be here too.
+  if (!loadedSettings?.touchKeyboardEnabled) return;
   if (keyboard.hidden) setKeyboard(true, { settings: true });
   else settingsKeyboardActive = true;
 });
@@ -314,7 +318,14 @@ window.homePanel.onState((state) => {
     led.dataset.status = value;
     $(`#${service}-state`).textContent = statusLabels[value] || "Unknown";
   }
-  if (!settingsKeyboardActive && Boolean(state.keyboardVisible) !== !keyboard.hidden) { keyboard.hidden = !state.keyboardVisible; if (state.keyboardVisible) renderKeyboard(); }
+  // The keyboard follows what the main process says, because that is where
+  // the setting is applied. A keyboard the main process has vetoed is
+  // hidden here, so turning the setting off takes the keyboard away even
+  // when it was already up.
+  if (!settingsKeyboardActive && Boolean(state.keyboardVisible) !== !keyboard.hidden) {
+    keyboard.hidden = !state.keyboardVisible;
+    if (state.keyboardVisible) renderKeyboard();
+  }
   if (Boolean(state.sidePanelOpen) !== drawer.classList.contains("open")) {
     drawer.classList.toggle("open", Boolean(state.sidePanelOpen));
     drawer.setAttribute("aria-hidden", String(!state.sidePanelOpen));
