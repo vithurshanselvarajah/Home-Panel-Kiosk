@@ -9,6 +9,7 @@
     "dev": "node tools/dev.js",
     "dev:ui": "node tools/dev-bridge.js",
     "packaged": "node tools/run-packaged.js",
+    "build:device": "node tools/build-device.js",
     "test": "node --test",
     "package": "electron-forge package",
     "make": "electron-forge make",

@@ -722,6 +722,11 @@ function startEchoMuse() {
     // shows up in the controller's dashboard rather than sitting in a list
     // of pending devices.
     pair: settings.echomusePair !== false,
+    // The audio devices are named on the command line as well as in the
+    // configuration, so the device opens the right ones before the
+    // configuration is read.
+    mic: settings.echomuseAudioInput || "",
+    speaker: settings.echomuseAudioOutput || "",
     onState: () => sendEchoMuseState(),
     onLog: (message) => { if (message) console.info("echomuse:", message); },
   });

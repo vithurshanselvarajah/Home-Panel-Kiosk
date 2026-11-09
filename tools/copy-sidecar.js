@@ -11,8 +11,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-// The name the sidecar is installed as.
-const BINARY_NAME = "echomuse-sidecar";
+// The name the device program is installed as.
+const BINARY_NAME = "echomuse-device";
 
 // Where the built binaries live.
 const VENDOR_DIRECTORY = path.join(__dirname, "..", "vendor");
@@ -20,8 +20,8 @@ const VENDOR_DIRECTORY = path.join(__dirname, "..", "vendor");
 // Forge names the architecture "x64" or "arm64"; the binaries are named for
 // the architecture Go builds for.
 const BINARY_NAMES = {
-  x64: "echomuse-sidecar-linux-amd64",
-  arm64: "echomuse-sidecar-linux-arm64",
+  x64: "echomuse-device-linux-amd64",
+  arm64: "echomuse-device-linux-arm64",
 };
 
 // The architectures a package can be built for, as they appear in the name
@@ -40,19 +40,19 @@ const ARCHITECTURES = ["x64", "arm64"];
 function copySidecar(outputPath) {
   const architecture = ARCHITECTURES.find((name) => outputPath.endsWith(`-linux-${name}`));
   if (!architecture) {
-    console.warn(`skipping the EchoMuse sidecar: ${outputPath} names no known architecture`);
+    console.warn(`skipping the EchoMuse device: ${outputPath} names no known architecture`);
     return;
   }
 
   const source = path.join(VENDOR_DIRECTORY, BINARY_NAMES[architecture]);
   if (!fs.existsSync(source)) {
-    throw new Error(`the EchoMuse sidecar for ${architecture} is missing: ${source} was not found`);
+    throw new Error(`the EchoMuse device for ${architecture} is missing: ${source} was not found`);
   }
 
   const target = path.join(outputPath, BINARY_NAME);
   fs.copyFileSync(source, target);
   fs.chmodSync(target, 0o755);
-  console.log(`the EchoMuse sidecar for ${architecture} is at ${target}`);
+  console.log(`the EchoMuse device for ${architecture} is at ${target}`);
 
   // The third-party notices travel with the binary: it contains BSD-licensed
   // Go libraries.
