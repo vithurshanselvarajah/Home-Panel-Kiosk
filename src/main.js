@@ -702,7 +702,7 @@ function startEchoMuse() {
   }
   if (!settings.echomuseEnabled) return;
 
-  const binary = findSidecar(app.getAppPath(), process.resourcesPath);
+  const binary = findSidecar(app.getAppPath(), process.resourcesPath, process.execPath);
   const stateFile = path.join(app.getPath("userData"), "echomuse-state.json");
   const configFile = path.join(app.getPath("userData"), "echomuse-config.json");
   const credentialsDir = path.join(app.getPath("userData"), "echomuse");

@@ -7,6 +7,8 @@
   "scripts": {
     "start": "electron .",
     "dev": "node tools/dev.js",
+    "dev:ui": "node tools/dev-bridge.js",
+    "start:packaged": "node tools/run-packaged.js",
     "test": "node --test",
     "package": "electron-forge package",
     "make": "electron-forge make",
@@ -22,6 +24,7 @@
     "@electron-forge/plugin-fuses": "8.0.1",
     "@electron-forge/publisher-github": "8.0.1",
     "@electron/fuses": "2.1.3",
-    "electron": "45.2.3"
+    "electron": "45.2.3",
+    "ws": "8.22.0"
   }
 }

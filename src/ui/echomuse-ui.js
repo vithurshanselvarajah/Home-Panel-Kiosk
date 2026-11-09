@@ -13,9 +13,16 @@
   // Connection is what the drawer reports: whether this device can reach a
   // controller and has been admitted by one. The phases that come with it
   // are what the on-screen indicator reacts to.
+  //
+  // A device that has reached the controller but has not been admitted is
+  // *pending*, not connected. Saying "Connected" for a device that is
+  // waiting for an administrator would be a lie the panel repeats to
+  // somebody who then wonders why nothing happens.
   const CONNECTIONS = {
     unknown: { label: "Unknown", led: "unknown" },
     connected: { label: "Connected", led: "online" },
+    pending: { label: "Awaiting approval", led: "connecting" },
+    pairing: { label: "Pairing", led: "connecting" },
     unpaired: { label: "Unpaired", led: "connecting" },
     disabled: { label: "Disabled", led: "offline" },
     refused: { label: "Refused", led: "offline" },
@@ -301,7 +308,11 @@
     const indicator = new VoiceIndicator(options.container, options.dim);
 
     function paint(state) {
-      const connection = CONNECTIONS[state.connection] || CONNECTIONS.unknown;
+      // A device that is asking to be admitted is shown as pairing, which
+      // is what it is doing. Everything else is shown as the connection
+      // the sidecar reported.
+      const key = state.pairing && state.connection === "pending" ? "pairing" : state.connection;
+      const connection = CONNECTIONS[key] || CONNECTIONS.unknown;
       options.row.hidden = false;
       options.state.textContent = connection.label;
       options.state.title = state.connection_reason || "";

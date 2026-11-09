@@ -134,11 +134,18 @@ looks like.
 ### Running against a real controller
 
 ```sh
-npm run dev -- --controller ws://192.168.1.132:8767
+npm run dev
 ```
 
-The app connects to that controller and asks to be admitted. The request
-appears in the controller's dashboard, where an administrator approves it.
+The device finds the controller by mDNS, which is what a device on the
+network does. It asks to be admitted, and the request appears in the
+controller's dashboard where an administrator approves it.
+
+To name the controller instead:
+
+```sh
+npm run dev -- --controller ws://192.168.1.132:8767
+```
 
 A device that has never been seen arrives as **pending** and waits in a
 list. Asking to pair puts the request in front of an administrator
@@ -146,7 +153,21 @@ instead, which is what a person setting the device up wants. The **Ask the
 controller to admit this device** setting turns that off, and the device
 then waits as an ordinary pending device.
 
-To point the app at a real controller without the dev script:
+### Running the packaged build
+
+```sh
+npm start:packaged
+```
+
+This builds the app the way the .deb does and runs that build, so the
+sidecar is found beside the executable the way it is on a device, rather
+than in the repository's vendor directory. The build is made if it is not
+there, or if the source is newer than it.
+
+The packaged build keeps its settings in the same place a device does, so
+a packaged run and a development run see the same configuration.
+
+To point it at a controller without the dev script:
 
 ```sh
 ECHOMUSE_CONTROLLER_URL=ws://192.168.1.132:8767 ECHOMUSE_ENABLED=1 npm start
