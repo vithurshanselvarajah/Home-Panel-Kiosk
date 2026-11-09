@@ -6,6 +6,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
+    "dev": "node tools/dev.js",
     "test": "node --test",
     "package": "electron-forge package",
     "make": "electron-forge make",
