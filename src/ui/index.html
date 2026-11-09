@@ -26,6 +26,9 @@
         <button class="drawer-button" data-action="dashboard"><span>⌂</span><span id="dashboard-action-label" class="button-label">Dashboard</span></button>
         <button class="drawer-button" data-action="slideshow" id="slideshow-action"><span>▧</span>Photo slideshow</button>
         <button id="settings-button" class="drawer-button"><span>⚙</span>Settings</button>
+        <div class="drawer-divider"></div>
+        <button class="drawer-button" id="display-mode-button"><span>⛶</span><span id="display-mode-label" class="button-label">Window mode</span></button>
+        <button class="drawer-button drawer-button--exit" id="exit-button"><span>⏻</span>Exit</button>
       </div>
       <footer id="mode-label">Dashboard</footer>
     </aside>
@@ -48,6 +51,8 @@
         <label>Immich Kiosk URL <span class="optional">optional</span><input name="slideshowUrl" type="url" placeholder="http://immich-kiosk.local:3000" /></label>
         <div class="two-col"><label>Idle before slideshow <span class="field-unit">minutes · 0 disables</span><input name="idleToSlideshowMinutes" type="number" min="0" max="1440" /></label><label>Slideshow before screen off <span class="field-unit">minutes · 0 disables</span><input name="slideshowToOffMinutes" type="number" min="0" max="1440" /></label></div>
         <label class="setting-toggle"><input name="touchKeyboardEnabled" type="checkbox" /> Enable automatic touch keyboard</label>
+        <div class="section-label"><span>DISPLAY</span><span class="line"></span></div>
+        <label>Display mode<select name="displayMode"><option value="fullscreen">Fullscreen — covers the screen</option><option value="window">Window — a movable window</option></select></label>
         <div class="section-label"><span>HOME ASSISTANT COMMANDS</span><span class="line"></span></div>
         <label>MQTT broker URL <span class="optional">optional</span><input name="mqttUrl" type="url" placeholder="mqtt://192.168.1.10:1883" /></label>
         <div class="two-col"><label>MQTT username<input name="mqttUsername" autocomplete="username" /></label><label>MQTT password<input name="mqttPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" /></label></div>

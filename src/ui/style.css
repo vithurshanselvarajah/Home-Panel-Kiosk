@@ -43,3 +43,6 @@
 .echomuse-status .service-led{width:10px;height:10px;flex:none}
 .echomuse-status strong{display:block;font-size:13px;font-weight:600;color:#f5f7fa}
 .echomuse-status span{display:block;margin-top:2px;font-size:11px;color:var(--muted)}
+.drawer-divider{height:1px;margin:6px 4px;background:rgba(255,255,255,.09)}
+.drawer-button--exit>span{color:#e08a84}
+.drawer-button--exit:hover,.drawer-button--exit:hover>span{color:#ff9c91}

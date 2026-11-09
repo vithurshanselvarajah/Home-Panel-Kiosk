@@ -4,7 +4,7 @@ const fsSync = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const os = require("node:os");
-const { safeUrl, settingNumber, settingBoolean } = require("./utils");
+const { safeUrl, settingNumber, settingBoolean, displayMode: readDisplayMode, windowBounds, DISPLAY_MODES } = require("./utils");
 const { createHealthChecker, probeHttp } = require("./health");
 const { EchoMuseClient, findSidecar } = require("./echomuse");
 
@@ -14,7 +14,7 @@ const DEFAULTS = {
   slideshowUrl: "",
   idleToSlideshowMinutes: 5,
   slideshowToOffMinutes: 15,
-  startInKiosk: true,
+  displayMode: "fullscreen",
   touchKeyboardEnabled: true,
   mqttUrl: "",
   mqttUsername: "",
@@ -47,6 +47,7 @@ let keyboardKeySequence = 0;
 const serviceStatus = { mqtt: "unknown", immich: "unknown", dashboard: "unknown" };
 let lastPublishedMode;
 let lastPublishedPower;
+let lastPublishedDisplayMode;
 let lastPublishedServiceStatus = "";
 let lastPublishedAt = 0;
 let lastSentState = "";
@@ -155,9 +156,9 @@ function sendToOverlay(channel, payload) {
 }
 
 function sendState() {
-  const state = { mode, displayIsOff, keyboardVisible, sidePanelOpen, serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
+  const state = { mode, displayIsOff, keyboardVisible, sidePanelOpen, displayMode: displayMode(), serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
   // Only message the overlay when something it renders has actually changed.
-  const fingerprint = `${state.mode}|${state.displayIsOff}|${state.keyboardVisible}|${state.sidePanelOpen}|${JSON.stringify(state.serviceStatus)}`;
+  const fingerprint = `${state.mode}|${state.displayIsOff}|${state.keyboardVisible}|${state.sidePanelOpen}|${state.displayMode}|${JSON.stringify(state.serviceStatus)}`;
   if (fingerprint !== lastSentState) {
     lastSentState = fingerprint;
     sendToOverlay("app:state", state);
@@ -177,10 +178,12 @@ function sendEchoMuseState() {
 function publishState(state) {
   if (!mqttClient?.connected) return;
   const currentServiceStatus = JSON.stringify(state.serviceStatus);
-  const stateChanged = state.mode !== lastPublishedMode || state.displayIsOff !== lastPublishedPower || currentServiceStatus !== lastPublishedServiceStatus;
+  const stateChanged = state.mode !== lastPublishedMode || state.displayIsOff !== lastPublishedPower
+    || state.displayMode !== lastPublishedDisplayMode || currentServiceStatus !== lastPublishedServiceStatus;
   if (!stateChanged && Date.now() - lastPublishedAt < 30_000) return;
   lastPublishedMode = state.mode;
   lastPublishedPower = state.displayIsOff;
+  lastPublishedDisplayMode = state.displayMode;
   lastPublishedServiceStatus = currentServiceStatus;
   lastPublishedAt = Date.now();
   mqttClient.publish(`${settings.mqttPrefix}/state`, JSON.stringify(state), { qos: 1, retain: true });
@@ -463,6 +466,14 @@ function handleCommand(command) {
       recordActivity("home-assistant");
       if (["dashboard", "slideshow"].includes(command.mode)) openMode(command.mode);
       break;
+    case "display_mode":
+      recordActivity("home-assistant");
+      setDisplayMode(command.mode);
+      break;
+    case "exit":
+      recordActivity("home-assistant");
+      quitApp();
+      break;
     default: console.warn("Ignored unknown MQTT action:", action);
   }
 }
@@ -563,6 +574,10 @@ function publishDiscovery() {
   clearOpenUrlText();
   removeEntity("button", "exit_view"); removeEntity("button", "keyboard_toggle");
   publishEntity("button", "dashboard", { name: "Return to Home", command_topic: `${settings.mqttPrefix}/command`, payload_press: '{"action":"dashboard"}', icon: "mdi:home" });
+  // The display mode is a select rather than a switch, because there are
+  // two modes and neither is the absence of the other.
+  publishEntity("select", "display_mode", { name: "Display mode", options: ["fullscreen", "window"], command_topic: `${settings.mqttPrefix}/command`, command_template: '{"action":"display_mode","mode":"{{ value }}"}', state_topic: `${settings.mqttPrefix}/state`, value_template: "{{ value_json.displayMode }}", optimistic: false, qos: 1, icon: "mdi:monitor" });
+  publishEntity("button", "exit", { name: "Exit", command_topic: `${settings.mqttPrefix}/command`, payload_press: '{"action":"exit"}', icon: "mdi:power" });
   // The camera picker has been removed, so clear any entity it left behind.
   removeEntity("select", "camera");
   for (const name of legacyCameraNames) {
@@ -593,6 +608,10 @@ async function saveSettings(next) {
   clean.echomuseControllerUrl = clean.echomuseControllerUrl ? safeUrl(clean.echomuseControllerUrl) || "" : "";
   clean.echomuseDeviceId = String(clean.echomuseDeviceId || "").trim();
   clean.echomuseBoard = String(clean.echomuseBoard || DEFAULTS.echomuseBoard).trim() || DEFAULTS.echomuseBoard;
+  // The display mode is a setting, so a device that was set up before it
+  // existed has none, and one with a nonsense value falls back to the
+  // mode it was running in.
+  clean.displayMode = DISPLAY_MODES.includes(clean.displayMode) ? clean.displayMode : displayMode();
   const persisted = { ...clean };
   if (clean.mqttPassword && await safeStorage.isAsyncEncryptionAvailable()) {
     persisted.mqttPasswordEncrypted = (await safeStorage.encryptStringAsync(clean.mqttPassword)).toString("base64");
@@ -600,7 +619,11 @@ async function saveSettings(next) {
   }
   await fs.mkdir(path.dirname(configPath()), { recursive: true });
   await writeSettingsFile(persisted);
+  const previousDisplayMode = displayMode();
   settings = { ...clean };
+  // The mode is applied only when it changed, so saving the other settings
+  // does not move the window the user is looking at.
+  if (settings.displayMode !== previousDisplayMode) applyDisplayMode();
   if (!settings.touchKeyboardEnabled) setKeyboardVisible(false);
   registerHealthProbes();
   if (mqttClient) { mqttClient.end(true); mqttClient = null; }
@@ -725,13 +748,68 @@ function destroyOverlayView() {
   lastSentState = "";
 }
 
+// The display modes the device can be in.
+//
+// A kiosk covers the screen and takes the keyboard, which is what a wall
+// display wants and what a developer at a desk does not. The mode is a
+// setting rather than a command line switch alone, so a device that was
+// installed as a kiosk can be turned into a window without being reinstalled.
+
+// Reads the display mode from the settings, falling back to fullscreen.
+//
+// A device that was set up before the setting existed has no value for it,
+// and fullscreen is what it was running in.
+function displayMode() {
+  return readDisplayMode(settings.displayMode);
+}
+
+// Puts the window into the mode it is supposed to be in.
+//
+// The mode is applied to the whole screen in fullscreen and to the window
+// itself in windowed mode. In windowed mode the window is sized to a
+// sensible fraction of the screen rather than the whole of it, because a
+// window that fills the screen is a fullscreen window with the title bar
+// hidden.
+function applyDisplayMode() {
+  if (!win || win.isDestroyed()) return;
+  const mode = displayMode();
+
+  if (mode === "fullscreen") {
+    if (!win.isFullScreen()) win.setFullScreen(true);
+    return;
+  }
+
+  if (win.isFullScreen()) win.setFullScreen(false);
+  const primary = screen.getPrimaryDisplay();
+  win.setBounds(windowBounds(primary.workArea || primary.bounds));
+  win.show();
+}
+
+// Switches the device between the modes.
+//
+// The window is resized rather than recreated, so the view keeps whatever it
+// was showing and there is no reload.
+function setDisplayMode(mode) {
+  if (!DISPLAY_MODES.includes(mode)) return false;
+  settings.displayMode = mode;
+  applyDisplayMode();
+  sendState();
+  // The mode is a setting, so it is written straight away. A device that is
+  // switched to a window and then loses power should come back in a window.
+  writeSettingsFile({ ...settings }).catch((error) => console.warn("The display mode could not be saved:", error.message));
+  return true;
+}
+
 function createWindow() {
   const primary = screen.getPrimaryDisplay();
   win = new BrowserWindow({
     x: primary.bounds.x, y: primary.bounds.y, width: primary.bounds.width, height: primary.bounds.height,
-    fullscreen: settings.startInKiosk, autoHideMenuBar: true, backgroundColor: "#080d15",
+    autoHideMenuBar: true, backgroundColor: "#080d15",
     webPreferences: { preload: path.join(__dirname, "remote-preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
+  // The mode is applied after the window exists, because leaving
+  // fullscreen needs a window that is already on screen to leave.
+  applyDisplayMode();
   // Use the BrowserWindow's own webContents for the dashboard: avoid a second,
   // hidden blank renderer process just to host the window.
   createOverlayView();
@@ -796,6 +874,16 @@ function createWindow() {
   scheduleIdle();
 }
 
+// Shuts the device down.
+//
+// The app quits through the normal path, so everything is cleaned up by the
+// same code whichever way the app is closed — the exit button, the window
+// manager, or a signal.
+function quitApp() {
+  console.info("Shutting down at the user's request.");
+  app.quit();
+}
+
 function registerIpc() {
   ipcMain.handle("app:get-settings", (event) => { assertOverlaySender(event); return publicSettings(); });
   ipcMain.handle("app:save-settings", async (event, value) => { assertOverlaySender(event); return saveSettings(value); });
@@ -803,6 +891,15 @@ function registerIpc() {
     assertOverlaySender(event);
     if (!command || typeof command.action !== "string") return false;
     handleCommand(command); return true;
+  });
+  ipcMain.handle("app:set-display-mode", (event, mode) => {
+    assertOverlaySender(event);
+    return setDisplayMode(mode);
+  });
+  ipcMain.handle("app:quit", (event) => {
+    assertOverlaySender(event);
+    quitApp();
+    return true;
   });
   ipcMain.on("app:activity", (event, source) => { assertOverlaySender(event); recordActivity(source === "keydown" ? "overlay-key" : "overlay"); });
   ipcMain.on("app:overlay-expanded", (event, expanded) => {
@@ -833,6 +930,24 @@ function registerIpc() {
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) app.quit();
 
+// The command line overrides the saved display mode for this run.
+//
+// The mode is a setting so a device can be changed without being reinstalled,
+// but a flag is useful when the settings file is not reachable or when the
+// device is being run by hand. The setting is not written, so the device goes
+// back to what it was configured to do when it is started again.
+//
+//   --window       run in a window
+//   --fullscreen   run fullscreen
+//
+// Electron consumes its own flags, so only the ones the app owns are read.
+function readDisplayModeFlag() {
+  const args = process.argv.slice(1);
+  if (args.includes("--window")) return "window";
+  if (args.includes("--fullscreen")) return "fullscreen";
+  return null;
+}
+
 // Trim Chromium features a kiosk never uses. Hardware acceleration is kept
 // because the target device has a GPU.
 app.commandLine.appendSwitch("disable-features", "Translate,MediaRouter,OptimizationHints,CalculateNativeWinOcclusion,InterestFeedContentSuggestions,BackForwardCache,AcceptCHFrame,AutofillServerCommunication,CertificateTransparencyComponentUpdater,DialMediaRouteProvider,GlobalMediaControls,PrivacySandboxSettings4,DiskCacheBackendInMemory");
@@ -852,6 +967,9 @@ app.commandLine.appendSwitch("no-default-browser-check");
 app.whenReady().then(async () => {
   if (!hasLock) return;
   await loadSettings();
+  // The flag wins over the saved setting, but only for this run.
+  const flagMode = readDisplayModeFlag();
+  if (flagMode) settings.displayMode = flagMode;
   registerHealthProbes();
   healthChecker.start();
   registerIpc();
@@ -869,6 +987,13 @@ app.whenReady().then(async () => {
 app.on("before-quit", () => {
   healthChecker.stop();
   cancelIdleTimers(); clearTimeout(urlTimer); clearTimeout(viewRetryTimer); clearTimeout(notificationTimer);
+  // The sidecar holds the microphone and the speaker, so it is stopped
+  // before the process that owns it goes away. Otherwise the system waits
+  // for it to time out, and the audio devices stay held open.
+  if (echomuseClient) {
+    echomuseClient.stop();
+    echomuseClient = null;
+  }
   if (mqttClient) {
     mqttClient.publish(`${settings.mqttPrefix}/availability`, "offline", { retain: true, qos: 1 });
     mqttClient.end();

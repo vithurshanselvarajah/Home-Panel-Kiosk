@@ -21,6 +21,9 @@ let dragState;
 let shiftOn = false;
 let symbolsOn = false;
 let settingsKeyboardActive = false;
+// The mode the device is in, kept here so the drawer can label the button
+// before the first state arrives.
+let displayMode = "fullscreen";
 
 // How much room the on-screen keyboard takes off the bottom of the view.
 function keyboardOffset() {
@@ -222,6 +225,18 @@ selectSettingsTab(0);
 drawer.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
+  if (button.id === "exit-button") {
+    // The drawer is closed before the app goes, so the panel is not left
+    // hanging over a window that is closing.
+    setDrawer(false);
+    window.homePanel.quit();
+    return;
+  }
+  if (button.id === "display-mode-button") {
+    setDrawer(false);
+    window.homePanel.setDisplayMode(displayMode === "fullscreen" ? "window" : "fullscreen");
+    return;
+  }
   const action = button.dataset.action;
   if (action) window.homePanel.command({ action });
   else if (button.id === "settings-button") openSettings();
@@ -287,6 +302,12 @@ window.homePanel.onState((state) => {
   $("#dashboard-action-label").textContent = state.mode === "dashboard" ? "Dashboard" : "Exit to dashboard";
   $("#return-home").hidden = state.mode !== "url";
   $("#slideshow-action").hidden = !loadedSettings?.slideshowUrl;
+  // The button offers the mode the device is not in, so tapping it does
+  // what the label says.
+  if (state.displayMode) {
+    displayMode = state.displayMode;
+    $("#display-mode-label").textContent = displayMode === "fullscreen" ? "Window mode" : "Fullscreen";
+  }
   for (const service of ["mqtt", "immich", "dashboard"]) {
     const value = state.serviceStatus?.[service] || "unknown";
     const led = document.querySelector(`[data-service="${service}"]`);
