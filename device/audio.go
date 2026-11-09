@@ -134,6 +134,9 @@ func (a *deviceAudio) fillState(s *State) {
 }
 
 // selectInput chooses the microphone.
+//
+// An empty name means the system's own default, which is what the device
+// uses before anybody has chosen anything.
 func (a *deviceAudio) selectInput(name string) error {
 	if name == "" {
 		name = audio.DeviceDefault
@@ -142,6 +145,9 @@ func (a *deviceAudio) selectInput(name string) error {
 }
 
 // selectOutput chooses the speaker.
+//
+// An empty name means the system's own default, which is what the device
+// uses before anybody has chosen anything.
 func (a *deviceAudio) selectOutput(name string) error {
 	if name == "" {
 		name = audio.DeviceDefault
