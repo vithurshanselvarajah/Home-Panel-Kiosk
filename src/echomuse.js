@@ -48,14 +48,24 @@ const DEFAULT_STATE = {
 /**
  * Finds the sidecar binary.
  *
+ * The sidecar is a separate program, so it cannot live inside the asar and
+ * it has to be somewhere the application can execute it from. It sits
+ * beside the executable, which is where the packaging step puts it.
+ *
  * @param {string} appPath the directory the application was started from
  * @param {string} resourcesPath the directory Electron's resources live in
+ * @param {string} execPath the path of the running executable
  * @returns {string|null} the path to the binary, or null when there is none
  */
-function findSidecar(appPath, resourcesPath) {
+function findSidecar(appPath, resourcesPath, execPath) {
   const candidates = [
+    // Beside the executable, which is where the package puts it.
+    path.join(path.dirname(execPath || ""), BINARY_NAME),
+    // Beside the resources directory, for a build that puts it there.
+    path.join(path.dirname(resourcesPath), BINARY_NAME),
     path.join(resourcesPath, BINARY_NAME),
     path.join(path.dirname(appPath), BINARY_NAME),
+    // The repository's own copy, for a development run.
     path.join(appPath, "vendor", `echomuse-sidecar-linux-${process.arch === "x64" ? "amd64" : process.arch}`),
   ];
   for (const candidate of candidates) {
@@ -115,7 +125,17 @@ class EchoMuseClient {
     // request in front of an administrator in the dashboard.
     if (this.pair) args.push("--pair");
 
-    this.child = spawn(this.binary, args, { stdio: ["ignore", "ignore", "pipe"] });
+    // The spawn is guarded, because a path that is not executable throws
+    // here rather than arriving as an error event, and a throw in here
+    // takes the whole application down for a sidecar that is only an
+    // extra.
+    try {
+      this.child = spawn(this.binary, args, { stdio: ["ignore", "ignore", "pipe"] });
+    } catch (error) {
+      this.child = null;
+      this.onLog(`the EchoMuse sidecar could not be started: ${error.message}`);
+      return false;
+    }
     this.child.stderr.on("data", (chunk) => this.onLog(String(chunk).trim()));
     this.child.on("exit", (code) => {
       this.child = null;

@@ -46,3 +46,6 @@
 .drawer-divider{height:1px;margin:6px 4px;background:rgba(255,255,255,.09)}
 .drawer-button--exit>span{color:#e08a84}
 .drawer-button--exit:hover,.drawer-button--exit:hover>span{color:#ff9c91}
+.settings-panel select option{background:#141b26;color:#f5f7fa;font:500 12px 'DM Sans',sans-serif;padding:8px 10px}
+.settings-panel select option:checked{background:#24313f;color:#f5f7fa}
+.settings-panel select option:hover{background:#1e2a37;color:#f5f7fa}
