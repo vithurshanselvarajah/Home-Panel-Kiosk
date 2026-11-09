@@ -194,6 +194,21 @@ wss.on("connection", (socket) => {
     }
     if (channel === "app:overlay-expanded" || channel === "app:activity") { reply(true); return; }
     if (channel === "app:keyboard-key") { reply(true); return; }
+    if (channel === "app:test-sound") {
+      // The counter is what tells the device a new tone was asked for.
+      const saved = await readSettings();
+      const counter = (saved.echomuseTestSound || 0) + 1;
+      await writeSettings({ echomuseTestSound: counter });
+      await client.sendConfig({ testSound: counter });
+      reply(counter);
+      return;
+    }
+    if (channel === "app:monitor-mic") {
+      await writeSettings({ echomuseMonitorMic: Boolean(payload) });
+      await client.sendConfig({ monitorMic: Boolean(payload) });
+      reply(Boolean(payload));
+      return;
+    }
     reply(true);
   });
 });

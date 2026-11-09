@@ -194,6 +194,24 @@ when nothing is picked. The names are stored as the device reported them,
 so a device that is unplugged keeps its name and can be picked again when
 it comes back.
 
+Under each picker is a way to check it:
+
+- **Test microphone** opens the microphone and shows its level. The level is
+  what the microphone is hearing, on a scale a quiet room still moves. The
+  microphone is released when the settings page is closed.
+- **Test speaker** plays a short tone through the chosen speaker, so a
+  person can hear which speaker is which before they commit to it.
+
+The microphone and the speaker have to be **different devices**. ALSA will
+not open a device for capture while it is open for playback, so a device
+that is its own microphone cannot also be its own speaker.
+
+The names come from the kernel and the mixer, and ALSA opens them as
+`hw:CARD=...,DEV=...` — the hardware itself, rather than the sound
+server's view of it. A device that is already in use, by the sound server
+or by another program, is reported as busy rather than opened, because
+ALSA answers a busy device by taking the process down.
+
 ### The EchoMuse device program
 
 The EchoMuse link lives in a separate program: it owns the connection to the

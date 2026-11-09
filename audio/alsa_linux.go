@@ -122,10 +122,15 @@ func openStream(device string, direction, rate, channels int) (*audioStream, err
 	name := []byte(device + "\x00")
 	var handle uintptr
 	if rc := sndPcmOpen(&handle, &name[0], direction, 0); rc < 0 {
-		return nil, fmt.Errorf("opening the ALSA device %q: %s", device, alsaError(rc))
+		// The handle is NOT closed here. Closing a handle that was never
+		// opened is an assertion inside ALSA, and an assertion takes the
+		// whole process down — so a device that is merely busy would kill
+		// the application rather than say it is busy.
+		return nil, fmt.Errorf("opening the ALSA device %q: %s", device, alsaError(int(rc)))
 	}
-	if rc := sndPcmSetParams(handle, s16le, rwInterleaved, uint(channels), uint(rate), 1, 100000); rc < 0 {
-		sndPcmClose(handle)
+	if rc := sndPcmSetParams(handle, s16le, rwInterleaved, uint(channels), uint(rate), 1, 100000); rc < 0 { // The stream is closed, because it was opened. Closing it is safe
+		// here and closing it is right: leaving a stream open would take
+		// the device away from anything else that wants it.		sndPcmClose(handle)
 		return nil, fmt.Errorf("setting the format of the ALSA device %q: %s", device, alsaError(rc))
 	}
 	return &audioStream{handle: handle, rate: rate, channels: channels}, nil
@@ -187,6 +192,10 @@ func (p *audioStream) Write(buf []byte) (int, error) {
 //
 // It is what stops the end of a reply being cut off: the controller
 // releases its speaking state when playback is reported finished.
+//
+// A drain on a closed stream is not an error. ALSA asserts on it, and an
+// assertion takes the whole process down, so the closed case is caught
+// here rather than in the library.
 func (p *audioStream) Drain() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -225,15 +234,21 @@ func (p *audioStream) NextPlaybackTime() (time.Time, time.Duration, error) {
 // The queued audio is dropped rather than drained, because the stream is
 // closing because something stopped, and playing the rest of a reply to a
 // speaker nobody is listening to is worse than dropping it.
+//
+// Closing twice is not an error: the stream is closed by whoever stops the
+// playback and again by the loop that was playing it, and a double close
+// of a sound card is an assertion inside ALSA.
 func (p *audioStream) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.closed {
+	if p.closed || p.handle == 0 {
+		p.closed = true
 		return nil
 	}
 	p.closed = true
 	sndPcmDrop(p.handle)
 	sndPcmClose(p.handle)
+	p.handle = 0
 	return nil
 }
 
@@ -248,7 +263,7 @@ func alsaError(code int) string {
 	case -22:
 		return "the device does not accept that format"
 	case -16:
-		return "the device is busy"
+		return "the device is busy — it is already in use, or it is the same device as the other one"
 	case -11:
 		return "the device is out of memory"
 	case -32:
