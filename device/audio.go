@@ -60,6 +60,20 @@ type deviceAudio struct {
 	// has been replaced does not clear the flag of the one that replaced
 	// it.
 	outputGen int
+	// clocked is the clocked speaker, when one could be opened. It is
+	// what the music is played through, because it knows when each period
+	// reaches the sound card and the music player needs to know that.
+	clocked echomuse.ClockedAudioOutput
+	// clockedChannels is how many channels the clocked output really has.
+	clockedChannels int
+	// clockedDisabled says the clocked output could not be used, so the
+	// music goes through the shared speaker instead. It is not retried
+	// after it has failed: a card that would not open for stereo will
+	// not open for it later either.
+	clockedDisabled bool
+	// lastClockedAttempt is when the clocked output was last tried, so it
+	// is not tried on every period.
+	lastClockedAttempt time.Time
 
 	// voice is the reply being played, and the mixer takes it out of here.
 	voice []byte
@@ -89,6 +103,9 @@ type deviceAudio struct {
 	sendspinUnpaired bool
 	// sendspinMuted is whether the music player was muted by its server.
 	sendspinMuted bool
+	// sendspinPump is the goroutine that watches for music and opens the
+	// speaker for it.
+	sendspinPump context.CancelFunc
 
 	// endpoints are the audio devices the machine has.
 	inputs  []audio.Endpoint
@@ -656,23 +673,54 @@ func (a *deviceAudio) closeOutput() {
 // knows when each period should be heard, and a device that only played
 // what it was given would play the music in whatever order the periods
 // arrived, which is what makes it choppy.
+//
+// The clocked output is what the music goes through when one can be
+// opened. It reports when each period reaches the sound card, and the
+// player needs that: given a guessed time the player cannot tell that it
+// is seconds behind, and it plays what it queued long ago rather than
+// what is due. The shared speaker is the fallback for a card that will
+// not open for the clocked output, and the music goes through it then.
+//
+// This is the shape the SDK's own emulator uses, which was written for the
+// same device.
 func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
-	writer, err := a.backend.Playback(ctx, playbackRate)
-	if err != nil {
-		a.log.Error("the speaker could not be opened", "error", err)
-		a.releaseOutput(generation)
-		return
+	// The clocked output is opened first, when there is one. It is the
+	// music's output and the reply's, because one card cannot be opened
+	// twice.
+	clocked, channels := a.openClocked(ctx)
+
+	var writer io.WriteCloser
+	if clocked == nil {
+		// Without a clock the music goes through the shared speaker, and
+		// the time handed to the player is a guess.
+		w, err := a.backend.Playback(ctx, playbackRate)
+		if err != nil {
+			a.log.Error("the speaker could not be opened", "error", err)
+			a.releaseOutput(generation)
+			return
+		}
+		writer = w
+		channels = 1
 	}
+
 	a.mu.Lock()
 	// The loop may have been replaced while the speaker was opening, in
 	// which case the new one owns the card and this one must not.
 	replaced := a.outputGen != generation
 	if !replaced {
 		a.output = writer
+		if clocked != nil {
+			a.clocked = clocked
+			a.clockedChannels = channels
+		}
 	}
 	a.mu.Unlock()
 	if replaced {
-		_ = writer.Close()
+		if clocked != nil {
+			_ = clocked.Close()
+		} else {
+			_ = writer.Close()
+		}
 		return
 	}
 
@@ -682,12 +730,18 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	// A card that is still open when the next open comes is a card that
 	// ALSA asserts on, and an assertion takes the whole process down.
 	defer func() {
-		_ = writer.Close()
+		if clocked != nil {
+			_ = clocked.Close()
+		} else {
+			_ = writer.Close()
+		}
 		a.releaseOutput(generation)
 	}()
 
-	// A period is 10 milliseconds, which is the player's own period.
-	mono := make([]byte, playbackRate/100*2)
+	// A period is 10 milliseconds, which is the player's own period. The
+	// music is stereo and the reply is mono, so the stereo buffer is
+	// twice the size of the mono one.
+	stereo := make([]byte, playbackRate/100*4)
 
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
@@ -711,26 +765,55 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		test := a.takeAudio(&a.test, periodBytes)
 		a.mu.Unlock()
 
-		clear(mono)
-
 		// The music is mixed in first, and the reply is mixed over it.
 		// The other way round would let the reply duck the music, which
 		// is what the controller's duck request is for.
 		musicReady := player != nil && player.Active()
+
+		clear(stereo)
 		if musicReady {
-			a.fillMusic(mono, player, volume, muted, ducked, duckDB)
-		}
-		if len(test) > 0 {
-			a.mixVoiceInto(mono, test)
-		}
-		if len(voice) > 0 {
-			a.mixVoiceInto(mono, voice)
-		}
-		if muted {
-			clear(mono)
+			// The clocked output says when the period reaches the card.
+			// The shared speaker has no such answer, so a guess is used
+			// and the player smooths it.
+			playAt := time.Now().Add(80 * time.Millisecond)
+			uncertainty := 2 * time.Millisecond
+			if clocked != nil {
+				if at, unc, err := clocked.NextPlaybackTime(); err == nil {
+					playAt, uncertainty = at, unc
+				}
+			}
+			player.Fill(stereo, playAt, uncertainty)
+			applySendspinGain(stereo, volume, muted, ducked, duckDB)
 		}
 
-		if _, err := writer.Write(mono); err != nil {
+		// The reply is mono and the music is stereo, so the reply is
+		// laid into both channels of the music.
+		if len(test) > 0 {
+			a.mixVoiceIntoStereo(stereo, test)
+		}
+		if len(voice) > 0 {
+			a.mixVoiceIntoStereo(stereo, voice)
+		}
+		if muted {
+			clear(stereo)
+		}
+
+		// The stereo is written to a mono card by averaging the two
+		// channels, or to a stereo card whole. The card says how many it
+		// has.
+		out := stereo
+		if channels == 1 {
+			out = make([]byte, len(stereo)/2)
+			audio.StereoToMono(stereo, out)
+		}
+
+		var err error
+		if clocked != nil {
+			_, err = clocked.Write(out)
+		} else {
+			_, err = writer.Write(out)
+		}
+		if err != nil {
 			if ctx.Err() == nil {
 				a.log.Warn("the speaker missed a period", "error", err)
 			}
@@ -742,8 +825,13 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		// A loop that kept the card open for ever would make every
 		// later sound fail: ALSA asserts on a card that is already
 		// open, and an assertion takes the whole process down.
+		//
+		// The music player counts as something to play for as long as
+		// it is connected, not only while it has audio queued. A queue
+		// empties between tracks, and releasing the card then would cut
+		// the music off and make the next track start late.
 		a.mu.Lock()
-		empty := len(a.voice) == 0 && len(a.test) == 0 && (player == nil || !player.Active())
+		empty := len(a.voice) == 0 && len(a.test) == 0 && (player == nil || !musicConnected(player))
 		a.mu.Unlock()
 		if empty {
 			// The speaker is drained rather than dropped, so the last
@@ -756,46 +844,90 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	}
 }
 
-// fillMusic mixes a period of the music into the output.
+// openClocked opens the clocked speaker, if it can be opened.
 //
-// The player is asked for the period that should be heard next, and the
-// player's own clock says when that is. The period is 48 kHz stereo, and
-// the output is mono, so the two channels are averaged.
-func (a *deviceAudio) fillMusic(mono []byte, player *sendspin.Client, volume int, muted, ducked bool, duckDB float64) {
-	stereo := make([]byte, playbackRate/100*4)
-	clear(stereo)
-	// The period is played 80 milliseconds from now, which is the lead the
-	// player needs to have the audio ready.
-	player.Fill(stereo, time.Now().Add(80*time.Millisecond), 2*time.Millisecond)
-	applySendspinGain(stereo, volume, muted, ducked, duckDB)
+// It is tried at most once a second, because a card that will not open
+// for the clocked output will not open for it on the next period either,
+// and a failure on every period would fill the log.
+//
+// The channel count is a request. The card may give fewer than were
+// asked for, and the output says what it really has.
+func (a *deviceAudio) openClocked(ctx context.Context) (echomuse.ClockedAudioOutput, int) {
+	a.mu.Lock()
+	disabled := a.clockedDisabled
+	last := a.lastClockedAttempt
+	a.mu.Unlock()
+	if disabled {
+		return nil, 0
+	}
+	if !last.IsZero() && time.Since(last) < time.Second {
+		return nil, 0
+	}
 
-	for i := 0; i+3 < len(stereo); i += 4 {
-		left := int32(int16(uint16(stereo[i]) | uint16(stereo[i+1])<<8))
-		right := int32(int16(uint16(stereo[i+2]) | uint16(stereo[i+3])<<8))
-		v := (left + right) / 2
-		mono[i/2], mono[i/2+1] = byte(v), byte(uint16(v)>>8)
+	a.mu.Lock()
+	a.lastClockedAttempt = time.Now()
+	a.mu.Unlock()
+
+	// The music is stereo, and stereo is what the player fills. A card
+	// that will not do stereo falls back to mono inside the backend.
+	out, err := a.backend.OpenClockedOutput(ctx, playbackRate, 2)
+	if err != nil {
+		a.log.Warn("the clocked speaker could not be opened; using the shared speaker", "error", err)
+		a.mu.Lock()
+		a.clockedDisabled = true
+		a.mu.Unlock()
+		return nil, 0
+	}
+	channels := 2
+	if counted, ok := out.(interface{ Channels() int }); ok {
+		if n := counted.Channels(); n > 0 {
+			channels = n
+		}
+	}
+	if channels != 2 {
+		a.log.Info("the clocked speaker is not stereo", "channels", channels)
+	}
+	return out, channels
+}
+
+// mixVoiceIntoStereo mixes a mono reply into a stereo buffer.
+//
+// The reply is laid into both channels, so it sits in the middle of the
+// music rather than on one side of it.
+//
+// The reply is mono and the buffer is stereo, so the reply's own samples
+// are walked one at a time and laid into each frame's two channels.
+func (a *deviceAudio) mixVoiceIntoStereo(stereo, voice []byte) {
+	sample := 0
+	for i := 0; i+3 < len(stereo) && sample+1 < len(voice); i += 4 {
+		v := int32(int16(uint16(voice[sample]) | uint16(voice[sample+1])<<8))
+		sample += 2
+		for _, j := range []int{i, i + 2} {
+			sum := int32(int16(uint16(stereo[j])|uint16(stereo[j+1])<<8)) + v
+			if sum > 32767 {
+				sum = 32767
+			}
+			if sum < -32768 {
+				sum = -32768
+			}
+			sample := int16(sum)
+			stereo[j], stereo[j+1] = byte(sample), byte(uint16(sample)>>8)
+		}
 	}
 }
 
-// mixVoiceInto mixes the reply over the music.
+// musicConnected says whether the music player has a server behind it.
 //
-// The sum is clamped rather than wrapped: a wrap turns a loud reply into
-// a loud hiss, which is worse than a quiet moment of clipping.
-//
-// Only as much as fits is mixed. The reply is longer than one period, and
-// the rest of it is mixed in on the periods that follow.
-func (a *deviceAudio) mixVoiceInto(music, voice []byte) {
-	for i := 0; i+1 < len(music) && i+1 < len(voice); i += 2 {
-		m := int32(int16(uint16(music[i]) | uint16(music[i+1])<<8))
-		v := int32(int16(uint16(voice[i]) | uint16(voice[i+1])<<8))
-		sum := m + v
-		if sum > 32767 {
-			sum = 32767
-		}
-		if sum < -32768 {
-			sum = -32768
-		}
-		music[i], music[i+1] = byte(sum), byte(uint16(sum)>>8)
+// The player's own status says "connected" or "playing" when there is one,
+// and "listening" when it is waiting for a server to find it. The card is
+// held for the first two and released for the third, because a player with
+// nobody behind it is not going to make a sound.
+func musicConnected(player *sendspin.Client) bool {
+	switch player.Status().State {
+	case "connected", "playing":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -951,11 +1083,13 @@ func (a *deviceAudio) applySendspinConfig(cfg protocol.Config) {
 			Product:   "Home Panel",
 			Version:   "0.1.0",
 			Unpaired:  unpaired,
-			// A shared speaker needs a modest lead to keep the start
-			// responsive; a large jitter buffer is seconds of latency
-			// the user hears.
-			RequiredLeadTime: 250 * time.Millisecond,
-			MinBuffer:        150 * time.Millisecond,
+			// The lead and the jitter buffer are the Echo firmware's
+			// own figures. The server holds back the audio it sends by
+			// this much and more, and the buffer is what the group is
+			// played in step with, so it is the server's figure and
+			// not ours to choose.
+			RequiredLeadTime: 2000 * time.Millisecond,
+			MinBuffer:        2000 * time.Millisecond,
 		})
 		if err != nil {
 			a.log.Error("the music player could not be started", "error", err)
@@ -972,13 +1106,6 @@ func (a *deviceAudio) applySendspinConfig(cfg protocol.Config) {
 		})
 		player.OnChange(func() {
 			_ = a.device.SendSendspinStatus(player.Status())
-			// The speaker is opened when the music starts playing, not
-			// when the player does. A player that is listening for a
-			// server is silent, and a speaker opened for it would sit
-			// there holding the sound card for nothing.
-			if player.Active() {
-				a.ensureOutput()
-			}
 		})
 		if err := player.Start(); err != nil {
 			a.log.Error("the music player could not be started", "error", err)
@@ -991,8 +1118,58 @@ func (a *deviceAudio) applySendspinConfig(cfg protocol.Config) {
 		a.mu.Unlock()
 		_ = a.device.SendSendspinStatus(player.Status())
 		current = player
+		// The speaker is opened when the music starts playing, not when
+		// the player does. A player that is listening for a server is
+		// silent, and a speaker opened for it would sit there holding
+		// the sound card for nothing.
+		//
+		// The change callback does not say when the music starts: it
+		// fires when the session changes, which is before the first
+		// note has arrived. So the pump watches for the audio itself.
+		a.startSendspinPump()
 	}
 	current.SetUnpaired(unpaired)
+}
+
+// startSendspinPump watches for music and opens the speaker for it.
+//
+// The pump is what makes the music audible. The player reports that it is
+// active when it has audio queued, and the speaker has to be open before
+// that audio can be heard — so something has to look, and the change
+// callback is not it: it fires when the session changes, which is before
+// the first note has arrived. Without the pump the music arrives, is
+// decoded, is queued, and is never played, because the speaker was never
+// opened for it.
+//
+// It is the SDK's own emulator that does the same thing, and it is the
+// reference for this.
+func (a *deviceAudio) startSendspinPump() {
+	a.mu.Lock()
+	if a.sendspinPump != nil {
+		a.mu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.sendspinPump = cancel
+	a.mu.Unlock()
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			a.mu.Lock()
+			player := a.sendspin
+			a.mu.Unlock()
+			if player != nil && player.Active() {
+				a.ensureOutput()
+			}
+		}
+	}()
 }
 
 // sendspinStore is where the music player's identity is kept.
@@ -1004,9 +1181,14 @@ func (a *deviceAudio) sendspinStore() string {
 func (a *deviceAudio) stopSendspin(reason string) {
 	a.mu.Lock()
 	player := a.sendspin
+	pump := a.sendspinPump
 	a.sendspin = nil
 	a.sendspinName = ""
+	a.sendspinPump = nil
 	a.mu.Unlock()
+	if pump != nil {
+		pump()
+	}
 	if player != nil {
 		player.Stop(reason)
 	}

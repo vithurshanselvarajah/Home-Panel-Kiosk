@@ -115,7 +115,11 @@ func (b *Backend) LastError() string {
 
 func (b *Backend) setError(err error) {
 	b.mu.Lock()
-	b.lastError = err.Error()
+	if err == nil {
+		b.lastError = ""
+	} else {
+		b.lastError = err.Error()
+	}
 	b.mu.Unlock()
 }
 
@@ -209,6 +213,15 @@ func (b *Backend) Playback(ctx context.Context, rate int) (io.WriteCloser, error
 //
 // The clock is what keeps the Sendspin stream in step with the voice
 // response: without it the music drifts against the reply.
+//
+// The channel count asked for is a request, not a demand. A sound card
+// that will not open for stereo is opened for mono instead, and the
+// output says how many channels it really has, so the caller can lay the
+// audio out to match. A device that cannot play stereo still plays the
+// music.
+//
+// The caller has to know what it got, so the returned output carries the
+// channel count it was opened with.
 func (b *Backend) OpenClockedOutput(ctx context.Context, rate, channels int) (echomuse.ClockedAudioOutput, error) {
 	b.mu.RLock()
 	device := b.output
@@ -216,10 +229,21 @@ func (b *Backend) OpenClockedOutput(ctx context.Context, rate, channels int) (ec
 
 	stream, err := openStream(target(device), streamPlayback, rate, channels)
 	if err != nil {
-		b.setError(err)
-		return nil, err
+		// A card that will not open for the channels asked for may still
+		// open for one. Mono is the fallback because every card has it.
+		if channels <= 1 {
+			b.setError(err)
+			return nil, err
+		}
+		fallback, fallbackErr := openStream(target(device), streamPlayback, rate, 1)
+		if fallbackErr != nil {
+			b.setError(err)
+			return nil, err
+		}
+		b.setError(nil)
+		return &clocked{stream: fallback, done: make(chan struct{}), channels: 1}, nil
 	}
-	return &clocked{stream: stream, done: make(chan struct{})}, nil
+	return &clocked{stream: stream, done: make(chan struct{}), channels: channels}, nil
 }
 
 // captureChannels is how many channels a capture is opened with.
@@ -286,6 +310,30 @@ func downmix(src, dst []byte) int {
 	return out
 }
 
+// StereoToMono averages a stereo buffer into a mono one.
+//
+// It is exported because the device's mixer is the one that lays the
+// music out, and the conversion belongs with the rest of the audio
+// handling rather than being written twice.
+//
+// The music is stereo, because that is what the player fills, and a
+// speaker may be mono. The two channels are averaged rather than one of
+// them taken, because a hard-panned track played on one side only is
+// quieter on that side than the other.
+func StereoToMono(src, dst []byte) int {
+	frame := 4
+	out := 0
+	for i := 0; i+frame <= len(src) && out+2 <= len(dst); i += frame {
+		left := int32(int16(uint16(src[i]) | uint16(src[i+1])<<8))
+		right := int32(int16(uint16(src[i+2]) | uint16(src[i+3])<<8))
+		v := (left + right) / 2
+		dst[out] = byte(v)
+		dst[out+1] = byte(uint16(v) >> 8)
+		out += 2
+	}
+	return out
+}
+
 // Close stops the capture and releases the sound card.
 func (c *capture) Close() error {
 	c.once.Do(func() { close(c.done) })
@@ -327,7 +375,16 @@ type clocked struct {
 	stream *audioStream
 	done   chan struct{}
 	once   sync.Once
+	// channels is how many channels the stream really has, which may be
+	// fewer than were asked for.
+	channels int
 }
+
+// Channels is how many channels the output really carries.
+//
+// The caller lays the audio out to match, so a card that only does mono
+// gets mono rather than the left channel played twice.
+func (c *clocked) Channels() int { return c.channels }
 
 // NextPlaybackTime is when the next frame should reach the speaker.
 func (c *clocked) NextPlaybackTime() (time.Time, time.Duration, error) {
