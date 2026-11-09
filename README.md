@@ -156,7 +156,7 @@ then waits as an ordinary pending device.
 ### Running the packaged build
 
 ```sh
-npm start:packaged
+npm run packaged
 ```
 
 This builds the app the way the .deb does and runs that build, so the
