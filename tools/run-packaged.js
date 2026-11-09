@@ -1,6 +1,6 @@
 // Builds the app and runs the packaged build.
 //
-//   npm start:packaged
+//   npm run packaged
 //
 // The packaged build is what the .deb installs, so it is what a device
 // actually runs. Running it means the sidecar is found beside the binary
