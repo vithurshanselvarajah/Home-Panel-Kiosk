@@ -58,12 +58,21 @@ if (needsBuild()) {
 if (!fs.existsSync(binary)) fail(`there is no build at ${binary}`);
 
 // The sidecar has to be executable, and the packaging step puts it beside
-// the binary. It is copied there again when it is missing, because a build
-// made before the device program existed has no copy of it.
+// the binary. It is copied there again when it is missing, and when the
+// one in the package is older than the one that was built.
+//
+// Copying only when it is missing would run an old device program: the
+// package keeps whatever was copied the first time, and a rebuild of the
+// device program would never reach the packaged build. The bug looks like
+// a fix that did not take.
 const device = path.join(packagedDir, "echomuse-device");
-if (!fs.existsSync(device)) {
-  const source = path.join(root, "vendor", `echomuse-device-linux-${arch === "x64" ? "amd64" : arch}`);
-  if (!fs.existsSync(source)) fail(`there is no EchoMuse device at ${source}`);
+const source = path.join(root, "vendor", `echomuse-device-linux-${arch === "x64" ? "amd64" : arch}`);
+if (!fs.existsSync(source)) fail(`there is no EchoMuse device at ${source}`);
+
+const needsCopy =
+  !fs.existsSync(device) || fs.statSync(source).mtimeMs > fs.statSync(device).mtimeMs;
+if (needsCopy) {
+  console.log("run: putting the device program beside the app");
   fs.copyFileSync(source, device);
 }
 fs.chmodSync(device, 0o755);
