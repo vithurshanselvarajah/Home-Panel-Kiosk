@@ -63,6 +63,11 @@ let overlayRecycleTimer;
 let viewRetryTimer;
 let lastPointerMoveAt = 0;
 let echomuseClient;
+// quitting is whether the application is on its way out.
+//
+// The quit waits for the sidecar to release the sound card, and the wait
+// holds the quit up. This flag says the second attempt is the real one.
+let quitting = false;
 const OVERLAY_RECYCLE_DELAY_MS = 60_000;
 const VIEW_RETRY_INTERVAL_MS = 15_000;
 const POINTER_MOVE_INTERVAL_MS = 5_000;
@@ -638,7 +643,11 @@ async function saveSettings(next) {
   if (mqttClient) { mqttClient.end(true); mqttClient = null; }
   connectMqtt();
   openMode(mode === "slideshow" ? "slideshow" : "dashboard");
-  startEchoMuse();
+  // The device program is restarted because the settings it was given may
+  // have changed — the microphone, the speaker, the controller. It is
+  // awaited so the old one has released the sound card before the new
+  // one asks for it.
+  await startEchoMuse();
   // The EchoMuse settings are pushed to the controller as its configuration,
   // so the controller and the device agree on how the device listens.
   if (echomuseClient && settings.echomuseEnabled) sendEchoMuseConfig();
@@ -699,9 +708,14 @@ function publicSettings() {
 //
 // The sidecar owns the controller link and the audio. It reports what the
 // device is doing, and the overlay draws it.
-function startEchoMuse() {
+async function startEchoMuse() {
   if (echomuseClient) {
-    echomuseClient.stop();
+    // The old sidecar has to be gone before the new one starts. It holds
+    // the microphone and the speaker, and a new one that starts while the
+    // old one is still holding them finds the card busy — so the device
+    // never hears anything and the controller is told the microphone
+    // could not be opened, over and over.
+    await echomuseClient.stop();
     echomuseClient = null;
   }
   if (!settings.echomuseEnabled) return;
@@ -1020,7 +1034,7 @@ app.whenReady().then(async () => {
   registerIpc();
   createWindow();
   connectMqtt();
-  startEchoMuse();
+  await startEchoMuse();
   app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
   app.on("second-instance", () => {
     if (!win || win.isDestroyed()) return;
@@ -1029,15 +1043,25 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+  if (quitting) return;
   healthChecker.stop();
   cancelIdleTimers(); clearTimeout(urlTimer); clearTimeout(viewRetryTimer); clearTimeout(notificationTimer);
   // The sidecar holds the microphone and the speaker, so it is stopped
   // before the process that owns it goes away. Otherwise the system waits
   // for it to time out, and the audio devices stay held open.
+  //
+  // The quit waits for it, because the sidecar releases the sound card
+  // when it exits and the next thing to want it — a restart, another
+  // program — finds it busy. The wait is bounded inside the sidecar.
   if (echomuseClient) {
-    echomuseClient.stop();
+    const client = echomuseClient;
     echomuseClient = null;
+    event.preventDefault();
+    client.stop().finally(() => {
+      quitting = true;
+      app.quit();
+    });
   }
   if (mqttClient) {
     mqttClient.publish(`${settings.mqttPrefix}/availability`, "offline", { retain: true, qos: 1 });

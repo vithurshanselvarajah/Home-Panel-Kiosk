@@ -23,6 +23,13 @@ const POLL_INTERVAL_MS = 250;
 // packaged, and in the repository's vendor directory when it is not.
 const BINARY_NAME = "echomuse-device";
 
+// How long the sidecar is given to stop before it is killed.
+//
+// The sidecar releases the microphone and the speaker when it exits, so
+// the replacement needs the old one to have gone. The wait is bounded so
+// a sidecar that hangs does not stop the application from starting.
+const STOP_TIMEOUT_MS = 3000;
+
 // The state the sidecar reports. These are the fields the interface draws.
 const DEFAULT_STATE = {
   connection: "unknown",
@@ -199,15 +206,49 @@ class EchoMuseClient {
   }
 
   /**
-   * Stops the sidecar.
+   * Stops the sidecar, and waits for it to go.
+   *
+   * The wait is the point. The sidecar holds the microphone and the
+   * speaker, and it releases them when it exits — so a new one started
+   * before the old one has gone finds the sound card busy and cannot
+   * open it. The controller then asks for the microphone and is told it
+   * is busy, over and over, and the device never hears anything.
+   *
+   * The wait is bounded, because a sidecar that will not go must not
+   * stop the application from starting its replacement.
+   *
+   * @returns {Promise<void>} resolved when the sidecar has gone
    */
-  stop() {
+  async stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    if (this.child) {
-      this.child.kill();
-      this.child = null;
-    }
+    const child = this.child;
+    if (!child) return;
+    this.child = null;
+
+    await new Promise((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      // A sidecar that will not stop is killed. It is the last thing
+      // tried, because a kill does not give it the chance to release the
+      // sound card.
+      const timer = setTimeout(() => {
+        try { child.kill("SIGKILL"); } catch { /* it has already gone */ }
+        done();
+      }, STOP_TIMEOUT_MS);
+      child.once("exit", done);
+      child.once("error", done);
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        done();
+      }
+    });
   }
 }
 
