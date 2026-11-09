@@ -108,7 +108,7 @@ Settings live in Electron's per-user application data directory. Use `npm run ma
 
 ### Running against a mock controller
 
-The EchoMuse sidecar needs a controller to talk to. For development there is
+The EchoMuse device needs a controller to talk to. For development there is
 one: a mock controller in the SDK that speaks enough of the protocol to
 register a device, approve it and hold a link.
 
@@ -160,7 +160,7 @@ npm run packaged
 ```
 
 This builds the app the way the .deb does and runs that build, so the
-sidecar is found beside the executable the way it is on a device, rather
+device program is found beside the executable the way it is on a device, rather
 than in the repository's vendor directory. The build is made if it is not
 there, or if the source is newer than it.
 
@@ -186,12 +186,41 @@ where it is turned on.
 
 The **Microphone** and **Speaker** pickers in the EchoMuse settings list the
 audio endpoints the machine has, the way the mixer names them. The list
-comes from the sidecar, because the sidecar is what opens the audio.
+comes from the device program, because the device program is what opens the
+audio.
 
 **System default** is the system's own choice and is what the device uses
-when nothing is picked. The names are stored as the sidecar reported them,
+when nothing is picked. The names are stored as the device reported them,
 so a device that is unplugged keeps its name and can be picked again when
 it comes back.
+
+### The EchoMuse device program
+
+The EchoMuse link lives in a separate program: it owns the connection to the
+controller, the microphone and the speaker, and it reports what the device
+is doing. The application renders that.
+
+It is written in Go, in two modules:
+
+| Module | What it is |
+|---|---|
+| `audio/` | The ALSA backend and the device listing. |
+| `device/` | The device program itself. |
+
+The audio reaches ALSA through [purego](https://github.com/ebitengine/purego),
+which loads `libasound.so.2` at run time rather than linking against it.
+That means the binaries cross compile for arm64 without a C toolchain, and
+they still start on a machine with no sound card.
+
+The device needs the EchoMuse SDK, which is developed in a checkout rather
+than published. Set `ECHOMUSE_SDK` to point somewhere else:
+
+```sh
+ECHOMUSE_SDK=/path/to/EchoMuse-SDK npm run build:device
+```
+
+`npm run build:device` writes the binaries into `vendor/`, one per
+architecture, and the packaging step copies them into the package.
 
 ## Suggested next improvements
 
