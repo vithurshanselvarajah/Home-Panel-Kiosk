@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { safeUrl, editFieldValue, settingNumber, settingBoolean } = require("../src/utils");
+const { safeUrl, editFieldValue, settingNumber, settingBoolean, displayMode, windowBounds } = require("../src/utils");
 
 test("safeUrl accepts and normalizes HTTP URLs", () => {
   assert.equal(safeUrl("https://example.com/camera"), "https://example.com/camera");
@@ -75,4 +75,46 @@ test("settingBoolean distinguishes an unticked box from an untouched one", () =>
   assert.equal(settingBoolean(false), false);
   assert.equal(settingBoolean(true), true);
   assert.equal(settingBoolean(undefined), undefined);
+});
+
+test("displayMode falls back to fullscreen", () => {
+  assert.equal(displayMode("fullscreen"), "fullscreen");
+  assert.equal(displayMode("window"), "window");
+  // A device that was set up before the setting existed has none.
+  assert.equal(displayMode(undefined), "fullscreen");
+  assert.equal(displayMode(null), "fullscreen");
+  assert.equal(displayMode(""), "fullscreen");
+});
+
+test("displayMode rejects a mode nobody knows", () => {
+  assert.equal(displayMode("kiosk"), "fullscreen");
+  assert.equal(displayMode("minimised"), "fullscreen");
+  assert.equal(displayMode(7), "fullscreen");
+});
+
+test("windowBounds leaves room around the window", () => {
+  const bounds = windowBounds({ x: 0, y: 0, width: 1920, height: 1080 });
+  assert.ok(bounds.width < 1920, "the window fills the screen");
+  assert.ok(bounds.height < 1080, "the window fills the screen");
+});
+
+test("windowBounds centres the window", () => {
+  const bounds = windowBounds({ x: 0, y: 0, width: 1920, height: 1080 });
+  const left = bounds.x;
+  const right = 1920 - (bounds.x + bounds.width);
+  assert.ok(Math.abs(left - right) <= 1, `the window is off centre by ${Math.abs(left - right)} pixels`);
+});
+
+test("windowBounds keeps the window usable on a small screen", () => {
+  const bounds = windowBounds({ x: 0, y: 0, width: 800, height: 480 });
+  assert.ok(bounds.width >= 900, "the window is too narrow to use");
+  assert.ok(bounds.height >= 600, "the window is too short to use");
+});
+
+test("windowBounds keeps the window within the screen", () => {
+  const bounds = windowBounds({ x: 100, y: 50, width: 3840, height: 2160 });
+  assert.ok(bounds.x >= 100, "the window is off the left of the screen");
+  assert.ok(bounds.y >= 50, "the window is off the top of the screen");
+  assert.ok(bounds.x + bounds.width <= 3940, "the window is off the right of the screen");
+  assert.ok(bounds.y + bounds.height <= 2210, "the window is off the bottom of the screen");
 });
