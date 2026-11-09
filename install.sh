@@ -65,7 +65,7 @@ APP_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk
 configure_pi_touch() {
   local settings_file="${APP_CONFIG_DIR}/settings.json"
   local interactive=true
-  if [[ -n "${PITOUCH_DASHBOARD_URL:-}${PITOUCH_SLIDESHOW_URL:-}${PITOUCH_MQTT_URL:-}${PITOUCH_MQTT_USERNAME:-}${PITOUCH_MQTT_PASSWORD:-}${PITOUCH_MQTT_PREFIX:-}${PITOUCH_DEVICE_NAME:-}${PITOUCH_IDLE_SLIDESHOW_MINUTES:-}${PITOUCH_SLIDESHOW_OFF_MINUTES:-}${PITOUCH_TOUCH_KEYBOARD:-}" ]]; then
+  if [[ -n "${PITOUCH_DASHBOARD_URL:-}${PITOUCH_SLIDESHOW_URL:-}${PITOUCH_MQTT_URL:-}${PITOUCH_MQTT_USERNAME:-}${PITOUCH_MQTT_PASSWORD:-}${PITOUCH_MQTT_PREFIX:-}${PITOUCH_DEVICE_NAME:-}${PITOUCH_IDLE_SLIDESHOW_MINUTES:-}${PITOUCH_SLIDESHOW_OFF_MINUTES:-}${PITOUCH_TOUCH_KEYBOARD:-}${PITOUCH_DISPLAY_MODE:-}" ]]; then
     interactive=false
   fi
 
@@ -88,6 +88,7 @@ configure_pi_touch() {
   local existing_dashboard_url="" existing_slideshow_url="" existing_mqtt_url=""
   local existing_mqtt_user="" existing_mqtt_prefix="" existing_device_name=""
   local existing_idle_slideshow_min="" existing_slideshow_off_min="" existing_touch_keyboard=""
+  local existing_display_mode=""
   if [[ -f "$settings_file" ]] && command -v python3 >/dev/null 2>&1; then
     read_existing() {
       PITOUCH_SETTINGS_PATH="$settings_file" python3 - "$1" <<'PY'
@@ -114,10 +115,11 @@ PY
     existing_idle_slideshow_min=$(read_existing idleToSlideshowMinutes)
     existing_slideshow_off_min=$(read_existing slideshowToOffMinutes)
     existing_touch_keyboard=$(read_existing touchKeyboardEnabled)
+    existing_display_mode=$(read_existing displayMode)
   fi
 
   local dashboard_url slideshow_url mqtt_url mqtt_user mqtt_pass mqtt_prefix device_name
-  local idle_slideshow_min slideshow_off_min touch_keyboard
+  local idle_slideshow_min slideshow_off_min touch_keyboard display_mode
 
   # Fall back to the documented defaults if no prior value is recorded.
   local def_dashboard=${existing_dashboard_url:-http://homeassistant.local:8123}
@@ -129,6 +131,7 @@ PY
   local def_idle_slideshow_min=${existing_idle_slideshow_min:-5}
   local def_slideshow_off_min=${existing_slideshow_off_min:-15}
   local def_touch_keyboard=${existing_touch_keyboard:-true}
+  local def_display_mode=${existing_display_mode:-fullscreen}
 
   if $interactive; then
     echo ""
@@ -161,6 +164,12 @@ PY
     if [[ -z "$touch_keyboard_input" ]]; then
       [[ "$def_touch_keyboard" == "false" ]] && touch_keyboard=false || touch_keyboard=true
     elif [[ "$touch_keyboard_input" =~ ^[Yy]$ ]]; then touch_keyboard=true; else touch_keyboard=false; fi
+    local mode_prompt="[F/w]"
+    [[ "$def_display_mode" == "window" ]] && mode_prompt="[f/W]"
+    read -r -p "Display mode — (F)ullscreen or (w)indow? $mode_prompt: " display_mode_input
+    if [[ -z "$display_mode_input" ]]; then
+      display_mode=$def_display_mode
+    elif [[ "$display_mode_input" =~ ^[Ww]$ ]]; then display_mode="window"; else display_mode="fullscreen"; fi
     if [[ -n "$def_mqtt" ]]; then
       read -r -p "MQTT broker URL (optional) [$def_mqtt]: " mqtt_url
     else
@@ -192,9 +201,11 @@ PY
     mqtt_pass=${PITOUCH_MQTT_PASSWORD:-}
     mqtt_prefix=${PITOUCH_MQTT_PREFIX:-homepanel}
     device_name=${PITOUCH_DEVICE_NAME:-Home Panel}
+    display_mode=${PITOUCH_DISPLAY_MODE:-fullscreen}
     validate_url "$dashboard_url" "dashboard" "https?" || { echo "PITOUCH_DASHBOARD_URL is invalid." >&2; exit 1; }
     [[ -z "$slideshow_url" ]] || validate_url "$slideshow_url" "slideshow" "https?" || { echo "PITOUCH_SLIDESHOW_URL is invalid." >&2; exit 1; }
     [[ -z "$mqtt_url" ]] || validate_url "$mqtt_url" "MQTT" "mqtts?" || { echo "PITOUCH_MQTT_URL is invalid." >&2; exit 1; }
+    [[ "$display_mode" == "fullscreen" || "$display_mode" == "window" ]] || { echo "PITOUCH_DISPLAY_MODE must be fullscreen or window." >&2; exit 1; }
   fi
 
   mkdir -p "$APP_CONFIG_DIR"
@@ -212,6 +223,7 @@ PY
   PITOUCH_MQTT_PASSWORD="$mqtt_pass" \
   PITOUCH_MQTT_PREFIX="$mqtt_prefix" \
   PITOUCH_DEVICE_NAME="$device_name" \
+  PITOUCH_DISPLAY_MODE="$display_mode" \
   python3 - "$settings_file" <<'PY'
 import json, os, sys
 
@@ -231,7 +243,7 @@ settings = {
     "slideshowUrl": os.environ["PITOUCH_SLIDESHOW_URL"],
     "idleToSlideshowMinutes": int_env("PITOUCH_IDLE_SLIDESHOW_MINUTES", 5),
     "slideshowToOffMinutes": int_env("PITOUCH_SLIDESHOW_OFF_MINUTES", 15),
-    "startInKiosk": True,
+    "displayMode": os.environ.get("PITOUCH_DISPLAY_MODE", "fullscreen") or "fullscreen",
     "touchKeyboardEnabled": os.environ.get("PITOUCH_TOUCH_KEYBOARD", "true").lower() not in ("0", "false", "no"),
     "mqttUrl": os.environ.get("PITOUCH_MQTT_URL", ""),
     "mqttUsername": os.environ.get("PITOUCH_MQTT_USERNAME", ""),

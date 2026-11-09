@@ -61,4 +61,37 @@ function settingBoolean(value) {
   return typeof value === "boolean" ? value : undefined;
 }
 
-module.exports = { safeUrl, editFieldValue, settingNumber, settingBoolean };
+// The display modes the device can be in.
+const DISPLAY_MODES = ["fullscreen", "window"];
+
+// Reads the display mode from a value, falling back to fullscreen.
+//
+// A device that was set up before the setting existed has no value for it,
+// and fullscreen is what it was running in. A value that is not a mode at
+// all is treated the same way, because a device in a mode nobody knows
+// about is a device that cannot be reasoned about.
+function displayMode(value) {
+  return DISPLAY_MODES.includes(value) ? value : "fullscreen";
+}
+
+// The bounds of the window in windowed mode.
+//
+// A window that fills the screen is a fullscreen window with a title bar, so
+// the window is a fraction of the screen rather than all of it. The floor
+// keeps it usable: a window too small for the dashboard is not a window
+// mode, it is a bug.
+//
+// The window is centred on the work area, which is the screen without the
+// panels a desktop has, so the title bar is not hidden under one.
+function windowBounds(bounds) {
+  const width = Math.max(900, Math.min(1440, Math.round(bounds.width * 0.78)));
+  const height = Math.max(600, Math.min(900, Math.round(bounds.height * 0.78)));
+  return {
+    x: Math.round(bounds.x + (bounds.width - width) / 2),
+    y: Math.round(bounds.y + (bounds.height - height) / 2),
+    width,
+    height,
+  };
+}
+
+module.exports = { safeUrl, editFieldValue, settingNumber, settingBoolean, displayMode, windowBounds, DISPLAY_MODES };

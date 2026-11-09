@@ -5,6 +5,8 @@ An independent Electron kiosk for a Home Assistant touch display. Immich photos 
 ## Current build
 
 - Fullscreen Home Assistant dashboard surface with a swipe-in controls drawer. Swipe left from the right edge to open it and swipe right to close it.
+- Fullscreen or window mode. The drawer has a button that switches between them, and the mode is remembered. The device can also be started in either mode with `--fullscreen` or `--window`.
+- An exit button in the drawer, which shuts the app down cleanly.
 - Optional automatic touch keyboard appears when an editable Home Assistant field receives focus. Enable or disable it in Settings.
 - Configurable dashboard and external Immich Kiosk URLs.
 - Idle transition from dashboard to slideshow, then optional display power-off.
@@ -27,7 +29,11 @@ Configure a broker and topic prefix in the settings panel. Publish JSON commands
 {"action":"notification","title":"Delivery","message":"Package at the door","duration":12000,"priority":"high"}
 {"action":"dismiss_notification"}
 {"action":"set_mode","mode":"dashboard"}
+{"action":"display_mode","mode":"window"}
+{"action":"exit"}
 ```
+
+`display_mode` takes `fullscreen` or `window`. `exit` shuts the app down, so the service is left stopped until it is started again.
 
 The app publishes JSON state to `<prefix>/state` and online status to `<prefix>/availability`. Discovery is published with retained configuration messages and refreshed when Home Assistant announces that its MQTT integration is online. The brightness number uses `<prefix>/brightness` for its retained state.
 
@@ -56,6 +62,7 @@ The installer writes a `settings.json` into Electron's per-user app config direc
 | `PITOUCH_IDLE_SLIDESHOW_MINUTES` | Idle minutes before the slideshow opens (`0` disables). |
 | `PITOUCH_SLIDESHOW_OFF_MINUTES` | Slideshow minutes before the screen turns off (`0` disables). |
 | `PITOUCH_TOUCH_KEYBOARD` | `true` / `false` — enable the automatic touch keyboard. |
+| `PITOUCH_DISPLAY_MODE` | `fullscreen` / `window` — how the device starts (default `fullscreen`). |
 | `PITOUCH_MQTT_URL` | Optional MQTT broker URL (`mqtt://` or `mqtts://`). |
 | `PITOUCH_MQTT_USERNAME` | MQTT username. |
 | `PITOUCH_MQTT_PASSWORD` | MQTT password (written in plain text; the app re-encrypts it on first save with Electron `safeStorage`). |
