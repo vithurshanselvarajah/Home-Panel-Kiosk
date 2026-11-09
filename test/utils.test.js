@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { safeUrl, editFieldValue } = require("../src/utils");
+const { safeUrl, editFieldValue, settingNumber, settingBoolean } = require("../src/utils");
 
 test("safeUrl accepts and normalizes HTTP URLs", () => {
   assert.equal(safeUrl("https://example.com/camera"), "https://example.com/camera");
@@ -48,4 +48,31 @@ test("editFieldValue ignores toggles and non-editing keys", () => {
   assert.equal(editFieldValue({ value: "on", type: "checkbox" }, "x"), null);
   assert.equal(editFieldValue({ value: "", type: "text" }, "ENTER"), null);
   assert.equal(editFieldValue({ value: "", type: "text" }, "SHIFT"), null);
+});
+
+test("settingNumber leaves an unset setting unset", () => {
+  assert.equal(settingNumber(undefined), undefined);
+  assert.equal(settingNumber(null), undefined);
+  assert.equal(settingNumber(""), undefined);
+});
+
+test("settingNumber keeps a zero", () => {
+  assert.equal(settingNumber(0), 0);
+  assert.equal(settingNumber("0"), 0);
+});
+
+test("settingNumber reads a number from a string", () => {
+  assert.equal(settingNumber("4.5"), 4.5);
+  assert.equal(settingNumber(300), 300);
+});
+
+test("settingNumber rejects a value that is not a number", () => {
+  assert.equal(settingNumber("loud"), undefined);
+  assert.equal(settingNumber(Number.NaN), undefined);
+});
+
+test("settingBoolean distinguishes an unticked box from an untouched one", () => {
+  assert.equal(settingBoolean(false), false);
+  assert.equal(settingBoolean(true), true);
+  assert.equal(settingBoolean(undefined), undefined);
 });

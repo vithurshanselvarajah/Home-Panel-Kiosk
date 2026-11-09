@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("homePanel", {
   keyboardKey: (key) => ipcRenderer.send("app:keyboard-key", key),
   editFieldValue: (field, key) => editFieldValue(field, key),
   onState: (callback) => ipcRenderer.on("app:state", (_event, state) => callback(state)),
+  onEchoMuseState: (callback) => ipcRenderer.on("app:echomuse", (_event, state) => callback(state)),
   onNotification: (callback) => ipcRenderer.on("app:notification", (_event, notice) => callback(notice)),
   onDismissNotification: (callback) => ipcRenderer.on("app:dismiss-notification", callback),
 });

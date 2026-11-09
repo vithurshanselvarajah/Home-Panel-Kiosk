@@ -4,8 +4,9 @@ const fsSync = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const os = require("node:os");
-const { safeUrl } = require("./utils");
+const { safeUrl, settingNumber, settingBoolean } = require("./utils");
 const { createHealthChecker, probeHttp } = require("./health");
+const { EchoMuseClient, findSidecar } = require("./echomuse");
 
 const DEFAULTS = {
   configured: false,
@@ -20,6 +21,10 @@ const DEFAULTS = {
   mqttPassword: "",
   mqttPrefix: "homepanel",
   deviceName: "Home Panel",
+  echomuseEnabled: false,
+  echomuseControllerUrl: "",
+  echomuseDeviceId: "",
+  echomuseBoard: "home-panel",
 };
 
 let win;
@@ -51,6 +56,7 @@ let legacyCameraNames = [];
 let overlayRecycleTimer;
 let viewRetryTimer;
 let lastPointerMoveAt = 0;
+let echomuseClient;
 const OVERLAY_RECYCLE_DELAY_MS = 60_000;
 const VIEW_RETRY_INTERVAL_MS = 15_000;
 const POINTER_MOVE_INTERVAL_MS = 5_000;
@@ -157,6 +163,15 @@ function sendState() {
     sendToOverlay("app:state", state);
   }
   publishState(state);
+}
+
+// Sends the EchoMuse state to the overlay.
+//
+// It is sent on its own channel because it changes on its own schedule, and
+// the overlay draws it differently from the rest of the state.
+function sendEchoMuseState() {
+  if (!echomuseClient) return;
+  sendToOverlay("app:echomuse", echomuseClient.state);
 }
 
 function publishState(state) {
@@ -574,6 +589,10 @@ async function saveSettings(next) {
   if (next.mqttPassword === "••••••••" || next.mqttPassword === "") clean.mqttPassword = settings.mqttPassword;
   clean.dashboardUrl = safeUrl(clean.dashboardUrl) || DEFAULTS.dashboardUrl;
   clean.slideshowUrl = clean.slideshowUrl ? safeUrl(clean.slideshowUrl) || "" : "";
+  clean.echomuseEnabled = Boolean(clean.echomuseEnabled);
+  clean.echomuseControllerUrl = clean.echomuseControllerUrl ? safeUrl(clean.echomuseControllerUrl) || "" : "";
+  clean.echomuseDeviceId = String(clean.echomuseDeviceId || "").trim();
+  clean.echomuseBoard = String(clean.echomuseBoard || DEFAULTS.echomuseBoard).trim() || DEFAULTS.echomuseBoard;
   const persisted = { ...clean };
   if (clean.mqttPassword && await safeStorage.isAsyncEncryptionAvailable()) {
     persisted.mqttPasswordEncrypted = (await safeStorage.encryptStringAsync(clean.mqttPassword)).toString("base64");
@@ -587,7 +606,40 @@ async function saveSettings(next) {
   if (mqttClient) { mqttClient.end(true); mqttClient = null; }
   connectMqtt();
   openMode(mode === "slideshow" ? "slideshow" : "dashboard");
+  startEchoMuse();
+  // The EchoMuse settings are pushed to the controller as its configuration,
+  // so the controller and the device agree on how the device listens.
+  if (echomuseClient && settings.echomuseEnabled) sendEchoMuseConfig();
   return publicSettings();
+}
+
+// Sends the EchoMuse configuration to the controller.
+//
+// The controller owns the wake word and the audio settings, so the device
+// tells it what it is and the controller pushes back what it wants.
+//
+// Only the settings that were actually chosen are sent. A setting that was
+// never touched is left out, so the sidecar keeps what it had rather than
+// being handed a default that was not the user's.
+function sendEchoMuseConfig() {
+  if (!echomuseClient) return;
+  echomuseClient.sendConfig({
+    board: settings.echomuseBoard,
+    wakeThreshold: settingNumber(settings.echomuseWakeThreshold),
+    wakeWordEnabled: settingBoolean(settings.echomuseWakeWordEnabled),
+    bargeIn: settingBoolean(settings.echomuseBargeIn),
+    startupVolume: settingNumber(settings.echomuseStartupVolume),
+    micGainDb: settingNumber(settings.echomuseMicGainDb),
+    vadThreshold: settingNumber(settings.echomuseVadThreshold),
+    vadSpeechMs: settingNumber(settings.echomuseVadSpeechMs),
+    vadSilenceMs: settingNumber(settings.echomuseVadSilenceMs),
+    volume: settingNumber(settings.echomuseVolume),
+    duckDb: settingNumber(settings.echomuseDuckDb),
+    muteButton: settingBoolean(settings.echomuseMuteButton),
+    volumeButtonSound: settingBoolean(settings.echomuseVolumeButtonSound),
+    wakeMode: settings.echomuseWakeMode || "on",
+    wakeSound: settings.echomuseWakeSound !== "off",
+  });
 }
 
 // Writes the settings file atomically so a power cut cannot leave a half
@@ -605,6 +657,49 @@ async function writeSettingsFile(data) {
 
 function publicSettings() {
   return { ...settings, mqttPassword: settings.mqttPassword ? "••••••••" : "" };
+}
+
+// Starts the EchoMuse sidecar, if the device is set up to use one.
+//
+// The sidecar owns the controller link and the audio. It reports what the
+// device is doing, and the overlay draws it.
+function startEchoMuse() {
+  if (echomuseClient) {
+    echomuseClient.stop();
+    echomuseClient = null;
+  }
+  if (!settings.echomuseEnabled) return;
+
+  const binary = findSidecar(app.getAppPath(), process.resourcesPath);
+  const stateFile = path.join(app.getPath("userData"), "echomuse-state.json");
+  const configFile = path.join(app.getPath("userData"), "echomuse-config.json");
+  const credentialsDir = path.join(app.getPath("userData"), "echomuse");
+
+  echomuseClient = new EchoMuseClient({
+    binary,
+    stateFile,
+    configFile,
+    credentialsDir,
+    deviceId: settings.echomuseDeviceId || deviceId,
+    board: settings.echomuseBoard || "home-panel",
+    controllerUrl: settings.echomuseControllerUrl || "",
+    onState: () => sendEchoMuseState(),
+    onLog: (message) => { if (message) console.info("echomuse:", message); },
+  });
+
+  try {
+    fsSync.mkdirSync(credentialsDir, { recursive: true, mode: 0o700 });
+  } catch (error) {
+    console.warn("could not create the EchoMuse credential directory:", error.message);
+  }
+
+  echomuseClient.start();
+
+  // The configuration is written before the sidecar starts, so the sidecar
+  // reads the settings on its first pass rather than waiting for the next
+  // change. Otherwise a device that was configured yesterday would run
+  // today with the defaults.
+  sendEchoMuseConfig();
 }
 
 function createOverlayView() {
@@ -762,6 +857,7 @@ app.whenReady().then(async () => {
   registerIpc();
   createWindow();
   connectMqtt();
+  startEchoMuse();
   app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
   app.on("second-instance", () => {
     if (!win || win.isDestroyed()) return;

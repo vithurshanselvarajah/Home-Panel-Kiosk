@@ -102,6 +102,12 @@ function populate(settings) {
       if (input.type === "checkbox") input.checked = Boolean(value);
       else input.value = value;
     }
+    // The EchoMuse settings live in their own form.
+    const echomuseInput = echomuseForm && echomuseForm.elements.namedItem(key);
+    if (echomuseInput) {
+      if (echomuseInput.type === "checkbox") echomuseInput.checked = Boolean(value);
+      else echomuseInput.value = value;
+    }
   }
   if (settings.mqttPassword === "••••••••") form.elements.namedItem("mqttPassword").placeholder = "Saved securely · blank keeps current";
 }
@@ -253,13 +259,25 @@ form.addEventListener("submit", async (event) => {
   } catch (error) { $("#form-error").textContent = error.message || "Could not save settings."; }
 });
 
-// The EchoMuse form is not saved yet: there is no SDK to save it to. The
-// submit is deliberately inert for now, and says so rather than pretending
-// to have saved.
+// The EchoMuse settings are saved with the rest of the device settings, so
+// there is one place the configuration lives.
 if (echomuseForm) {
-  echomuseForm.addEventListener("submit", (event) => {
+  echomuseForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    $("#echomuse-error").textContent = "EchoMuse is not connected yet. These settings will be applied once the SDK is wired in.";
+    const data = Object.fromEntries(new FormData(echomuseForm));
+    // A form only submits the checkboxes that are ticked, so unticking one
+    // would leave the old value behind. The state of every checkbox is
+    // sent instead, so a tick can be undone.
+    for (const element of echomuseForm.elements) {
+      if (element.type === "checkbox") data[element.name] = element.checked;
+    }
+    $("#echomuse-error").textContent = "";
+    try {
+      const saved = await window.homePanel.saveSettings(data);
+      populate(saved);
+    } catch (error) {
+      $("#echomuse-error").textContent = error.message || "Could not save the EchoMuse settings.";
+    }
   });
 }
 
@@ -366,12 +384,9 @@ window.homePanel.getSettings().then((settings) => {
   if (!settings.configured) openSettings();
 });
 
-// The EchoMuse SDK is not wired up yet, so the interface runs on a mock
-// source. It is started here so the wave and the status can be judged on a
-// screen. Swap the mock for the SDK's state when it lands.
-if (echomuseUI && window.EchoMuseUI.createMockSource) {
-  const mock = window.EchoMuseUI.createMockSource();
-  mock.onChange((state) => echomuseUI.apply(state));
-  mock.start();
-  syncWaveLayout();
+// The EchoMuse state comes from the sidecar, which owns the link to the
+// controller and the audio. The main process pushes it whenever it changes.
+if (echomuseUI && window.homePanel.onEchoMuseState) {
+  window.homePanel.onEchoMuseState((state) => echomuseUI.apply(state));
 }
+syncWaveLayout();

@@ -66,7 +66,9 @@
         </div>
         <p class="panel-intro">Join the EchoMuse controller and choose how this device listens.</p>
         <form id="echomuse-form">
-          <div class="section-label"><span>DEVICE</span><span class="line"></span></div>
+        <div class="section-label"><span>ECHOMUSE</span><span class="line"></span></div>
+        <label class="setting-toggle"><input name="echomuseEnabled" type="checkbox" /> Join an EchoMuse controller</label>
+        <div class="two-col"><label>Controller URL <span class="field-unit">blank discovers by mDNS</span><input name="echomuseControllerUrl" type="url" placeholder="ws://192.168.1.10:8767" /></label><label>Device ID <span class="field-unit">must stay stable</span><input name="echomuseDeviceId" type="text" placeholder="home-panel" /></label></div>
           <label>Board <span class="optional">named in Home Assistant</span><input name="echomuseBoard" type="text" placeholder="home-panel" /></label>
           <div class="section-label"><span>WAKE WORD</span><span class="line"></span></div>
           <label>Wake word mode<select name="echomuseWakeMode"><option value="on">On device — nothing is sent until it fires</option><option value="off">On controller — audio streams continuously</option><option value="shadow">Shadow — both score, diagnostic only</option></select></label>
@@ -75,8 +77,8 @@
           <label class="setting-toggle"><input name="echomuseBargeIn" type="checkbox" /> Allow barge-in during a response</label>
           <div class="section-label"><span>MICROPHONE</span><span class="line"></span></div>
           <div class="two-col"><label>Microphone gain <span class="field-unit">dB</span><input name="echomuseMicGainDb" type="number" min="-30" max="30" placeholder="0" /></label><label>Startup volume <span class="field-unit">0 to 100</span><input name="echomuseStartupVolume" type="number" min="0" max="100" placeholder="50" /></label></div>
-          <div class="two-col"><label>VAD threshold <span class="field-unit">0 to 1</span><input name="echomuseVadThreshold" type="number" min="0" max="1" step="0.01" placeholder="0.5" /></label><label>VAD speech time <span class="field-unit">ms</span><input name="echomuseVadSpeechMs" type="number" min="0" max="2000" placeholder="300" /></label></div>
-          <label>VAD silence time <span class="field-unit">ms</span><input name="echomuseVadSilenceMs" type="number" min="0" max="5000" placeholder="700" /></label>
+          <div class="two-col"><label>VAD threshold <span class="field-unit">times the room's noise</span><input name="echomuseVadThreshold" type="number" min="1" max="20" step="0.5" placeholder="3" /></label><label>VAD speech time <span class="field-unit">ms</span><input name="echomuseVadSpeechMs" type="number" min="50" max="2000" step="50" placeholder="200" /></label></div>
+          <label>VAD silence time <span class="field-unit">ms</span><input name="echomuseVadSilenceMs" type="number" min="200" max="5000" step="100" placeholder="5000" /></label>
           <div class="section-label"><span>SPEAKER</span><span class="line"></span></div>
           <div class="two-col"><label>Output volume <span class="field-unit">0 to 100</span><input name="echomuseVolume" type="number" min="0" max="100" placeholder="50" /></label><label>Ducking <span class="field-unit">dB under a response</span><input name="echomuseDuckDb" type="number" min="-30" max="0" step="0.5" placeholder="-6" /></label></div>
           <label class="setting-toggle"><input name="echomuseMuteButton" type="checkbox" checked /> The device has its own mute switch</label>
