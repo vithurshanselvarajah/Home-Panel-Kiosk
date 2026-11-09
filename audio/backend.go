@@ -56,13 +56,21 @@ func New(input, output string) *Backend {
 
 // target turns a device name into the name the sound system is given.
 //
-// The listing reports names as `alsa:CARD,DEV`, which is the card and the
-// device on it. ALSA wants that as `hw:CARD=CARD,DEV=DEV`, with the
-// `plughw:` wrapper so the sound card does the format conversion: the raw
-// hardware does not, and a device asked for the wrong sample rate fails.
+// The listing reports names as `alsa:CARD,DEV`. ALSA wants that as
+// `hw:CARD=CARD,DEV=DEV`.
 //
-// A name that is already an ALSA name is left alone, so a name typed by
-// hand works too.
+// The `plughw:` prefix is deliberately NOT used. It opens the hardware
+// directly, which takes the card away from the sound server and fails with
+// "busy" on a machine where the server already has it. A device that
+// cannot open the microphone because something else is playing music is a
+// device that does not work.
+//
+// A device that is busy for a real reason still fails — a card whose main
+// device is held by another program cannot be opened, and saying so is
+// better than pretending the microphone works.
+//
+// The default device is ALSA's own default, which is the sound server's
+// default, and is the right answer when nothing has been chosen.
 func target(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -71,12 +79,12 @@ func target(name string) string {
 	if strings.HasPrefix(name, "alsa:") {
 		card, device, found := strings.Cut(strings.TrimPrefix(name, "alsa:"), ",")
 		if found {
-			return "plughw:CARD=" + card + ",DEV=" + device
+			return "hw:CARD=" + card + ",DEV=" + device
 		}
 		return "default"
 	}
 	if strings.HasPrefix(name, "hw:") {
-		return "plughw:" + strings.TrimPrefix(name, "hw:")
+		return name
 	}
 	return name
 }
@@ -165,12 +173,16 @@ func (b *Backend) AudioDevices() (inputs, outputs []echomuse.AudioDevice, err er
 // open, and the next capture opens a second one. The device then streams
 // whichever of the two the sound server gave it, and the controller hears
 // silence while the display says it is listening.
+//
+// The stream is opened with two channels because that is what the capture
+// devices have. The controller wants one, so the channels are averaged
+// as the frames are read.
 func (b *Backend) Capture(ctx context.Context, rate int) (io.ReadCloser, error) {
 	b.mu.RLock()
 	device := b.input
 	b.mu.RUnlock()
 
-	stream, err := openStream(target(device), streamCapture, rate, 1)
+	stream, err := openStream(target(device), streamCapture, rate, captureChannels)
 	if err != nil {
 		b.setError(err)
 		return nil, err
@@ -210,24 +222,68 @@ func (b *Backend) OpenClockedOutput(ctx context.Context, rate, channels int) (ec
 	return &clocked{stream: stream, done: make(chan struct{})}, nil
 }
 
+// captureChannels is how many channels a capture is opened with.
+//
+// The capture devices on a laptop and on a Pi are stereo, and ALSA will not
+// open one for a single channel. The controller wants mono, so the channels
+// are averaged as the frames are read.
+const captureChannels = 2
+
 // capture reads the microphone.
 type capture struct {
 	stream *audioStream
 	done   chan struct{}
 	once   sync.Once
+	// mono holds the downmixed frames, so the averaging is done once and
+	// not on every read.
+	mono []byte
 }
 
 // Read reads one block of audio.
 //
 // The block is 100 milliseconds, which is the size the controller's
 // capture frames are, so a frame is one read.
+//
+// The frames are averaged down to one channel, because that is what the
+// controller expects and what the sound device gives is not.
 func (c *capture) Read(p []byte) (int, error) {
 	select {
 	case <-c.done:
 		return 0, io.EOF
 	default:
 	}
-	return c.stream.Read(p)
+
+	// The device gives two channels and the caller wants one, so the
+	// buffer has to be big enough for what comes out of the device.
+	needed := len(p) * captureChannels
+	if cap(c.mono) < needed {
+		c.mono = make([]byte, needed)
+	}
+	buf := c.mono[:needed]
+
+	n, err := c.stream.Read(buf)
+	if n <= 0 {
+		return 0, err
+	}
+	return downmix(buf[:n], p), err
+}
+
+// downmix averages the channels of a block of audio.
+//
+// It is a copy rather than an average in place, because the caller's
+// buffer is not the device's buffer.
+func downmix(src, dst []byte) int {
+	frame := 2 * captureChannels
+	out := 0
+	for i := 0; i+frame <= len(src) && out+2 <= len(dst); i += frame {
+		left := int16(uint16(src[i]) | uint16(src[i+1])<<8)
+		right := int16(uint16(src[i+2]) | uint16(src[i+3])<<8)
+		v := (int32(left) + int32(right)) / 2
+		dst[out] = byte(v)
+		dst[out+1] = byte(uint16(v) >> 8)
+		out += 2
+	}
+	return out
 }
 
 // Close stops the capture and releases the sound card.

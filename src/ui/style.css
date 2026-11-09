@@ -49,3 +49,10 @@
 .settings-panel select option{background:#141b26;color:#f5f7fa;font:500 12px 'DM Sans',sans-serif;padding:8px 10px}
 .settings-panel select option:checked{background:#24313f;color:#f5f7fa}
 .settings-panel select option:hover{background:#1e2a37;color:#f5f7fa}
+.audio-test{display:flex;align-items:center;gap:10px;margin-top:-4px}
+.audio-test__button{flex:none;padding:8px 12px;border:1px solid rgba(255,255,255,.13);border-radius:9px;background:rgba(255,255,255,.05);color:#dfe5ec;font:600 11px 'DM Sans',sans-serif;cursor:pointer}
+.audio-test__button:hover{background:rgba(143,227,194,.14);color:var(--accent);border-color:rgba(143,227,194,.4)}
+.audio-test__button[aria-pressed="true"]{background:rgba(143,227,194,.2);color:var(--accent);border-color:var(--accent)}
+.audio-meter{flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}
+.audio-meter>i{display:block;width:0;height:100%;border-radius:4px;background:var(--accent);transition:width .08s linear}
+.audio-test__value{flex:none;width:38px;text-align:right;color:#8d99a8;font-size:11px;font-variant-numeric:tabular-nums}

@@ -100,6 +100,8 @@
     command: (command) => send("app:command", command),
     setDisplayMode: (mode) => send("app:command", { action: "display_mode", mode }),
     quit: () => send("app:command", { action: "exit" }),
+    testSound: () => send("app:test-sound", null),
+    monitorMic: (on) => send("app:monitor-mic", on),
     activity: (source) => notify("app:activity", source),
     setOverlayExpanded: (expanded) => notify("app:overlay-expanded", expanded),
     setSidePanel: (open) => notify("app:side-panel", open),

@@ -42,6 +42,7 @@ const DEFAULT_STATE = {
   audio_outputs: [],
   selected_audio_input: "",
   selected_audio_output: "",
+  monitoring: false,
   last_error: "",
 };
 
