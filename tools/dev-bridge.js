@@ -158,7 +158,16 @@ wss.on("connection", (socket) => {
       return;
     }
     if (channel === "app:save-settings") {
-      reply(await writeSettings(payload || {}));
+      const saved = await writeSettings(payload || {});
+      // The device is told the settings, the same way the application does
+      // it, so a saved change reaches the device rather than waiting for
+      // it to be restarted.
+      await client.sendConfig({
+        board: saved.echomuseBoard || "",
+        audioInput: saved.echomuseAudioInput || "",
+        audioOutput: saved.echomuseAudioOutput || "",
+      });
+      reply(saved);
       return;
     }
     if (channel === "app:command") {
