@@ -17,6 +17,26 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
 )
 
+// audioBackend is the sound card, as the device uses it.
+//
+// It is an interface rather than the concrete type so the handover
+// between the level meter and the controller's capture can be tested
+// without a sound card — the handover is the part that goes wrong, and
+// it goes wrong on a machine that has one.
+type audioBackend interface {
+	// Capture opens the microphone.
+	Capture(ctx context.Context, rate int) (io.ReadCloser, error)
+	// Playback opens the speaker.
+	Playback(ctx context.Context, rate int) (io.WriteCloser, error)
+	// OpenClockedOutput opens a speaker that reports when each period
+	// reaches the sound card.
+	OpenClockedOutput(ctx context.Context, rate, channels int) (echomuse.ClockedAudioOutput, error)
+	// SelectedAudioDevices reports the devices in use.
+	SelectedAudioDevices() (string, string)
+	// SelectAudioDevices chooses the devices.
+	SelectAudioDevices(input, output string) error
+}
+
 // deviceAudio is the device's audio: the microphone it listens with, the
 // speaker it answers through, and the music that plays under a reply.
 //
@@ -25,7 +45,7 @@ import (
 // so they are mixed rather than played one after the other — a reply that
 // waited for the music to stop would be late answering.
 type deviceAudio struct {
-	backend *audio.Backend
+	backend audioBackend
 	device  *echomuse.Device
 	guard   *turn.Guard
 	log     *slog.Logger
@@ -44,6 +64,8 @@ type deviceAudio struct {
 	monitoring bool
 	// monitorCancel stops the monitored capture.
 	monitorCancel context.CancelFunc
+	// monitorDone is closed when the monitor has let go of the microphone.
+	monitorDone chan struct{}
 	// testSound is the counter that says a tone should be played.
 	testSound int
 	// bounded is whether the turn is bounded, which is the case when the
@@ -304,6 +326,13 @@ func (a *deviceAudio) setMonitoring(on bool) {
 // It is only called when the controller is not already using the
 // microphone. When it is, the level comes from the frames the controller's
 // capture produces, because a sound card cannot be opened twice.
+//
+// The microphone is opened before this returns, and not on another
+// goroutine. The handover has to be ordered: the controller asks for the
+// microphone at some moment, and the meter has to have let go of it
+// before that moment. A meter that opens the card later finds the card
+// already taken by the capture, and the capture fails with the card
+// busy.
 func (a *deviceAudio) startMonitor() {
 	a.mu.Lock()
 	if a.monitorCancel != nil || a.capturing {
@@ -312,22 +341,51 @@ func (a *deviceAudio) startMonitor() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.monitorCancel = cancel
+	// The monitor says when it has let go of the sound card, so whoever
+	// asked for the microphone can wait for it rather than asking while
+	// the card is still held.
+	finished := make(chan struct{})
+	a.monitorDone = finished
 	a.mu.Unlock()
+
+	reader, err := a.backend.Capture(ctx, captureRate)
+	if err != nil {
+		a.log.Warn("the microphone could not be opened for the level meter", "error", err)
+		a.mu.Lock()
+		a.monitorCancel = nil
+		a.monitorDone = nil
+		a.mu.Unlock()
+		cancel()
+		close(finished)
+		return
+	}
 
 	go func() {
 		defer func() {
+			// The microphone is released BEFORE the monitor says it has
+			// let go. The other way round the caller would ask for the
+			// microphone while the meter still had it, and be told the
+			// card was busy.
+			_ = reader.Close()
 			a.mu.Lock()
 			a.monitorCancel = nil
+			a.monitorDone = nil
 			a.mu.Unlock()
 			cancel()
+			// The channel is closed last, so a caller waiting for the
+			// microphone to be released is woken by the release rather
+			// than by the bookkeeping.
+			close(finished)
 		}()
 
-		reader, err := a.backend.Capture(ctx, captureRate)
-		if err != nil {
-			a.log.Warn("the microphone could not be opened for the level meter", "error", err)
-			return
-		}
-		defer reader.Close()
+		// The microphone is closed as soon as the monitor is cancelled,
+		// rather than when the next read returns. A read blocks in the
+		// sound card until the next frame arrives, and whoever asked for
+		// the microphone is waiting for the card to be free.
+		go func() {
+			<-ctx.Done()
+			_ = reader.Close()
+		}()
 
 		buf := make([]byte, captureRate/10*2)
 		for {
@@ -354,14 +412,27 @@ func (a *deviceAudio) startMonitor() {
 }
 
 // stopMonitor closes the monitored microphone.
+//
+// It waits for the monitor to let go of the sound card, because the card
+// cannot be opened twice: a capture that starts while the monitor still
+// has it is told the card is busy, and the device goes deaf until the
+// controller asks again.
 func (a *deviceAudio) stopMonitor() {
 	a.mu.Lock()
 	cancel := a.monitorCancel
+	done := a.monitorDone
 	a.monitorCancel = nil
 	a.monitoring = false
 	a.mu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+	// The wait is outside the lock on purpose. The monitor's own cleanup
+	// takes the lock, so waiting for it while holding it would be a
+	// deadlock: the monitor would be waiting for the lock and this would
+	// be waiting for the monitor.
+	if done != nil {
+		<-done
 	}
 }
 
@@ -464,9 +535,32 @@ func (a *deviceAudio) startCapture(bounded bool) {
 
 	// The bounded turn is the device's own, so it starts when the
 	// microphone does.
-	a.guard.Start(time.Now())
+	//
+	// The guard is optional, because a device with no wake-word model
+	// has no turn of its own to bound: the controller's turn is the one
+	// that matters, and this is only the device's own limit.
+	if a.guard != nil {
+		a.guard.Start(time.Now())
+	}
 
 	a.log.Info("the microphone is opening")
+
+	// The microphone is opened before this returns, so a failure is
+	// reported here rather than on another goroutine, and so the caller
+	// knows the capture has the card.
+	reader, err := a.backend.Capture(ctx, captureRate)
+	if err != nil {
+		a.log.Error("the microphone could not be opened", "error", err)
+		a.mu.Lock()
+		a.capturing = false
+		a.captureCancel = nil
+		a.mu.Unlock()
+		cancel()
+		return
+	}
+	a.mu.Lock()
+	a.capture = reader
+	a.mu.Unlock()
 
 	go func() {
 		defer func() {
@@ -478,14 +572,6 @@ func (a *deviceAudio) startCapture(bounded bool) {
 			cancel()
 		}()
 
-		reader, err := a.backend.Capture(ctx, captureRate)
-		if err != nil {
-			a.log.Error("the microphone could not be opened", "error", err)
-			return
-		}
-		a.mu.Lock()
-		a.capture = reader
-		a.mu.Unlock()
 		defer reader.Close()
 
 		// 100 milliseconds of audio at 16 kHz is 3200 bytes, which is one
@@ -572,7 +658,9 @@ func (a *deviceAudio) stopCapture() {
 	if reader != nil {
 		_ = reader.Close()
 	}
-	a.guard.End()
+	if a.guard != nil {
+		a.guard.End()
+	}
 }
 
 // pushFrame sends one block of captured audio.
@@ -585,7 +673,7 @@ func (a *deviceAudio) pushFrame(pcm []byte) {
 	bounded := a.bounded
 	a.mu.Unlock()
 
-	if bounded {
+	if bounded && a.guard != nil {
 		a.guard.Push(pcm, time.Now())
 		return
 	}

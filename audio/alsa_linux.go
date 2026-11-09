@@ -124,6 +124,13 @@ type audioStream struct {
 	channels int
 	// closed is whether the stream has been closed.
 	closed bool
+	// reading is whether a read is in progress.
+	//
+	// A read blocks in the sound card until the next frame arrives, and
+	// the close has to get past it: a close that waits for the read to
+	// finish holds the card for the length of a frame, and the thing
+	// that wants the card next is told it is busy.
+	reading bool
 }
 
 // openStream opens an ALSA stream.
@@ -241,48 +248,83 @@ func isBusy(err error) bool {
 // A negative return is an ALSA error, and the stream is recovered when it
 // is one the stream can recover from: an underrun on the capture side is a
 // scheduling delay, not a broken sound card.
+//
+// The lock is not held across the read. A read blocks in the sound card
+// until the next frame arrives, and a close that had to wait for the
+// lock behind it would hold the card for the length of a frame — long
+// enough for the next thing that wants it to be told it is busy.
 func (p *audioStream) Read(buf []byte) (int, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.closed {
+		p.mu.Unlock()
 		return 0, fmt.Errorf("the ALSA stream is closed")
 	}
+	handle := p.handle
+	channels := p.channels
+	p.reading = true
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		p.reading = false
+		p.mu.Unlock()
+	}()
 
-	frames := len(buf) / (2 * p.channels)
+	frames := len(buf) / (2 * channels)
 	if frames == 0 {
 		return 0, nil
 	}
 
 	for {
-		n := sndPcmReadi(p.handle, buf[:frames*2*p.channels], uintptr(frames))
+		n := sndPcmReadi(handle, buf[:frames*2*channels], uintptr(frames))
 		if n >= 0 {
-			return int(n) * 2 * p.channels, nil
+			return int(n) * 2 * channels, nil
 		}
-		if rc := sndPcmRecover(p.handle, int(n), 1); rc < 0 {
+		// The stream may have been closed while the read was waiting, in
+		// which case the handle is gone and there is nothing to recover.
+		p.mu.Lock()
+		closed := p.closed
+		p.mu.Unlock()
+		if closed {
+			return 0, fmt.Errorf("the ALSA stream is closed")
+		}
+		if rc := sndPcmRecover(handle, int(n), 1); rc < 0 {
 			return 0, fmt.Errorf("reading from the ALSA device: %s", alsaError(int(n)))
 		}
 	}
 }
 
 // Write writes one block of frames.
+//
+// The lock is not held across the write, for the same reason the read does
+// not hold it: a close that had to wait for the lock behind a write in
+// progress would hold the card for the length of a frame.
 func (p *audioStream) Write(buf []byte) (int, error) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.closed {
+		p.mu.Unlock()
 		return 0, fmt.Errorf("the ALSA stream is closed")
 	}
+	handle := p.handle
+	channels := p.channels
+	p.mu.Unlock()
 
-	frames := len(buf) / (2 * p.channels)
+	frames := len(buf) / (2 * channels)
 	if frames == 0 {
 		return 0, nil
 	}
 
 	for {
-		n := sndPcmWritei(p.handle, buf[:frames*2*p.channels], uintptr(frames))
+		n := sndPcmWritei(handle, buf[:frames*2*channels], uintptr(frames))
 		if n >= 0 {
-			return int(n) * 2 * p.channels, nil
+			return int(n) * 2 * channels, nil
 		}
-		if rc := sndPcmRecover(p.handle, int(n), 1); rc < 0 {
+		p.mu.Lock()
+		closed := p.closed
+		p.mu.Unlock()
+		if closed {
+			return 0, fmt.Errorf("the ALSA stream is closed")
+		}
+		if rc := sndPcmRecover(handle, int(n), 1); rc < 0 {
 			return 0, fmt.Errorf("writing to the ALSA device: %s", alsaError(int(n)))
 		}
 	}
@@ -346,9 +388,20 @@ func (p *audioStream) Close() error {
 		return nil
 	}
 	p.closed = true
-	sndPcmDrop(p.handle)
-	sndPcmClose(p.handle)
+	handle := p.handle
 	p.handle = 0
+
+	// The handle is dropped and closed while the lock is held.
+	//
+	// The lock is what says the card has been released. A close that
+	// released the lock first would let a second close return while the
+	// card was still held, and the caller waiting for the card to be
+	// free would be told it was free before it was.
+	//
+	// The read does not hold the lock while it waits in the sound card,
+	// so this does not wait for it.
+	sndPcmDrop(handle)
+	sndPcmClose(handle)
 	return nil
 }
 
