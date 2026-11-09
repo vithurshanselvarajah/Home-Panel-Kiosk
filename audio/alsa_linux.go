@@ -3,10 +3,11 @@
 package audio
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/ebitengine/purego"
 )
@@ -17,25 +18,41 @@ import (
 // the binary cross compiles without a C toolchain and starts on a machine
 // with no sound card. The failure is a message rather than a missing
 // shared library.
+//
+// Every call that returns an error is declared as returning int32, and
+// that is not a style choice. ALSA returns a C `int`, which is 32 bits
+// wide and signed. The FFI layer hands back the raw 64-bit register, and
+// on x86-64 a 32-bit result is zero extended into it: an error of -16
+// arrives as 4294967280, which is positive. A check of `rc < 0` is then
+// never true, the failure is invisible, and the code carries on with a
+// handle that was never opened. ALSA answers that by taking the process
+// down, which is how a busy sound card became a crash rather than a
+// message. Declaring the return as int32 makes the sign real.
 var (
 	// sndPcmOpen opens a PCM stream.
-	sndPcmOpen func(pcm *uintptr, name *byte, stream int, mode int) int
+	sndPcmOpen func(pcm *uintptr, name *byte, stream int, mode int) int32
 	// sndPcmSetParams sets the stream's format.
-	sndPcmSetParams func(pcm uintptr, format int, access int, channels uint, rate uint, softResample int, latencyUsec uint) int
+	sndPcmSetParams func(pcm uintptr, format int, access int, channels uint, rate uint, softResample int, latencyUsec uint) int32
 	// sndPcmWritei writes frames.
-	sndPcmWritei func(pcm uintptr, data unsafe.Pointer, frames uintptr) int64
+	//
+	// The buffer is a slice rather than a pointer, because that is the
+	// form purego understands: it keeps the memory alive for the call
+	// and pins it, so the collector cannot move it while the sound card
+	// is reading it. A bare pointer carries no such promise, and the
+	// crash it causes is a segfault inside the library.
+	sndPcmWritei func(pcm uintptr, data []byte, frames uintptr) int64
 	// sndPcmReadi reads frames.
-	sndPcmReadi func(pcm uintptr, data unsafe.Pointer, frames uintptr) int64
+	sndPcmReadi func(pcm uintptr, data []byte, frames uintptr) int64
 	// sndPcmDelay returns the frames waiting to be played.
-	sndPcmDelay func(pcm uintptr, delay *int64) int64
+	sndPcmDelay func(pcm uintptr, delay *int64) int32
 	// sndPcmRecover recovers the stream from an error.
-	sndPcmRecover func(pcm uintptr, err int, silent int) int
+	sndPcmRecover func(pcm uintptr, err int, silent int) int32
 	// sndPcmDrain waits for the written audio to play.
-	sndPcmDrain func(pcm uintptr) int
+	sndPcmDrain func(pcm uintptr) int32
 	// sndPcmDrop discards the queued audio.
-	sndPcmDrop func(pcm uintptr) int
+	sndPcmDrop func(pcm uintptr) int32
 	// sndPcmClose closes the stream.
-	sndPcmClose func(pcm uintptr) int
+	sndPcmClose func(pcm uintptr) int32
 )
 
 // The ALSA constants the backend uses.
@@ -114,26 +131,109 @@ type audioStream struct {
 // The latency is 100 milliseconds, which is the same figure the SDK's
 // emulator uses: a small device has to buffer enough to survive a
 // scheduling delay, and too large a buffer is latency the user hears.
+//
+// The device is opened through more than one name when the first does not
+// work, because a sound card that cannot do the rate the controller wants
+// is an ordinary thing rather than a broken one.
 func openStream(device string, direction, rate, channels int) (*audioStream, error) {
 	if err := loadALSA(); err != nil {
 		return nil, err
 	}
 
-	name := []byte(device + "\x00")
+	var failure error
+	for _, candidate := range streamCandidates(device) {
+		stream, err := openOne(candidate, device, direction, rate, channels)
+		if err == nil {
+			return stream, nil
+		}
+		failure = err
+		// A device that is busy is busy however it is opened, so there is
+		// nothing to gain from trying the next name.
+		if isBusy(failure) {
+			break
+		}
+	}
+	return nil, failure
+}
+
+// streamCandidates are the names a device is opened through, in order.
+//
+// The hardware name comes first: it is the one with the least latency.
+// The plug name comes second: it is the same hardware with the rate
+// converted in software, which is what makes a microphone that only runs
+// at 48 kHz usable at the 16 kHz the controller asks for.
+//
+// The system default is left alone. It already goes through the sound
+// server, which does the conversion itself.
+func streamCandidates(device string) []string {
+	if strings.HasPrefix(device, "hw:") {
+		return []string{device, "plug" + device}
+	}
+	return []string{device}
+}
+
+// openOne opens a stream through one name.
+//
+// The name it is given and the name it is reported under are different
+// things: the device is opened as `hw:CARD=Audio,DEV=0` but it is
+// reported as `alsa:Audio,0`, which is what the settings page shows.
+func openOne(candidate, device string, direction, rate, channels int) (*audioStream, error) {
+	name := []byte(candidate + "\x00")
+	// The handle is zeroed before the open, because ALSA does not touch
+	// the output pointer when the open fails. A handle that still holds
+	// the previous stream's value would be closed or configured by
+	// mistake, and ALSA answers that by taking the process down.
 	var handle uintptr
 	if rc := sndPcmOpen(&handle, &name[0], direction, 0); rc < 0 {
 		// The handle is NOT closed here. Closing a handle that was never
 		// opened is an assertion inside ALSA, and an assertion takes the
 		// whole process down — so a device that is merely busy would kill
 		// the application rather than say it is busy.
-		return nil, fmt.Errorf("opening the ALSA device %q: %s", device, alsaError(int(rc)))
+		return nil, &alsaFailure{operation: "opening", device: device, code: int(rc)}
 	}
-	if rc := sndPcmSetParams(handle, s16le, rwInterleaved, uint(channels), uint(rate), 1, 100000); rc < 0 { // The stream is closed, because it was opened. Closing it is safe
+	if rc := sndPcmSetParams(handle, s16le, rwInterleaved, uint(channels), uint(rate), 1, 100000); rc < 0 {
+		// The stream is closed, because it was opened. Closing it is safe
 		// here and closing it is right: leaving a stream open would take
-		// the device away from anything else that wants it.		sndPcmClose(handle)
-		return nil, fmt.Errorf("setting the format of the ALSA device %q: %s", device, alsaError(rc))
+		// the device away from anything else that wants it.
+		sndPcmDrop(handle)
+		sndPcmClose(handle)
+		return nil, &alsaFailure{operation: "setting the format of", device: device, code: int(rc), rate: rate}
 	}
 	return &audioStream{handle: handle, rate: rate, channels: channels}, nil
+}
+
+// alsaFailure is an ALSA call that failed, with the code it failed with.
+//
+// The code is kept rather than only the message, because whether another
+// name is worth trying depends on what the failure was: a device that is
+// busy stays busy, and a device that does not accept the rate works
+// through the plug.
+type alsaFailure struct {
+	// operation is what was being done.
+	operation string
+	// device is the name the device was chosen by.
+	device string
+	// code is the ALSA error code.
+	code int
+	// rate is the rate that was asked for, when the failure was about it.
+	rate int
+}
+
+// Error says what failed and why.
+func (f *alsaFailure) Error() string {
+	if f.rate > 0 {
+		return fmt.Sprintf("%s the ALSA device %q at %d Hz: %s", f.operation, f.device, f.rate, alsaError(f.code))
+	}
+	return fmt.Sprintf("%s the ALSA device %q: %s", f.operation, f.device, alsaError(f.code))
+}
+
+// isBusy says whether the failure was a device that was already in use.
+func isBusy(err error) bool {
+	var failure *alsaFailure
+	if !errors.As(err, &failure) {
+		return false
+	}
+	return failure.code == -16
 }
 
 // Read reads one block of frames.
@@ -154,7 +254,7 @@ func (p *audioStream) Read(buf []byte) (int, error) {
 	}
 
 	for {
-		n := sndPcmReadi(p.handle, unsafe.Pointer(&buf[0]), uintptr(frames))
+		n := sndPcmReadi(p.handle, buf[:frames*2*p.channels], uintptr(frames))
 		if n >= 0 {
 			return int(n) * 2 * p.channels, nil
 		}
@@ -178,7 +278,7 @@ func (p *audioStream) Write(buf []byte) (int, error) {
 	}
 
 	for {
-		n := sndPcmWritei(p.handle, unsafe.Pointer(&buf[0]), uintptr(frames))
+		n := sndPcmWritei(p.handle, buf[:frames*2*p.channels], uintptr(frames))
 		if n >= 0 {
 			return int(n) * 2 * p.channels, nil
 		}
@@ -261,7 +361,7 @@ func alsaError(code int) string {
 	case -38:
 		return "libasound is not available"
 	case -22:
-		return "the device does not accept that format"
+		return "the device does not accept that format or rate"
 	case -16:
 		return "the device is busy — it is already in use, or it is the same device as the other one"
 	case -11:
