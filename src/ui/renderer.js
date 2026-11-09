@@ -408,6 +408,56 @@ window.homePanel.getSettings().then((settings) => {
 // The EchoMuse state comes from the sidecar, which owns the link to the
 // controller and the audio. The main process pushes it whenever it changes.
 if (echomuseUI && window.homePanel.onEchoMuseState) {
-  window.homePanel.onEchoMuseState((state) => echomuseUI.apply(state));
+  window.homePanel.onEchoMuseState((state) => {
+    echomuseUI.apply(state);
+    populateAudioDevices(state);
+  });
+}
+
+// Fills the microphone and speaker pickers with the devices this machine
+// has.
+//
+// The list comes from the sidecar, because the sidecar is what opens the
+// audio. The pickers keep whatever was chosen, so a device that was
+// unplugged does not silently become the default.
+function populateAudioDevices(state) {
+  fillDeviceSelect($("#echomuse-audio-input"), state.audio_inputs, loadedSettings?.echomuseAudioInput, state.selected_audio_input);
+  fillDeviceSelect($("#echomuse-audio-output"), state.audio_outputs, loadedSettings?.echomuseAudioOutput, state.selected_audio_output);
+}
+
+function fillDeviceSelect(select, devices, chosen, selected) {
+  if (!select) return;
+  const list = Array.isArray(devices) ? devices : [];
+  const current = select.value || chosen || "";
+  // The list is rebuilt only when it changed, so the picker does not lose
+  // its place while the state is pushed every few hundred milliseconds.
+  const signature = list.map((d) => d.name).join("|");
+  if (select.dataset.signature === signature) {
+    if (current && select.value !== current) select.value = current;
+    return;
+  }
+  select.dataset.signature = signature;
+
+  select.replaceChildren();
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = "System default";
+  select.append(blank);
+
+  for (const device of list) {
+    const option = document.createElement("option");
+    option.value = device.name;
+    option.textContent = device.description || device.name;
+    select.append(option);
+  }
+
+  // The chosen device is preferred over the one in use, because the chosen
+  // one is the person's choice and the one in use may be the default.
+  const wanted = current || selected || "";
+  if (wanted && list.some((d) => d.name === wanted)) {
+    select.value = wanted;
+  } else if (selected && list.some((d) => d.name === selected)) {
+    select.value = selected;
+  }
 }
 syncWaveLayout();
