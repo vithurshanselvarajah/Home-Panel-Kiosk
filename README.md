@@ -131,15 +131,46 @@ ECHOMUSE_SDK=/path/to/EchoMuse-SDK npm run dev
 device registers but is not admitted — which is what an unapproved device
 looks like.
 
-To point the app at a real controller instead, set the URL yourself:
+### Running against a real controller
 
 ```sh
-ECHOMUSE_CONTROLLER_URL=ws://192.168.1.10:8767 npm start
+npm run dev -- --controller ws://192.168.1.132:8767
 ```
 
-The environment variable wins over the device's own setting, and it is not
-written to the settings file. It also turns the EchoMuse link on, so a
-development run does not need the settings panel.
+The app connects to that controller and asks to be admitted. The request
+appears in the controller's dashboard, where an administrator approves it.
+
+A device that has never been seen arrives as **pending** and waits in a
+list. Asking to pair puts the request in front of an administrator
+instead, which is what a person setting the device up wants. The **Ask the
+controller to admit this device** setting turns that off, and the device
+then waits as an ordinary pending device.
+
+To point the app at a real controller without the dev script:
+
+```sh
+ECHOMUSE_CONTROLLER_URL=ws://192.168.1.132:8767 ECHOMUSE_ENABLED=1 npm start
+```
+
+Both environment variables are read at start-up and neither is written to
+the settings file, so a development run never changes how the device is set
+up. `ECHOMUSE_ENABLED=0` turns the link off for the run.
+
+The EchoMuse link is **off by default**. A device that has just been
+installed has never been admitted, and asking the controller to admit a
+device nobody has configured yet is not helpful — so the settings page is
+where it is turned on.
+
+### The audio devices
+
+The **Microphone** and **Speaker** pickers in the EchoMuse settings list the
+audio endpoints the machine has, the way the mixer names them. The list
+comes from the sidecar, because the sidecar is what opens the audio.
+
+**System default** is the system's own choice and is what the device uses
+when nothing is picked. The names are stored as the sidecar reported them,
+so a device that is unplugged keeps its name and can be picked again when
+it comes back.
 
 ## Suggested next improvements
 

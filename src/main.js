@@ -25,6 +25,9 @@ const DEFAULTS = {
   echomuseControllerUrl: "",
   echomuseDeviceId: "",
   echomuseBoard: "home-panel",
+  echomuseAudioInput: "",
+  echomuseAudioOutput: "",
+  echomusePair: true,
 };
 
 let win;
@@ -608,6 +611,10 @@ async function saveSettings(next) {
   clean.echomuseControllerUrl = clean.echomuseControllerUrl ? safeUrl(clean.echomuseControllerUrl) || "" : "";
   clean.echomuseDeviceId = String(clean.echomuseDeviceId || "").trim();
   clean.echomuseBoard = String(clean.echomuseBoard || DEFAULTS.echomuseBoard).trim() || DEFAULTS.echomuseBoard;
+  // The audio devices are named by the sidecar, so the names are kept as
+  // they are. An empty name is the system default.
+  clean.echomuseAudioInput = String(clean.echomuseAudioInput || "").trim();
+  clean.echomuseAudioOutput = String(clean.echomuseAudioOutput || "").trim();
   // The display mode is a setting, so a device that was set up before it
   // existed has none, and one with a nonsense value falls back to the
   // mode it was running in.
@@ -662,6 +669,8 @@ function sendEchoMuseConfig() {
     volumeButtonSound: settingBoolean(settings.echomuseVolumeButtonSound),
     wakeMode: settings.echomuseWakeMode || "on",
     wakeSound: settings.echomuseWakeSound !== "off",
+    audioInput: settings.echomuseAudioInput || "",
+    audioOutput: settings.echomuseAudioOutput || "",
   });
 }
 
@@ -709,6 +718,10 @@ function startEchoMuse() {
     // pointed at a controller on another machine without changing the
     // device's own configuration.
     controllerUrl: process.env.ECHOMUSE_CONTROLLER_URL || settings.echomuseControllerUrl || "",
+    // A device that has never been admitted asks to pair, so the request
+    // shows up in the controller's dashboard rather than sitting in a list
+    // of pending devices.
+    pair: settings.echomusePair !== false,
     onState: () => sendEchoMuseState(),
     onLog: (message) => { if (message) console.info("echomuse:", message); },
   });
@@ -973,10 +986,11 @@ app.whenReady().then(async () => {
   // The flag wins over the saved setting, but only for this run.
   const flagMode = readDisplayModeFlag();
   if (flagMode) settings.displayMode = flagMode;
-  // A development run turns the EchoMuse link on whatever the device's own
-  // settings say, so a developer does not have to go through the settings
-  // panel to try it.
-  if (process.env.ECHOMUSE_CONTROLLER_URL) settings.echomuseEnabled = true;
+  // The environment can turn the link on for a development run, and it can
+  // point it at a controller. Neither is written to the settings file, so a
+  // development run never changes how the device is set up.
+  if (process.env.ECHOMUSE_ENABLED === "1") settings.echomuseEnabled = true;
+  if (process.env.ECHOMUSE_ENABLED === "0") settings.echomuseEnabled = false;
   registerHealthProbes();
   healthChecker.start();
   registerIpc();
