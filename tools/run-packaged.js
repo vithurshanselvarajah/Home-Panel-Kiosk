@@ -3,12 +3,12 @@
 //   npm run packaged
 //
 // The packaged build is what the .deb installs, so it is what a device
-// actually runs. Running it means the sidecar is found beside the binary
+// actually runs. Running it means the device program is found beside the binary
 // the way it is on a device, rather than in the repository's vendor
 // directory, and the Electron binary is the one that was packaged rather
 // than the one in node_modules.
 //
-// The build is made if it is not already there, and the sidecar is put
+// The build is made if it is not already there, and the device program is put
 // beside it, because the packaging step is what does that.
 
 const { spawn, spawnSync } = require("node:child_process");
@@ -59,14 +59,14 @@ if (!fs.existsSync(binary)) fail(`there is no build at ${binary}`);
 
 // The sidecar has to be executable, and the packaging step puts it beside
 // the binary. It is copied there again when it is missing, because a build
-// made before the sidecar existed has no copy of it.
-const sidecar = path.join(packagedDir, "echomuse-sidecar");
-if (!fs.existsSync(sidecar)) {
-  const source = path.join(root, "vendor", `echomuse-sidecar-linux-${arch === "x64" ? "amd64" : arch}`);
-  if (!fs.existsSync(source)) fail(`there is no sidecar at ${source}`);
-  fs.copyFileSync(source, sidecar);
+// made before the device program existed has no copy of it.
+const device = path.join(packagedDir, "echomuse-device");
+if (!fs.existsSync(device)) {
+  const source = path.join(root, "vendor", `echomuse-device-linux-${arch === "x64" ? "amd64" : arch}`);
+  if (!fs.existsSync(source)) fail(`there is no EchoMuse device at ${source}`);
+  fs.copyFileSync(source, device);
 }
-fs.chmodSync(sidecar, 0o755);
+fs.chmodSync(device, 0o755);
 
 // The packaged app keeps its settings in the same place a device does, so
 // a packaged run and a development run see the same configuration.
