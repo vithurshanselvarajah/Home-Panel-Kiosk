@@ -218,6 +218,12 @@ server.listen(port, () => {
   startSidecar();
 });
 
+// The sidecar holds the microphone and the speaker, and it releases them
+// when it exits. The exit waits for it, so the next thing to want the
+// sound card finds it free.
 process.on("exit", () => client.stop());
-process.on("SIGINT", () => { client.stop(); process.exit(0); });
-process.on("SIGTERM", () => { client.stop(); process.exit(0); });
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    client.stop().finally(() => process.exit(0));
+  });
+}
