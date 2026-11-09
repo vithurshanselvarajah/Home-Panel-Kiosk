@@ -8,7 +8,7 @@
     "start": "electron .",
     "dev": "node tools/dev.js",
     "dev:ui": "node tools/dev-bridge.js",
-    "start:packaged": "node tools/run-packaged.js",
+    "packaged": "node tools/run-packaged.js",
     "test": "node --test",
     "package": "electron-forge package",
     "make": "electron-forge make",
