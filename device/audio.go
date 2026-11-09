@@ -39,6 +39,13 @@ type deviceAudio struct {
 	captureCancel context.CancelFunc
 	// capturing is whether a capture is running.
 	capturing bool
+	// monitoring is whether the microphone is open for the level meter
+	// alone.
+	monitoring bool
+	// monitorCancel stops the monitored capture.
+	monitorCancel context.CancelFunc
+	// testSound is the counter that says a tone should be played.
+	testSound int
 	// bounded is whether the turn is bounded, which is the case when the
 	// controller asked for a locked microphone.
 	bounded bool
@@ -49,9 +56,15 @@ type deviceAudio struct {
 	outputCancel context.CancelFunc
 	// playing is whether a playback is running.
 	playing bool
+	// outputGen says which output loop is the current one, so a loop that
+	// has been replaced does not clear the flag of the one that replaced
+	// it.
+	outputGen int
 
 	// voice is the reply being played, and the mixer takes it out of here.
 	voice []byte
+	// test is the test tone, and the mixer takes it out of here.
+	test []byte
 	// voiceActive is whether a reply is playing.
 	voiceActive bool
 	// voiceMixed is whether the music is playing under the reply.
@@ -89,6 +102,12 @@ const (
 	playbackRate = audio.PlaybackRate
 )
 
+// periodBytes is the size of one playback period.
+//
+// A period is 10 milliseconds of mono audio at 48 kHz. It is the size the
+// mixer works in, so a reply is played one period at a time.
+const periodBytes = playbackRate / 100 * 2
+
 // setEndpoints records the audio devices the machine has.
 func (a *deviceAudio) setEndpoints(inputs, outputs []audio.Endpoint) {
 	a.mu.Lock()
@@ -111,6 +130,7 @@ func (a *deviceAudio) fillState(s *State) {
 	if a.level > s.Level {
 		s.Level = a.level
 	}
+	s.Monitoring = a.monitoring
 }
 
 // selectInput chooses the microphone.
@@ -143,6 +163,174 @@ func (a *deviceAudio) currentOutput() string {
 	defer a.mu.Unlock()
 	_, out := a.backend.SelectedAudioDevices()
 	return out
+}
+
+// playTestSound plays a short tone through the speaker.
+//
+// It is what the settings page's test button uses: a person choosing a
+// speaker needs to hear it before they commit to it, and a tone is the
+// only thing that says which speaker is which.
+//
+// The tone goes through the same mixer as the music and the reply, rather
+// than straight to the sound card. A device that opened the card a second
+// time would either fail or steal the card from the music, and a test
+// tone that interrupts the music is worse than no test tone.
+//
+// The tone is a second long, which is long enough to hear and short enough
+// that it is not a nuisance.
+func (a *deviceAudio) playTestSound() error {
+	// The tone is a 440 Hz sine, which is the note a telephone used and is
+	// easy to recognise.
+	const frequency = 440.0
+	samples := playbackRate * 2
+	tone := make([]byte, samples*2)
+	for i := 0; i < samples; i++ {
+		// The envelope fades the tone in and out, so it does not click at
+		// the ends.
+		envelope := 1.0
+		fade := samples / 20
+		if i < fade {
+			envelope = float64(i) / float64(fade)
+		} else if i > samples-fade {
+			envelope = float64(samples-i) / float64(fade)
+		}
+		sample := int16(12000 * envelope * math.Sin(2*math.Pi*frequency*float64(i)/playbackRate))
+		tone[i*2] = byte(sample)
+		tone[i*2+1] = byte(uint16(sample) >> 8)
+	}
+
+	a.mu.Lock()
+	a.test = tone
+	a.mu.Unlock()
+
+	// The mixer is what plays it, so the speaker has to be open.
+	a.ensureOutput()
+	return nil
+}
+
+// captureLevel is the level of the microphone, as a percentage of full
+// scale.
+//
+// It is zero until the microphone is open, because a level that says
+// something about a microphone that is not open is a level that is lying.
+func (a *deviceAudio) captureLevel() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.level
+}
+
+// setMonitoring opens or closes the microphone so its level can be shown.
+//
+// The monitoring is a flag rather than a capture of its own when the
+// controller is already using the microphone. The level meter reads the
+// frames the capture produces, because a sound card cannot be opened twice
+// — ALSA says so by taking the process down — and because the level of the
+// frames being sent is the level that matters.
+//
+// The microphone is opened for the meter alone when the controller is not
+// using it, so a person can see what the microphone hears while they are
+// setting the device up.
+func (a *deviceAudio) setMonitoring(on bool) {
+	a.mu.Lock()
+	a.monitoring = on
+	alreadyCapturing := a.capturing
+	a.mu.Unlock()
+
+	if on && !alreadyCapturing {
+		a.startMonitor()
+		return
+	}
+	if !on {
+		a.stopMonitor()
+	}
+}
+
+// startMonitor opens the microphone for the level meter alone.
+//
+// It is only called when the controller is not already using the
+// microphone. When it is, the level comes from the frames the controller's
+// capture produces, because a sound card cannot be opened twice.
+func (a *deviceAudio) startMonitor() {
+	a.mu.Lock()
+	if a.monitorCancel != nil || a.capturing {
+		a.mu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.monitorCancel = cancel
+	a.mu.Unlock()
+
+	go func() {
+		defer func() {
+			a.mu.Lock()
+			a.monitorCancel = nil
+			a.mu.Unlock()
+			cancel()
+		}()
+
+		reader, err := a.backend.Capture(ctx, captureRate)
+		if err != nil {
+			a.log.Warn("the microphone could not be opened for the level meter", "error", err)
+			return
+		}
+		defer reader.Close()
+
+		buf := make([]byte, captureRate/10*2)
+		for {
+			n, err := reader.Read(buf)
+			if n > 0 {
+				a.setLevel(peakLevel(buf[:n]))
+			}
+			if err != nil {
+				if ctx.Err() == nil {
+					a.log.Warn("the level meter stopped", "error", err)
+				}
+				return
+			}
+			// The controller's capture takes the microphone back when it
+			// needs it, and the level meter gives it up.
+			a.mu.Lock()
+			taken := a.capturing
+			a.mu.Unlock()
+			if taken {
+				return
+			}
+		}
+	}()
+}
+
+// stopMonitor closes the monitored microphone.
+func (a *deviceAudio) stopMonitor() {
+	a.mu.Lock()
+	cancel := a.monitorCancel
+	a.monitorCancel = nil
+	a.monitoring = false
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// setTestSound plays a tone when the counter changes.
+//
+// The counter is what says whether the tone should play: a button that is
+// pressed twice has to make two sounds, and a flag cannot tell the
+// difference between the first press and the second.
+func (a *deviceAudio) setTestSound(counter int) {
+	a.mu.Lock()
+	changed := counter != a.testSound
+	a.testSound = counter
+	a.mu.Unlock()
+	if !changed {
+		return
+	}
+	go func() {
+		if err := a.playTestSound(); err != nil {
+			a.log.Warn("the test sound could not be played", "error", err)
+			return
+		}
+		a.log.Info("the test sound was played")
+	}()
 }
 
 // setVolume sets the device's volume.
@@ -191,11 +379,28 @@ func (a *deviceAudio) applyConfig(c protocol.Config) {
 // The stream begins when the controller asks for it and stops when it says
 // to stop, which is the order the protocol expects: a device that streams
 // before it is asked is a device streaming to nobody.
+// startCapture opens the microphone and streams it to the controller.
+//
+// The stream begins when the controller asks for it and stops when it says
+// to stop, which is the order the protocol expects: a device that streams
+// before it is asked is a device streaming to nobody.
+//
+// The microphone is opened once. The level meter reads the same frames
+// rather than opening a second capture, because a sound card cannot be
+// opened twice and ALSA says so by taking the process down.
 func (a *deviceAudio) startCapture(bounded bool) {
 	a.mu.Lock()
 	if a.capturing {
 		a.mu.Unlock()
 		return
+	}
+	// The level meter may have the microphone open. It gives it up rather
+	// than the two of them trying to open a sound card at once, which ALSA
+	// answers by taking the process down.
+	if a.monitorCancel != nil {
+		a.mu.Unlock()
+		a.stopMonitor()
+		a.mu.Lock()
 	}
 	a.capturing = true
 	a.bounded = bounded
@@ -374,6 +579,13 @@ func (a *deviceAudio) flush() {
 }
 
 // ensureOutput opens the speaker if it is not open.
+//
+// The generation counter is what makes this safe. A loop that is on its way
+// out clears the flag when it finishes, and a new loop that started in
+// between would have its flag cleared by the old one — so a second press
+// would open the speaker a second time, and ALSA asserts on a card that is
+// already open. The counter says which loop is the current one, so only the
+// current loop clears the flag.
 func (a *deviceAudio) ensureOutput() {
 	a.mu.Lock()
 	if a.playing {
@@ -381,23 +593,51 @@ func (a *deviceAudio) ensureOutput() {
 		return
 	}
 	a.playing = true
+	a.outputGen++
+	generation := a.outputGen
 	ctx, cancel := context.WithCancel(context.Background())
 	a.outputCancel = cancel
 	a.mu.Unlock()
 
-	go a.outputLoop(ctx, cancel)
+	go a.outputLoop(ctx, generation)
+}
+
+// releaseOutput marks the output loop as finished.
+//
+// Only the current loop clears the flag. A loop that has been replaced must
+// not clear the flag of the one that replaced it, or the next sound would
+// open the speaker a second time.
+func (a *deviceAudio) releaseOutput(generation int) {
+	a.mu.Lock()
+	if a.outputGen == generation {
+		a.playing = false
+		a.outputCancel = nil
+		a.output = nil
+	}
+	a.mu.Unlock()
 }
 
 // closeOutput closes the speaker.
+//
+// The writer is closed here rather than left to the loop, because the loop
+// may be a moment behind: it is the loop that closes the card, and a card
+// that is closed a moment late is a card that the next open finds already
+// open. ALSA asserts on that, and an assertion takes the process down.
 func (a *deviceAudio) closeOutput() {
 	a.mu.Lock()
 	cancel := a.outputCancel
+	writer := a.output
 	a.outputCancel = nil
+	a.output = nil
 	a.playing = false
+	a.outputGen++
 	a.mu.Unlock()
 
 	if cancel != nil {
 		cancel()
+	}
+	if writer != nil {
+		_ = writer.Close()
 	}
 }
 
@@ -405,27 +645,43 @@ func (a *deviceAudio) closeOutput() {
 //
 // It is one loop, because one loop is what keeps them in step. Two loops
 // writing to one sound card is two clocks, and the reply arrives late.
-func (a *deviceAudio) outputLoop(ctx context.Context, cancel context.CancelFunc) {
-	defer func() {
-		a.mu.Lock()
-		a.playing = false
-		a.outputCancel = nil
-		a.mu.Unlock()
-		cancel()
-	}()
-
+//
+// The music is pulled from the player rather than pushed to it: the player
+// knows when each period should be heard, and a device that only played
+// what it was given would play the music in whatever order the periods
+// arrived, which is what makes it choppy.
+func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	writer, err := a.backend.Playback(ctx, playbackRate)
 	if err != nil {
 		a.log.Error("the speaker could not be opened", "error", err)
+		a.releaseOutput(generation)
 		return
 	}
 	a.mu.Lock()
-	a.output = writer
+	// The loop may have been replaced while the speaker was opening, in
+	// which case the new one owns the card and this one must not.
+	replaced := a.outputGen != generation
+	if !replaced {
+		a.output = writer
+	}
 	a.mu.Unlock()
-	defer writer.Close()
+	if replaced {
+		_ = writer.Close()
+		return
+	}
 
-	// 100 milliseconds of mono audio at 48 kHz.
-	mono := make([]byte, playbackRate/10*2)
+	// The speaker is released before the loop returns, so the next thing
+	// that wants to make a sound finds the card closed.
+	//
+	// A card that is still open when the next open comes is a card that
+	// ALSA asserts on, and an assertion takes the whole process down.
+	defer func() {
+		_ = writer.Close()
+		a.releaseOutput(generation)
+	}()
+
+	// A period is 10 milliseconds, which is the player's own period.
+	mono := make([]byte, playbackRate/100*2)
 
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
@@ -438,25 +694,35 @@ func (a *deviceAudio) outputLoop(ctx context.Context, cancel context.CancelFunc)
 		}
 
 		a.mu.Lock()
-		voice := a.voice
+		player := a.sendspin
 		volume := a.volume
 		muted := a.muted
 		ducked := a.ducked
 		duckDB := a.duckDB
-		a.voice = nil
+		// One period is taken from each queue, so a long reply is spread
+		// over the periods that follow rather than played all at once.
+		voice := a.takeAudio(&a.voice, periodBytes)
+		test := a.takeAudio(&a.test, periodBytes)
 		a.mu.Unlock()
 
 		clear(mono)
+
+		// The music is mixed in first, and the reply is mixed over it.
+		// The other way round would let the reply duck the music, which
+		// is what the controller's duck request is for.
+		musicReady := player != nil && player.Active()
+		if musicReady {
+			a.fillMusic(mono, player, volume, muted, ducked, duckDB)
+		}
+		if len(test) > 0 {
+			a.mixVoiceInto(mono, test)
+		}
 		if len(voice) > 0 {
-			copy(mono, voice)
+			a.mixVoiceInto(mono, voice)
 		}
 		if muted {
 			clear(mono)
-		} else {
-			applyGain(mono, volume)
 		}
-		_ = ducked
-		_ = duckDB
 
 		if _, err := writer.Write(mono); err != nil {
 			if ctx.Err() == nil {
@@ -464,6 +730,113 @@ func (a *deviceAudio) outputLoop(ctx context.Context, cancel context.CancelFunc)
 			}
 			return
 		}
+
+		// The speaker is released when there is nothing left to play.
+		//
+		// A loop that kept the card open for ever would make every
+		// later sound fail: ALSA asserts on a card that is already
+		// open, and an assertion takes the whole process down.
+		a.mu.Lock()
+		empty := len(a.voice) == 0 && len(a.test) == 0 && (player == nil || !player.Active())
+		a.mu.Unlock()
+		if empty {
+			// The speaker is drained rather than dropped, so the last
+			// of the tone is heard rather than cut off.
+			if drainer, ok := writer.(interface{ Drain() error }); ok {
+				_ = drainer.Drain()
+			}
+			return
+		}
+	}
+}
+
+// fillMusic mixes a period of the music into the output.
+//
+// The player is asked for the period that should be heard next, and the
+// player's own clock says when that is. The period is 48 kHz stereo, and
+// the output is mono, so the two channels are averaged.
+func (a *deviceAudio) fillMusic(mono []byte, player *sendspin.Client, volume int, muted, ducked bool, duckDB float64) {
+	stereo := make([]byte, playbackRate/100*4)
+	clear(stereo)
+	// The period is played 80 milliseconds from now, which is the lead the
+	// player needs to have the audio ready.
+	player.Fill(stereo, time.Now().Add(80*time.Millisecond), 2*time.Millisecond)
+	applySendspinGain(stereo, volume, muted, ducked, duckDB)
+
+	for i := 0; i+3 < len(stereo); i += 4 {
+		left := int32(int16(uint16(stereo[i]) | uint16(stereo[i+1])<<8))
+		right := int32(int16(uint16(stereo[i+2]) | uint16(stereo[i+3])<<8))
+		v := (left + right) / 2
+		mono[i/2], mono[i/2+1] = byte(v), byte(uint16(v)>>8)
+	}
+}
+
+// mixVoiceInto mixes the reply over the music.
+//
+// The sum is clamped rather than wrapped: a wrap turns a loud reply into
+// a loud hiss, which is worse than a quiet moment of clipping.
+//
+// Only as much as fits is mixed. The reply is longer than one period, and
+// the rest of it is mixed in on the periods that follow.
+func (a *deviceAudio) mixVoiceInto(music, voice []byte) {
+	for i := 0; i+1 < len(music) && i+1 < len(voice); i += 2 {
+		m := int32(int16(uint16(music[i]) | uint16(music[i+1])<<8))
+		v := int32(int16(uint16(voice[i]) | uint16(voice[i+1])<<8))
+		sum := m + v
+		if sum > 32767 {
+			sum = 32767
+		}
+		if sum < -32768 {
+			sum = -32768
+		}
+		music[i], music[i+1] = byte(sum), byte(uint16(sum)>>8)
+	}
+}
+
+// takeAudio takes the next period of the queued audio.
+//
+// The queue is the whole of what is left to play, and one period is taken
+// from it. A queue that was emptied all at once would play the first
+// period over and over, and a reply of two seconds would be two hundred
+// milliseconds of it.
+func (a *deviceAudio) takeAudio(queue *[]byte, period int) []byte {
+	if len(*queue) == 0 {
+		return nil
+	}
+	taken := period
+	if taken > len(*queue) {
+		taken = len(*queue)
+	}
+	out := (*queue)[:taken]
+	*queue = (*queue)[taken:]
+	return out
+}
+
+// applySendspinGain scales the music by the device's volume, and ducks it
+// when the controller asks for it.
+//
+// The duck is applied to the music only. The reply is the thing the user is
+// meant to hear, so it is never ducked.
+func applySendspinGain(pcm []byte, volume int, muted, ducked bool, duckDB float64) {
+	duckGain := 1.0
+	if ducked {
+		duckGain = math.Pow(10, duckDB/20)
+	}
+	for i := 0; i+1 < len(pcm); i += 2 {
+		v := float64(int16(uint16(pcm[i]) | uint16(pcm[i+1])<<8))
+		if muted {
+			v = 0
+		} else {
+			v = v * float64(volume) / 100 * duckGain
+		}
+		if v > 32767 {
+			v = 32767
+		}
+		if v < -32768 {
+			v = -32768
+		}
+		sample := int16(v)
+		pcm[i], pcm[i+1] = byte(sample), byte(uint16(sample)>>8)
 	}
 }
 
@@ -570,7 +943,7 @@ func (a *deviceAudio) applySendspinConfig(cfg protocol.Config) {
 			Name:      name,
 			Instance:  "echomuse-home-panel",
 			Product:   "Home Panel",
-			Version:    "0.1.0",
+			Version:   "0.1.0",
 			Unpaired:  unpaired,
 			// A shared speaker needs a modest lead to keep the start
 			// responsive; a large jitter buffer is seconds of latency
@@ -591,7 +964,16 @@ func (a *deviceAudio) applySendspinConfig(cfg protocol.Config) {
 			a.sendspinMuted = muted
 			a.mu.Unlock()
 		})
-		player.OnChange(func() { _ = a.device.SendSendspinStatus(player.Status()) })
+		player.OnChange(func() {
+			_ = a.device.SendSendspinStatus(player.Status())
+			// The speaker is opened when the music starts playing, not
+			// when the player does. A player that is listening for a
+			// server is silent, and a speaker opened for it would sit
+			// there holding the sound card for nothing.
+			if player.Active() {
+				a.ensureOutput()
+			}
+		})
 		if err := player.Start(); err != nil {
 			a.log.Error("the music player could not be started", "error", err)
 			_ = a.device.SendSendspinStatus(map[string]string{"state": "error", "error": err.Error()})

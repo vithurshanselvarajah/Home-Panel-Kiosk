@@ -87,6 +87,9 @@ type State struct {
 	SelectedAudioInput string `json:"selected_audio_input"`
 	// SelectedAudioOutput is the speaker in use.
 	SelectedAudioOutput string `json:"selected_audio_output"`
+	// Monitoring is true while the microphone is open for the level meter
+	// alone, so a person can see what the microphone hears.
+	Monitoring bool `json:"monitoring"`
 
 	// LastError is the most recent error, if any.
 	LastError string `json:"last_error"`
@@ -162,6 +165,16 @@ type Config struct {
 	// AudioOutput is the speaker to use. An empty name is the system
 	// default.
 	AudioOutput *string `json:"audioOutput,omitempty"`
+	// MonitorMic opens the microphone so its level can be shown, without
+	// sending anything to the controller.
+	MonitorMic *bool `json:"monitorMic,omitempty"`
+	// TestSound is a counter. Every time it changes, the device plays a
+	// short tone through its speaker.
+	//
+	// A counter rather than a flag, because a flag that stays set is
+	// played once and then never again, and the settings page cannot
+	// tell that the button did nothing.
+	TestSound *int `json:"testSound,omitempty"`
 }
 
 // readConfig reads the device configuration.
@@ -275,11 +288,11 @@ func main() {
 	})
 
 	reporter := &stateReporter{
-		log:     log,
-		device:  device,
-		ring:    ring,
-		guard:   guard,
-		audio:   speaker_,
+		log:    log,
+		device: device,
+		ring:   ring,
+		guard:  guard,
+		audio:  speaker_,
 	}
 	if *stateFile != "" {
 		reporter.file = *stateFile
@@ -401,7 +414,7 @@ func (r *stateReporter) publish(s state.Snapshot) {
 		Level:            r.guard.Detector().Level(),
 		Pattern:          string(view.Pattern),
 		LastError:        s.LastError,
-		UpdatedAt:         time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
 	}
 	for _, c := range view.Palette {
 		next.Palette = append(next.Palette, Colour{R: int(c.R), G: int(c.G), B: int(c.B)})
@@ -522,6 +535,13 @@ func applyConfig(c Config, guard *turn.Guard, reporter *stateReporter, audio *de
 		} else {
 			log.Info("the speaker was set", "device", *c.AudioOutput)
 		}
+	}
+	if c.MonitorMic != nil {
+		audio.setMonitoring(*c.MonitorMic)
+		log.Info("the microphone monitor was turned on or off", "enabled", *c.MonitorMic)
+	}
+	if c.TestSound != nil {
+		audio.setTestSound(*c.TestSound)
 	}
 }
 

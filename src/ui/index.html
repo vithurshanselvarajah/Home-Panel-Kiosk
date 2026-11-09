@@ -84,11 +84,21 @@
           <label class="setting-toggle"><input name="echomuseBargeIn" type="checkbox" /> Allow barge-in during a response</label>
           <div class="section-label"><span>MICROPHONE</span><span class="line"></span></div>
           <label>Microphone<select name="echomuseAudioInput" id="echomuse-audio-input"><option value="">System default</option></select></label>
+          <div class="audio-test">
+            <button type="button" class="audio-test__button" id="mic-test-button">Test microphone</button>
+            <div class="audio-meter" role="meter" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100" id="mic-meter"><i id="mic-meter-fill"></i></div>
+            <span class="audio-test__value" id="mic-level-value">—</span>
+          </div>
           <div class="two-col"><label>Microphone gain <span class="field-unit">dB</span><input name="echomuseMicGainDb" type="number" min="-30" max="30" placeholder="0" /></label><label>Startup volume <span class="field-unit">0 to 100</span><input name="echomuseStartupVolume" type="number" min="0" max="100" placeholder="50" /></label></div>
           <div class="two-col"><label>VAD threshold <span class="field-unit">times the room's noise</span><input name="echomuseVadThreshold" type="number" min="1" max="20" step="0.5" placeholder="3" /></label><label>VAD speech time <span class="field-unit">ms</span><input name="echomuseVadSpeechMs" type="number" min="50" max="2000" step="50" placeholder="200" /></label></div>
           <label>VAD silence time <span class="field-unit">ms</span><input name="echomuseVadSilenceMs" type="number" min="200" max="5000" step="100" placeholder="5000" /></label>
           <div class="section-label"><span>SPEAKER</span><span class="line"></span></div>
           <label>Speaker<select name="echomuseAudioOutput" id="echomuse-audio-output"><option value="">System default</option></select></label>
+          <div class="audio-test">
+            <button type="button" class="audio-test__button" id="speaker-test-button">Test speaker</button>
+            <div class="audio-meter" role="meter" aria-label="Speaker level" aria-valuemin="0" aria-valuemax="100" id="speaker-meter"><i id="speaker-meter-fill"></i></div>
+            <span class="audio-test__value" id="speaker-level-value">—</span>
+          </div>
           <div class="two-col"><label>Output volume <span class="field-unit">0 to 100</span><input name="echomuseVolume" type="number" min="0" max="100" placeholder="50" /></label><label>Ducking <span class="field-unit">dB under a response</span><input name="echomuseDuckDb" type="number" min="-30" max="0" step="0.5" placeholder="-6" /></label></div>
           <label class="setting-toggle"><input name="echomuseMuteButton" type="checkbox" checked /> The device has its own mute switch</label>
           <label class="setting-toggle"><input name="echomuseVolumeButtonSound" type="checkbox" checked /> Play a sound on the volume buttons</label>

@@ -194,8 +194,21 @@ function setKeyboard(visible, { settings = false } = {}) {
 function closeSettings() {
   panel.hidden = true;
   if (settingsKeyboardActive) setKeyboard(false);
+  // The microphone is released when the settings page closes, because a
+  // microphone left open holds the sound card for a dashboard that is
+  // showing the weather.
+  stopMicMonitor();
   window.homePanel.setOverlayExpanded(!$("#notice").hidden || !keyboard.hidden);
   syncSettingsLayout();
+}
+
+// stopMicMonitor stops the microphone level meter.
+function stopMicMonitor() {
+  const button = $("#mic-test-button");
+  if (!button || button.getAttribute("aria-pressed") !== "true") return;
+  button.setAttribute("aria-pressed", "false");
+  button.textContent = "Test microphone";
+  window.homePanel.monitorMic(false);
 }
 
 $("#close-settings").addEventListener("click", closeSettings);
@@ -422,7 +435,50 @@ if (echomuseUI && window.homePanel.onEchoMuseState) {
   window.homePanel.onEchoMuseState((state) => {
     echomuseUI.apply(state);
     populateAudioDevices(state);
+    paintAudioMeters(state);
   });
+}
+
+// The microphone and speaker test controls.
+//
+// The microphone is monitored while the settings page is open, so a person
+// can see what the microphone hears before they commit to it. The speaker
+// is tested by a tone, because a person choosing a speaker needs to hear
+// it to know which one it is.
+const micTestButton = $("#mic-test-button");
+const speakerTestButton = $("#speaker-test-button");
+
+if (micTestButton) {
+  micTestButton.addEventListener("click", async () => {
+    // The button is a toggle, because the microphone has to be released
+    // again when the settings page is closed.
+    const on = micTestButton.getAttribute("aria-pressed") !== "true";
+    micTestButton.setAttribute("aria-pressed", String(on));
+    micTestButton.textContent = on ? "Stop monitoring" : "Test microphone";
+    await window.homePanel.monitorMic(on);
+  });
+}
+
+if (speakerTestButton) {
+  speakerTestButton.addEventListener("click", async () => {
+    await window.homePanel.testSound();
+  });
+}
+
+// paintAudioMeters draws the levels.
+//
+// The microphone meter shows what the microphone is hearing, and the
+// speaker meter shows the volume that was asked for, which is what the
+// device will play at.
+function paintAudioMeters(state) {
+  const level = Number(state.level) || 0;
+  setMeter($("#mic-meter-fill"), $("#mic-level-value"), level);
+  setMeter($("#speaker-meter-fill"), $("#speaker-level-value"), Number(state.volume) || 0);
+}
+
+function setMeter(fill, value, level) {
+  if (fill) fill.style.width = `${Math.max(0, Math.min(100, level))}%`;
+  if (value) value.textContent = level > 0 ? `${level}%` : "—";
 }
 
 // Fills the microphone and speaker pickers with the devices this machine

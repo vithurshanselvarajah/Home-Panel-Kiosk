@@ -27,6 +27,8 @@ const DEFAULTS = {
   echomuseBoard: "home-panel",
   echomuseAudioInput: "",
   echomuseAudioOutput: "",
+  echomuseMonitorMic: false,
+  echomuseTestSound: 0,
   echomusePair: true,
 };
 
@@ -671,6 +673,8 @@ function sendEchoMuseConfig() {
     wakeSound: settings.echomuseWakeSound !== "off",
     audioInput: settings.echomuseAudioInput || "",
     audioOutput: settings.echomuseAudioOutput || "",
+    monitorMic: settings.echomuseMonitorMic === true,
+    testSound: settings.echomuseTestSound || 0,
   });
 }
 
@@ -921,6 +925,21 @@ function registerIpc() {
     assertOverlaySender(event);
     quitApp();
     return true;
+  });
+  // The test sound and the microphone monitor are settings that act
+  // immediately rather than being saved, so they are their own calls.
+  ipcMain.handle("app:test-sound", (event) => {
+    assertOverlaySender(event);
+    // The counter is what tells the device a new tone was asked for.
+    settings.echomuseTestSound = (settings.echomuseTestSound || 0) + 1;
+    sendEchoMuseConfig();
+    return settings.echomuseTestSound;
+  });
+  ipcMain.handle("app:monitor-mic", (event, on) => {
+    assertOverlaySender(event);
+    settings.echomuseMonitorMic = Boolean(on);
+    sendEchoMuseConfig();
+    return settings.echomuseMonitorMic;
   });
   ipcMain.on("app:activity", (event, source) => { assertOverlaySender(event); recordActivity(source === "keydown" ? "overlay-key" : "overlay"); });
   ipcMain.on("app:overlay-expanded", (event, expanded) => {
