@@ -526,14 +526,18 @@ func applyConfig(c Config, guard *turn.Guard, reporter *stateReporter, audio *de
 		if err := audio.selectInput(*c.AudioInput); err != nil {
 			log.Warn("the microphone could not be chosen", "device", *c.AudioInput, "error", err)
 		} else {
-			log.Info("the microphone was set", "device", *c.AudioInput)
+			// The device that is in use is reported rather than the one
+			// that was asked for, because an empty setting means the
+			// system's default and saying so is more use than an empty
+			// name is.
+			log.Info("the microphone was set", "device", audio.currentInput())
 		}
 	}
 	if c.AudioOutput != nil {
 		if err := audio.selectOutput(*c.AudioOutput); err != nil {
 			log.Warn("the speaker could not be chosen", "device", *c.AudioOutput, "error", err)
 		} else {
-			log.Info("the speaker was set", "device", *c.AudioOutput)
+			log.Info("the speaker was set", "device", audio.currentOutput())
 		}
 	}
 	if c.MonitorMic != nil {
