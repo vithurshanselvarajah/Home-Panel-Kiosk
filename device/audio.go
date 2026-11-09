@@ -81,8 +81,21 @@ type deviceAudio struct {
 	test []byte
 	// voiceActive is whether a reply is playing.
 	voiceActive bool
+	// voiceStreaming is whether the reply's frames are still arriving.
+	//
+	// It is not the same as voiceActive: a reply is still playing after
+	// its last frame has arrived, because the speaker has a queue of its
+	// own. The reply ends when the frames have stopped and the queue is
+	// empty.
+	voiceStreaming bool
 	// voiceMixed is whether the music is playing under the reply.
 	voiceMixed bool
+	// voiceEnded is called when the reply has been played out.
+	//
+	// The end of the stream is not the end of the reply: the last of the
+	// words is said after the last frame has arrived. The mixer is what
+	// knows when the reply is really over.
+	voiceEnded func()
 
 	// volume is the device's volume, 0 to 100.
 	volume int
@@ -240,6 +253,24 @@ func (a *deviceAudio) captureLevel() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.level
+}
+
+// monitoringMic reports whether the microphone is open for the level meter
+// alone.
+//
+// The level meter opens the microphone so a person can see what it hears
+// while they are setting the device up. That is the device listening to
+// the room for the person, not the controller listening for a wake word,
+// so the two are told apart.
+//
+// The flag says the monitor was asked for. What matters here is whether
+// the monitor actually opened the microphone: when the controller is
+// already using it, the monitor reads the frames the controller's capture
+// produces and the controller really is listening.
+func (a *deviceAudio) monitoringMic() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.monitoring && !a.capturing
 }
 
 // setMonitoring opens or closes the microphone so its level can be shown.
@@ -573,32 +604,60 @@ func (a *deviceAudio) playVoice(pcm []byte) {
 	a.mu.Lock()
 	a.voice = append(a.voice, pcm...)
 	a.voiceActive = true
+	a.voiceStreaming = true
 	a.voiceMixed = a.sendspin != nil && a.sendspin.Active()
 	a.mu.Unlock()
 
 	a.ensureOutput()
 }
 
-// finishVoice is called when the reply ends.
+// finishVoice is called when the reply's last frame arrives.
+//
+// The reply is not over yet: the speaker has a queue of its own, and the
+// last of the words is said after this. The mixer ends the reply when the
+// queue is empty, which is the real end of it.
 func (a *deviceAudio) finishVoice() {
 	a.mu.Lock()
+	a.voiceStreaming = false
 	// The mixer takes the reply out of the queue as it plays, so the
-	// reply is finished when the queue is empty.
+	// reply is over when the queue is empty. A reply that was cut off
+	// has an empty queue already, and the mixer has already ended it.
+	//
+	// The reply may also have been played out already: the mixer runs a
+	// period ahead, so a short reply can be finished before the frame
+	// that ends it arrives. The reply is ended here in that case, or it
+	// would wait for a mixer that has already let it go.
 	empty := len(a.voice) == 0
+	over := a.voiceActive && empty
+	if over {
+		a.voiceActive = false
+	}
+	ended := a.voiceEnded
 	a.mu.Unlock()
-	if empty {
+	if over {
 		a.finishPlayback()
+		if ended != nil {
+			ended()
+		}
 	}
 }
 
 // flush drops whatever is queued.
+//
+// A flush is a reply that was cut off. The frame that would say the reply
+// ended never arrives, so the reply is ended here.
 func (a *deviceAudio) flush() {
 	a.mu.Lock()
 	a.voice = nil
 	a.voiceActive = false
+	a.voiceStreaming = false
 	a.voiceMixed = false
+	ended := a.voiceEnded
 	a.mu.Unlock()
 	a.closeOutput()
+	if ended != nil {
+		ended()
+	}
 }
 
 // ensureOutput opens the speaker if it is not open.
@@ -832,7 +891,26 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		// the music off and make the next track start late.
 		a.mu.Lock()
 		empty := len(a.voice) == 0 && len(a.test) == 0 && (player == nil || !musicConnected(player))
+		// The reply is over when its frames have stopped arriving and the
+		// speaker has played them all. The end of the stream is not that:
+		// the speaker still has the words in it, and the display would go
+		// quiet while the reply was still being said.
+		//
+		// It does not wait for the music to finish. The music may run for
+		// the rest of the evening, and a reply that waits for it never
+		// ends.
+		replyDone := a.voiceActive && !a.voiceStreaming && len(a.voice) == 0
 		a.mu.Unlock()
+		if replyDone {
+			a.mu.Lock()
+			a.voiceActive = false
+			ended := a.voiceEnded
+			a.mu.Unlock()
+			a.finishPlayback()
+			if ended != nil {
+				ended()
+			}
+		}
 		if empty {
 			// The speaker is drained rather than dropped, so the last
 			// of the tone is heard rather than cut off.
@@ -984,6 +1062,10 @@ func applySendspinGain(pcm []byte, volume int, muted, ducked bool, duckDB float6
 // The controller releases its speaking state when playback is reported
 // finished, so a report that is early is a reply that is still playing
 // while the display says it is over.
+//
+// The report is made even when the drain fails: a speaker that will not
+// drain must not leave the reply on the display for the life of the
+// process.
 func (a *deviceAudio) finishPlayback() {
 	a.mu.Lock()
 	writer := a.output

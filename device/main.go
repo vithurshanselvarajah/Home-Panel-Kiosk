@@ -58,7 +58,13 @@ type State struct {
 
 	// Listen is what the device is doing with its microphone.
 	Listen string `json:"listen"`
-	// Listening is true while the microphone is open.
+	// Listening is true while the controller is listening for a wake word
+	// or for a person speaking.
+	//
+	// It is the controller's doing, not the microphone's. The microphone
+	// is also open for the level meter alone, and a device that shows
+	// itself as listening because a settings page asked to hear the room
+	// is telling the user something untrue.
 	Listening bool `json:"listening"`
 	// Speaking is true while a response is playing.
 	Speaking bool `json:"speaking"`
@@ -250,9 +256,46 @@ func main() {
 		credentialsDir: *creds,
 	}
 
+	// The reporter is made before the callbacks are wired, because the
+	// callbacks tell it when a reply starts and ends and it is what
+	// publishes that.
+	reporter := &stateReporter{
+		log:    log,
+		device: device,
+		ring:   ring,
+		guard:  guard,
+		audio:  speaker_,
+	}
+	if *stateFile != "" {
+		reporter.file = *stateFile
+	}
+
+	// The reply ends when the speaker has drained it, which is later than
+	// the end of the stream. The mixer is what knows when that is.
+	speaker_.voiceEnded = reporter.replyEnded
+
 	device.OnConfig(func(c protocol.Config) {
 		log.Info("the controller pushed a configuration", "model", c.OwwModel, "threshold", c.OwwThreshold)
 		speaker_.applyConfig(c)
+	})
+	// The ring frames are the controller's own account of what it is
+	// doing. The listening frame carries the flag that says the
+	// controller is listening, and it is the only place the controller
+	// says so: the microphone being open only says the device is
+	// streaming, which is a different thing.
+	device.OnLEDs(func(l protocol.LEDs) {
+		ring.OnLEDs(l)
+		// The listening frame carries the flag; the others do not, and a
+		// frame without it is the controller doing something else.
+		listening := false
+		if l.Listening != nil {
+			listening = *l.Listening
+		}
+		reporter.setControllerListening(listening)
+	})
+	device.OnLEDAnim(func(a protocol.AnimSpec) {
+		ring.OnLEDAnim(a)
+		reporter.setControllerListening(a.Listening)
 	})
 	device.OnMicStart(func(lockMic bool) {
 		log.Info("the controller asked for the microphone", "bounded", lockMic)
@@ -263,6 +306,7 @@ func main() {
 		speaker_.stopCapture()
 	})
 	device.OnSpeaker(func(pcm []byte) {
+		reporter.replyStarted()
 		speaker_.playVoice(pcm)
 	})
 	device.OnSpeakerEOS(func() {
@@ -274,6 +318,10 @@ func main() {
 	})
 	device.OnFlush(func(kind string) {
 		if kind == "speaker" {
+			// A flush is a reply that was cut off, and the frame that
+			// would say the reply ended never arrives. The reply is
+			// therefore ended with it, or the indicator stays on
+			// speaking for the life of the process.
 			speaker_.flush()
 		}
 	})
@@ -287,19 +335,33 @@ func main() {
 		log.Info("the controller asked for a cue", "cue", cue)
 	})
 
-	reporter := &stateReporter{
-		log:    log,
-		device: device,
-		ring:   ring,
-		guard:  guard,
-		audio:  speaker_,
-	}
-	if *stateFile != "" {
-		reporter.file = *stateFile
-	}
-
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	// The listen state is reported once the controller has answered, so
+	// the controller knows what the device is doing with its microphone
+	// rather than waiting for the device to say so.
+	//
+	// It streams: the device has no wake-word model, so it sends the
+	// microphone to the controller and the controller decides when a turn
+	// starts. Saying anything else would have the controller waiting for
+	// a wake that is never coming.
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
+			if !device.HasFeature(protocol.FeatureListenSession) {
+				continue
+			}
+			if err := device.SendListenState(protocol.ListenStream, "the device streams to the controller"); err != nil {
+				log.Debug("the listen state did not reach the controller", "error", err)
+			}
+			return
+		}
+	}()
 
 	// The audio devices are found before anything is published, so the
 	// first state the application reads already carries them.
@@ -333,26 +395,25 @@ func main() {
 // not implementing it produces a device that scores, stays silent and looks
 // broken.
 //
-// The Sendspin capability is what turns the controller's Sendspin switch on.
-// Without it the dashboard shows the switch greyed out with the reason
-// "needs newer firmware on this Echo", and no amount of asking on the
-// device's side changes that: the controller reads the capability from the
-// registration and never offers the setting to a device that did not
-// announce it.
+// The local wake word capability is deliberately NOT announced. The device
+// has no wake-word model — it detects speech with a voice activity
+// detector, which is not a wake word — so it cannot score its own and
+// send nothing until it fires.
 //
-// The audio mix capability is deliberately NOT announced. It would move
-// Home Assistant's own music onto a separate frame type for the device to
-// mix under the voice, and this device does not read that frame type — the
-// music it plays comes from the Sendspin player instead. Announcing it
-// would take Home Assistant's music off the plane the device does read and
-// silence it.
+// Announcing it would be worse than not announcing it. The controller
+// would take the device into private listening, which waits for a wake
+// from the device and opens the microphone to listen for one. The device
+// would never send one, so the controller would wait for ever and the
+// microphone would stay open — a device that announces the capability and
+// cannot do it looks exactly like a device that has gone deaf.
+//
+// The device streams to the controller instead, and says so.
 func capabilities() []protocol.Capability {
 	return []protocol.Capability{
 		protocol.CapMic,
 		protocol.CapSpeaker,
 		protocol.CapPairing,
 		protocol.CapButtons,
-		protocol.CapOWWLocalOnly,
 		protocol.CapSendspin,
 	}
 }
@@ -375,6 +436,22 @@ type stateReporter struct {
 	last State
 	// haveLast is whether anything has been published yet.
 	haveLast bool
+	// speaking is whether a reply is playing.
+	//
+	// It is kept here rather than taken from the link, because the link
+	// clears it only when the end-of-stream frame arrives. A reply that
+	// is flushed, or a link that drops mid-reply, never sends that frame,
+	// and a reply that stays on the screen for the life of the process is
+	// a reply that looks like it is still talking.
+	speaking bool
+	// controllerListening is whether the controller has said it is
+	// listening.
+	//
+	// The controller says so on the ring: the listening frame carries the
+	// flag and the other frames do not. A frame without the flag is the
+	// controller doing something else — thinking, playing, or nothing —
+	// so the flag is cleared rather than kept.
+	controllerListening bool
 }
 
 // discoverAudio finds the audio endpoints the machine has.
@@ -409,10 +486,73 @@ func (r *stateReporter) run(ctx context.Context) {
 	}
 }
 
+// setControllerListening records whether the controller has said it is
+// listening.
+//
+// It is the controller's own account, taken from the ring frames, and it
+// is what the indicator follows: a device that streams to the controller
+// holds the microphone open the whole time, so the microphone being open
+// would light the indicator for ever.
+func (r *stateReporter) setControllerListening(listening bool) {
+	r.mu.Lock()
+	r.controllerListening = listening
+	r.mu.Unlock()
+}
+
+// replyStarted records that a reply began.
+// The link knows when the first frame of a reply arrives, but the reply's
+// own life is tracked here as well, because the end of the reply is not
+// always signalled: a flushed reply and a dropped link both end without
+// the frame that would say so.
+func (r *stateReporter) replyStarted() {
+	r.mu.Lock()
+	r.speaking = true
+	r.mu.Unlock()
+}
+
+// replyEnded records that a reply finished.
+//
+// It is called when the reply ends and when the link drops, so the
+// indicator does not stay on speaking for the life of the process.
+func (r *stateReporter) replyEnded() {
+	r.mu.Lock()
+	r.speaking = false
+	r.mu.Unlock()
+}
+
 // publish writes the state if it changed.
 func (r *stateReporter) publish(s state.Snapshot) {
 	conn, reason := connection(s)
+
+	// The ring is reset when the link drops. A ring frozen on the last
+	// thing it showed says something is happening, and nothing is — and
+	// the listening flag is on it, so a device that came back would say
+	// it was listening for as long as it had been away.
+	if !s.LinkUp {
+		r.ring.Reset()
+		r.replyEnded()
+		r.setControllerListening(false)
+	}
 	view := r.ring.View()
+
+	r.mu.Lock()
+	// The reply's own life is tracked here, because the link's flag is
+	// not enough on its own: it is cleared only when the end-of-stream
+	// frame arrives, and a reply that is flushed, or a link that drops
+	// mid-reply, never sends that frame. A reply that stays on the screen
+	// for the life of the process is a reply that looks like it is still
+	// talking.
+	//
+	// The link's flag still has to agree: it says a reply is playing
+	// while the frames are arriving, and the reply's own flag says it
+	// while they are being played. Both have to be true.
+	//
+	// A link that is down cannot be playing a reply, so the reply ends
+	// with it.
+	r.speaking = r.speaking && s.LinkUp
+	speaking := r.speaking
+	controllerListening := r.controllerListening
+	r.mu.Unlock()
 
 	next := State{
 		Connection:       conn,
@@ -421,15 +561,30 @@ func (r *stateReporter) publish(s state.Snapshot) {
 		Phase:            string(s.Phase),
 		PhaseReason:      s.PhaseReason,
 		Listen:           string(s.Listen),
-		Listening:        s.Listening,
-		Speaking:         s.Speaking,
-		Thinking:         s.Thinking,
-		Muted:            s.Muted,
-		Volume:           s.Volume,
-		Level:            r.guard.Detector().Level(),
-		Pattern:          string(view.Pattern),
-		LastError:        s.LastError,
-		UpdatedAt:        time.Now().UTC(),
+		// The device is listening when the controller says it is.
+		//
+		// The controller lights the listening frame when it is waiting
+		// for something to be said, and that frame is the only place it
+		// says so. The microphone being open is not the same thing: a
+		// device that streams to the controller holds the microphone open
+		// the whole time, so "the microphone is open" would light the
+		// indicator for ever.
+		//
+		// The level meter opens the microphone too, and that is the
+		// device listening to the room for the person, so the meter is
+		// left out of it as well.
+		Listening: controllerListening && !r.audio.monitoringMic(),
+		Speaking:  speaking,
+		// The controller's thinking state is on the ring: the spin is what
+		// it shows while it waits for Home Assistant. There is no other
+		// message that says so.
+		Thinking:  view.Pattern == display.PatternSpin,
+		Muted:     s.Muted,
+		Volume:    s.Volume,
+		Level:     r.guard.Detector().Level(),
+		Pattern:   string(view.Pattern),
+		LastError: s.LastError,
+		UpdatedAt: time.Now().UTC(),
 	}
 	for _, c := range view.Palette {
 		next.Palette = append(next.Palette, Colour{R: int(c.R), G: int(c.G), B: int(c.B)})
