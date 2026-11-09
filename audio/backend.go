@@ -335,9 +335,18 @@ func StereoToMono(src, dst []byte) int {
 }
 
 // Close stops the capture and releases the sound card.
+//
+// It is called more than once — the capture's own loop closes it when it
+// ends, and whoever stopped the capture closes it as well — so the close
+// happens once. A second close of a sound card is an assertion inside
+// ALSA, and an assertion takes the whole process down.
 func (c *capture) Close() error {
-	c.once.Do(func() { close(c.done) })
-	return c.stream.Close()
+	var err error
+	c.once.Do(func() {
+		close(c.done)
+		err = c.stream.Close()
+	})
+	return err
 }
 
 // playback writes to the speaker.
