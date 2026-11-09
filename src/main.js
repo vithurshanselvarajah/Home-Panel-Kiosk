@@ -705,7 +705,10 @@ function startEchoMuse() {
     credentialsDir,
     deviceId: settings.echomuseDeviceId || deviceId,
     board: settings.echomuseBoard || "home-panel",
-    controllerUrl: settings.echomuseControllerUrl || "",
+    // The environment wins over the setting, so a development run can be
+    // pointed at a controller on another machine without changing the
+    // device's own configuration.
+    controllerUrl: process.env.ECHOMUSE_CONTROLLER_URL || settings.echomuseControllerUrl || "",
     onState: () => sendEchoMuseState(),
     onLog: (message) => { if (message) console.info("echomuse:", message); },
   });
@@ -970,6 +973,10 @@ app.whenReady().then(async () => {
   // The flag wins over the saved setting, but only for this run.
   const flagMode = readDisplayModeFlag();
   if (flagMode) settings.displayMode = flagMode;
+  // A development run turns the EchoMuse link on whatever the device's own
+  // settings say, so a developer does not have to go through the settings
+  // panel to try it.
+  if (process.env.ECHOMUSE_CONTROLLER_URL) settings.echomuseEnabled = true;
   registerHealthProbes();
   healthChecker.start();
   registerIpc();
