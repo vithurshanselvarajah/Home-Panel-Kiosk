@@ -332,6 +332,20 @@ func main() {
 // Every one of them must be true of the device: announcing a capability and
 // not implementing it produces a device that scores, stays silent and looks
 // broken.
+//
+// The Sendspin capability is what turns the controller's Sendspin switch on.
+// Without it the dashboard shows the switch greyed out with the reason
+// "needs newer firmware on this Echo", and no amount of asking on the
+// device's side changes that: the controller reads the capability from the
+// registration and never offers the setting to a device that did not
+// announce it.
+//
+// The audio mix capability is deliberately NOT announced. It would move
+// Home Assistant's own music onto a separate frame type for the device to
+// mix under the voice, and this device does not read that frame type — the
+// music it plays comes from the Sendspin player instead. Announcing it
+// would take Home Assistant's music off the plane the device does read and
+// silence it.
 func capabilities() []protocol.Capability {
 	return []protocol.Capability{
 		protocol.CapMic,
@@ -339,6 +353,7 @@ func capabilities() []protocol.Capability {
 		protocol.CapPairing,
 		protocol.CapButtons,
 		protocol.CapOWWLocalOnly,
+		protocol.CapSendspin,
 	}
 }
 

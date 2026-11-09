@@ -53,6 +53,7 @@
 
   const MODE_LABELS = {
     listening: "Listening",
+    thinking: "Thinking",
     speaking: "Speaking",
   };
 
@@ -111,7 +112,7 @@
       this.level = Math.max(0, Math.min(1, level));
     }
 
-    // mode is "off", "listening" or "speaking".
+    // mode is "off", "listening", "thinking" or "speaking".
     setMode(mode) {
       if (mode === this.mode) return;
       this.mode = mode;
@@ -194,6 +195,13 @@
           const falloff = 1 - Math.abs(i - (this.dots.length - 1) / 2) / this.dots.length;
           this.dots[i] *= 0.82 + falloff * 0.16;
         }
+      } else if (this.mode === "thinking") {
+        // Thinking has no level and no audio of its own, so the dots turn
+        // slowly in one place: the row is working, and it is not answering.
+        for (let i = 0; i < this.dots.length; i++) {
+          const offset = Math.sin(this.phase * 2 - i * 0.35);
+          this.dots[i] = 0.25 + Math.max(0, offset) * 0.35;
+        }
       } else {
         // Speaking has no microphone level to show, so the dots pulse along
         // instead, the way a voice assistant shows it is answering.
@@ -260,11 +268,11 @@
   // can be judged on a screen before any protocol code exists.
 
   const MOCK_SCRIPT = [
-    { at: 0, connection: "connected", phase: "idle", reason: "the controller admitted this device" },
-    { at: 5000, connection: "connected", phase: "listening", reason: "the controller admitted this device" },
-    { at: 13000, connection: "connected", phase: "thinking", reason: "the controller admitted this device" },
-    { at: 17000, connection: "connected", phase: "speaking", reason: "the controller admitted this device" },
-    { at: 21000, connection: "connected", phase: "idle", reason: "the controller admitted this device" },
+    { at: 0, connection: "connected", phase: "ready", listening: false, thinking: false, speaking: false, reason: "the controller admitted this device" },
+    { at: 5000, connection: "connected", phase: "ready", listening: true, thinking: false, speaking: false, reason: "the controller admitted this device" },
+    { at: 13000, connection: "connected", phase: "ready", listening: true, thinking: true, speaking: false, reason: "the controller admitted this device" },
+    { at: 17000, connection: "connected", phase: "ready", listening: false, thinking: false, speaking: true, reason: "the controller admitted this device" },
+    { at: 21000, connection: "connected", phase: "ready", listening: false, thinking: false, speaking: false, reason: "the controller admitted this device" },
   ];
 
   function createMockSource() {
@@ -279,12 +287,15 @@
       for (const step of MOCK_SCRIPT) {
         if (elapsed >= step.at) entry = step;
       }
-      const target = entry.phase === "listening" ? 0.3 + Math.random() * 0.55 : 0;
+      const target = entry.listening ? 0.3 + Math.random() * 0.55 : 0;
       level += (target - level) * 0.22;
       if (level < 0.005) level = 0;
       const state = {
         connection: entry.connection,
         phase: entry.phase,
+        listening: entry.listening,
+        thinking: entry.thinking,
+        speaking: entry.speaking,
         reason: entry.reason,
         muted: false,
         level,
@@ -326,10 +337,21 @@
     }
     // The indicator is only on screen while the device is listening or
     // speaking. It is not a row of status LEDs that sits there all the time.
+    //
+    // What the device is doing is read from the flags, not from the phase.
+    // The phase is the state of the link to the controller — ready,
+    // pending, refused, disconnected — and a device whose link is up
+    // reports "ready" whether it is listening or not. The flags are where
+    // the link's own state is kept, and they are what the indicator wants:
+    // the microphone being open, a reply being played, the controller
+    // waiting for Home Assistant.
     function paintIndicator(state) {
       let mode = "off";
-      if (!state.muted && state.phase === "listening") mode = "listening";
-      else if (!state.muted && state.phase === "speaking") mode = "speaking";
+      if (!state.muted) {
+        if (state.speaking) mode = "speaking";
+        else if (state.thinking) mode = "thinking";
+        else if (state.listening) mode = "listening";
+      }
       indicator.setMode(mode);
       // The sidecar reports the level as a percentage of full scale.
       if (mode === "listening") indicator.setLevel((state.level || 0) / 100);
