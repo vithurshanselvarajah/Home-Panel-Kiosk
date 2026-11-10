@@ -23,7 +23,9 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -77,8 +79,12 @@ type State struct {
 	Volume int `json:"volume"`
 
 	// Level is the level of the microphone, as a percentage of full scale.
-	// It is what a level meter draws.
-	Level int `json:"level"`
+	//
+	// It is not in the state file. It is a live reading and not a state:
+	// it changes on every frame of audio, and a file that changed ten
+	// times a second would be written ten times a second. It has a file
+	// of its own, written a few times a second.
+	Level int `json:"-"`
 
 	// Pattern is the ring's animation.
 	Pattern string `json:"pattern"`
@@ -203,6 +209,7 @@ func main() {
 		board      = flag.String("board", "home-panel", "board name, shown in Home Assistant")
 		creds      = flag.String("credentials-dir", "", "where the link credential lives")
 		stateFile  = flag.String("state-file", "", "write the state here as JSON")
+		levelFile  = flag.String("level-file", "", "write the live microphone level here; empty derives it from the state file")
 		configFile = flag.String("config-file", "", "read the device configuration from here")
 		pair       = flag.Bool("pair", false, "ask the controller to admit this device")
 		mic        = flag.String("mic", "", "the microphone to use; empty is the system default")
@@ -285,9 +292,31 @@ func main() {
 		guard:  guard,
 		audio:  speaker_,
 	}
-	if *stateFile != "" {
-		reporter.file = *stateFile
+	// The live state and the live level are written into memory.
+	//
+	// They are a live reading and not a record: they change as the
+	// device listens and speaks, and they are worth nothing once the
+	// process is gone. Writing them to the flash would wear the flash
+	// out for nothing — a device on eMMC is written to a few thousand
+	// times over its life.
+	//
+	// The path given is used when it is already in memory. When it is
+	// not — a development run, or a system with no memory filesystem —
+	// a directory in memory is found, and the ordinary path is the last
+	// resort.
+	statePath := *stateFile
+	levelPath := *levelFile
+	if statePath != "" && !isMemory(path.Dir(statePath)) {
+		statePath = runtimePath(identity, "state.json", statePath)
 	}
+	switch {
+	case levelPath != "" && !isMemory(path.Dir(levelPath)):
+		levelPath = runtimePath(identity, "level", levelPath)
+	case statePath != "":
+		levelPath = runtimePath(identity, "level", statePath+".level")
+	}
+	reporter.file = statePath
+	reporter.levelFile = levelPath
 
 	// The reply ends when the speaker has drained it, which is later than
 	// the end of the stream. The mixer is what knows when that is.
@@ -400,6 +429,11 @@ func main() {
 		<-ctx.Done()
 		device.Stop()
 		speaker_.stop()
+		// The memory the live state lived in is given back at once, rather
+		// than when the last reference to it goes. The kernel would do it
+		// anyway, but a device that is restarted often would leave a
+		// directory behind each time.
+		clearRuntime(identity)
 	}()
 
 	if err := device.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
@@ -448,6 +482,12 @@ type stateReporter struct {
 
 	// file is where the state is written, if anywhere.
 	file string
+	// levelFile is where the live microphone level is written.
+	//
+	// It is a file of its own because the level is not a state: it
+	// changes ten times a second, and a write for every change would
+	// write to the flash ten times a second for ever.
+	levelFile string
 
 	mu sync.Mutex
 	// last is the state that was published, so a change is not published
@@ -471,7 +511,24 @@ type stateReporter struct {
 	// controller doing something else — thinking, playing, or nothing —
 	// so the flag is cleared rather than kept.
 	controllerListening bool
+	// lastLevel is the level that was last written to the level file.
+	lastLevel int
+	// lastLevelWrite is when the level file was last written.
+	//
+	// The level is a live reading and not a state: it changes ten times
+	// a second, and a write for every change would write to the flash ten
+	// times a second for ever. A device on eMMC cannot do that — it wears
+	// the flash out for nothing.
+	lastLevelWrite time.Time
 }
+
+// levelWriteInterval is how often the level file is written.
+//
+// The level is a live reading and it moves on every frame, so it cannot
+// be written on every change. Four times a second is quick enough for a
+// meter — a level that moved faster than that could not be read anyway —
+// and slow enough that the flash is not written for ever.
+const levelWriteInterval = 250 * time.Millisecond
 
 // discoverAudio finds the audio endpoints the machine has.
 //
@@ -611,9 +668,15 @@ func (r *stateReporter) publish(s state.Snapshot) {
 
 	r.audio.fillState(&next)
 
+	// The level is a live reading and not part of the state. It has a
+	// file of its own, written a few times a second.
+	level := next.Level
+	next.Level = 0
+
 	r.mu.Lock()
 	if r.haveLast && same(r.last, next) {
 		r.mu.Unlock()
+		r.writeLevel(level)
 		return
 	}
 	r.last = next
@@ -623,9 +686,79 @@ func (r *stateReporter) publish(s state.Snapshot) {
 	if r.file != "" {
 		r.writeFile(next)
 	}
+	r.writeLevel(level)
+}
+
+// writeLevel writes the live level to its own file.
+//
+// It is written at a fixed rate rather than on every change, because the
+// level changes on every frame of audio and the flash is not worth a
+// write for every one of them.
+//
+// The write is skipped when the level has not moved far enough to see.
+func (r *stateReporter) writeLevel(level int) {
+	if r.levelFile == "" {
+		return
+	}
+	r.mu.Lock()
+	now := time.Now()
+	due := now.Sub(r.lastLevelWrite) >= levelWriteInterval
+	moved := abs(level-r.lastLevel) > levelTolerance
+	if due {
+		// The clock moves on whether the level moved or not, so a quiet
+		// room does not write the file over and over.
+		r.lastLevelWrite = now
+	}
+	if due && moved {
+		r.lastLevel = level
+	}
+	r.mu.Unlock()
+	if !due || !moved {
+		return
+	}
+	data := []byte(strconv.Itoa(level))
+	if err := writeInPlace(r.levelFile, data); err != nil {
+		r.log.Debug("the level could not be written", "error", err)
+	}
+}
+
+// writeInPlace writes to a file without replacing it.
+//
+// The file is opened and truncated, so the inode stays the same and the
+// filesystem does not have to change the directory. Replacing it is two
+// writes and a directory change for a couple of bytes, and the directory
+// change is what the flash feels most.
+func writeInPlace(path string, data []byte) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
+}
+
+// levelTolerance is how much the microphone level may change before the
+// state is written again.
+//
+// A percent of full scale is what the level is, so one is the smallest
+// change anybody can see. The meter is drawn from the file, so a level
+// that moves within one percent is the same reading.
+const levelTolerance = 1
+
+// abs is the distance between two numbers.
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // same compares two states, ignoring the timestamp.
+//
+// The level is not compared at all: it is not part of the state.
 func same(a, b State) bool {
 	if a.Connection != b.Connection || a.Phase != b.Phase || a.Listen != b.Listen {
 		return false
@@ -636,7 +769,10 @@ func same(a, b State) bool {
 	if a.Listening != b.Listening || a.Speaking != b.Speaking || a.Thinking != b.Thinking || a.Muted != b.Muted {
 		return false
 	}
-	if a.Volume != b.Volume || a.Level != b.Level || a.Pattern != b.Pattern || a.LastError != b.LastError {
+	if a.Monitoring != b.Monitoring {
+		return false
+	}
+	if a.Volume != b.Volume || a.Pattern != b.Pattern || a.LastError != b.LastError {
 		return false
 	}
 	if a.SelectedAudioInput != b.SelectedAudioInput || a.SelectedAudioOutput != b.SelectedAudioOutput {

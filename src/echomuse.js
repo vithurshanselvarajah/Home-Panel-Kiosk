@@ -89,11 +89,15 @@ function findSidecar(appPath, resourcesPath, execPath) {
  * EchoMuseClient runs the sidecar and reads the state it reports.
  */
 class EchoMuseClient {
-  constructor({ binary, stateFile, configFile, credentialsDir, deviceId, board, controllerUrl, pair, mic, speaker, onState, onLog }) {
+  constructor({ binary, stateFile, levelFile, configFile, credentialsDir, deviceId, board, controllerUrl, pair, mic, speaker, runtimeDirectory, onState, onLog }) {
     this.binary = binary;
     this.stateFile = stateFile;
+    this.levelFile = levelFile || `${stateFile}.level`;
     this.configFile = configFile;
     this.credentialsDir = credentialsDir;
+    // The directory the live state is in. The device program is told
+    // about it so that it writes the state where this reads it.
+    this.runtimeDirectory = runtimeDirectory;
     this.deviceId = deviceId;
     this.board = board;
     this.controllerUrl = controllerUrl;
@@ -128,6 +132,7 @@ class EchoMuseClient {
       "--board", this.board,
       "--credentials-dir", this.credentialsDir,
       "--state-file", this.stateFile,
+      "--level-file", this.levelFile,
     ];
     if (this.configFile) args.push("--config-file", this.configFile);
     if (this.controllerUrl) args.push("--controller", this.controllerUrl);
@@ -144,7 +149,14 @@ class EchoMuseClient {
     // takes the whole application down for a sidecar that is only an
     // extra.
     try {
-      this.child = spawn(this.binary, args, { stdio: ["ignore", "ignore", "pipe"] });
+      // The environment is passed on with the runtime directory named in
+      // it, so the device program puts its state where the application
+      // looks for it. The two have to agree: one writes the state and
+      // the other reads it.
+      this.child = spawn(this.binary, args, {
+        stdio: ["ignore", "ignore", "pipe"],
+        env: { ...process.env, RUNTIME_DIRECTORY: this.runtimeDirectory || "" },
+      });
     } catch (error) {
       this.child = null;
       this.onLog(`the EchoMuse sidecar could not be started: ${error.message}`);
@@ -166,8 +178,15 @@ class EchoMuseClient {
 
   /**
    * Reads the state file, if it has changed.
+   *
+   * The live microphone level is read from a file of its own. It changes
+   * on every frame of audio, so it cannot be part of the state: a state
+   * file that changed ten times a second would be written ten times a
+   * second, and that wears the flash out on a device whose storage is
+   * eMMC.
    */
   async read() {
+    await this.readLevel();
     let raw;
     try {
       raw = await fsp.readFile(this.stateFile, "utf8");
@@ -183,6 +202,26 @@ class EchoMuseClient {
       return;
     }
     this.state = { ...DEFAULT_STATE, ...parsed };
+    this.onState(this.state);
+  }
+
+  /**
+   * Reads the live microphone level.
+   *
+   * It is a small file beside the state, written a few times a second by
+   * the device, and it carries the level and nothing else.
+   */
+  async readLevel() {
+    let raw;
+    try {
+      raw = await fsp.readFile(this.levelFile, "utf8");
+    } catch {
+      return;
+    }
+    const level = Number(raw.trim());
+    if (!Number.isFinite(level)) return;
+    if (level === this.state.level) return;
+    this.state.level = level;
     this.onState(this.state);
   }
 
