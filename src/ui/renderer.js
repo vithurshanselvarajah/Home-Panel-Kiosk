@@ -313,9 +313,76 @@ if (echomuseForm) {
   });
 }
 
+// ── The quick controls ────────────────────────────────────────────────
+//
+// Brightness and volume are the two things a person reaches for most
+// often, so they are in the drawer rather than in the settings.
+
+const brightnessSlider = $("#brightness-slider");
+const volumeSlider = $("#volume-slider");
+const brightnessValue = $("#brightness-value");
+const volumeValue = $("#volume-value");
+const brightnessControl = $("#brightness-control");
+const volumeControl = $("#volume-control");
+
+// paintSlider draws a slider at a value.
+//
+// The filled part of the track is a gradient that stops where the thumb
+// is, and the gradient is set from the value, so it moves with the thumb.
+function paintSlider(slider, percent) {
+  if (!slider) return;
+  slider.value = String(percent);
+  slider.style.setProperty("--fill", `${percent}%`);
+}
+
+function paintBrightness(value) {
+  const percent = Math.max(0, Math.min(100, Math.round(value)));
+  paintSlider(brightnessSlider, percent);
+  if (brightnessValue) brightnessValue.textContent = `${percent}%`;
+}
+
+function paintVolume(value) {
+  const percent = Math.max(0, Math.min(100, Math.round(value)));
+  paintSlider(volumeSlider, percent);
+  if (volumeValue) volumeValue.textContent = `${percent}%`;
+}
+
+// The slider is set on release rather than on every movement, because a
+// backlight is written to for every value and a drag would write it
+// dozens of times.
+function bindSlider(slider, onChange) {
+  if (!slider) return;
+  slider.addEventListener("input", () => {
+    const value = Number(slider.value);
+    slider.style.setProperty("--fill", `${value}%`);
+  });
+  slider.addEventListener("change", () => onChange(Number(slider.value)));
+}
+
+bindSlider(brightnessSlider, (value) => {
+  paintBrightness(value);
+  window.homePanel.setBrightness(value);
+});
+
+bindSlider(volumeSlider, (value) => {
+  paintVolume(value);
+  window.homePanel.setVolume(value);
+});
+
 const statusLabels = { online: "Online", connecting: "Connecting", offline: "Offline", unknown: "Unknown" };
 window.homePanel.onState((state) => {
   $("#mode-label").textContent = state.displayIsOff ? "Screen off" : ({ dashboard: "Dashboard", slideshow: "Slideshow" }[state.mode] || state.mode);
+  // The version is at the bottom of the drawer. It is the thing a person
+  // is asked for when something goes wrong.
+  if (state.version) $("#version-label").textContent = `Home Panel - v${state.version}`;
+  // The brightness and the volume are drawn from the state, so they are
+  // right the moment the drawer opens.
+  if (typeof state.brightness === "number") paintBrightness(state.brightness);
+  if (typeof state.volume === "number") paintVolume(state.volume);
+  // A control that cannot change anything is hidden rather than shown at
+  // a value that would do nothing.
+  if (brightnessControl) brightnessControl.hidden = typeof state.brightness !== "number";
+  if (volumeControl) volumeControl.hidden = typeof state.volume !== "number";
   $("#dashboard-action-label").textContent = state.mode === "dashboard" ? "Dashboard" : "Exit to dashboard";
   $("#return-home").hidden = state.mode !== "url";
   $("#slideshow-action").hidden = !loadedSettings?.slideshowUrl;

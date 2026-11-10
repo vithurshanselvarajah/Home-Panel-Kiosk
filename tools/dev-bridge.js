@@ -19,6 +19,7 @@ const fsp = require("node:fs/promises");
 const path = require("node:path");
 const { WebSocketServer } = require("ws");
 const { EchoMuseClient, findSidecar } = require("../src/echomuse");
+const { systemVolumePercent, setSystemVolume } = require("../src/volume");
 const { editFieldValue } = require("../src/utils");
 
 const root = path.join(__dirname, "..");
@@ -48,6 +49,9 @@ let state = {
   keyboardVisible: false,
   sidePanelOpen: false,
   displayMode: "fullscreen",
+  brightness: 60,
+  volume: 60,
+  version: "0.0.2",
   serviceStatus: { mqtt: "unknown", immich: "unknown", dashboard: "unknown" },
   lastActivity: new Date().toISOString(),
 };
@@ -208,6 +212,24 @@ wss.on("connection", (socket) => {
       state.keyboardVisible = Boolean(payload);
       broadcast("app:state", state);
       reply(true);
+      return;
+    }
+    if (channel === "app:set-brightness") {
+      // The brightness is the panel's own, so the development bridge keeps
+      // it the same way the application does: in the state it broadcasts.
+      state.brightness = Math.max(0, Math.min(100, Math.round(Number(payload) || 0)));
+      broadcast("app:state", state);
+      reply(state.brightness);
+      return;
+    }
+    if (channel === "app:set-volume") {
+      // The volume belongs to the system mixer, so it is set there and the
+      // state carries what it is now.
+      const volume = Math.max(0, Math.min(100, Math.round(Number(payload) || 0)));
+      await setSystemVolume(volume);
+      state.volume = volume;
+      broadcast("app:state", state);
+      reply(volume);
       return;
     }
     if (channel === "app:overlay-expanded" || channel === "app:activity") { reply(true); return; }

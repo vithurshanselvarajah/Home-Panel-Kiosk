@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld("homePanel", {
   setOverlayExpanded: (expanded) => ipcRenderer.send("app:overlay-expanded", expanded),
   setSidePanel: (open) => ipcRenderer.send("app:side-panel", open),
   setKeyboard: (visible) => ipcRenderer.send("app:keyboard", visible),
+  setBrightness: (value) => ipcRenderer.invoke("app:set-brightness", value),
+  setVolume: (value) => ipcRenderer.invoke("app:set-volume", value),
   keyboardKey: (key) => ipcRenderer.send("app:keyboard-key", key),
   editFieldValue: (field, key) => editFieldValue(field, key),
   onState: (callback) => ipcRenderer.on("app:state", (_event, state) => callback(state)),

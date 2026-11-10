@@ -7,6 +7,7 @@ const os = require("node:os");
 const { safeUrl, settingNumber, settingBoolean, displayMode: readDisplayMode, windowBounds, DISPLAY_MODES } = require("./utils");
 const { createHealthChecker, probeHttp } = require("./health");
 const { EchoMuseClient, findSidecar } = require("./echomuse");
+const { systemVolumePercent, setSystemVolume } = require("./volume");
 
 const DEFAULTS = {
   configured: false,
@@ -183,9 +184,9 @@ function sendToOverlay(channel, payload) {
 }
 
 function sendState() {
-  const state = { mode, displayIsOff, keyboardVisible, sidePanelOpen, displayMode: displayMode(), serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
+  const state = { mode, displayIsOff, keyboardVisible, sidePanelOpen, displayMode: displayMode(), brightness: currentBrightness(), volume: currentVolume(), version: app.getVersion(), serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
   // Only message the overlay when something it renders has actually changed.
-  const fingerprint = `${state.mode}|${state.displayIsOff}|${state.keyboardVisible}|${state.sidePanelOpen}|${state.displayMode}|${JSON.stringify(state.serviceStatus)}`;
+  const fingerprint = `${state.mode}|${state.displayIsOff}|${state.keyboardVisible}|${state.sidePanelOpen}|${state.displayMode}|${state.brightness}|${state.volume}|${JSON.stringify(state.serviceStatus)}`;
   if (fingerprint !== lastSentState) {
     lastSentState = fingerprint;
     sendToOverlay("app:state", state);
@@ -477,6 +478,48 @@ function turnDisplayOn() {
   runDisplayCommand("on");
 }
 
+// currentBrightness is the brightness the backlight is set to.
+//
+// The backlight is the truth: the panel may have been dimmed by something
+// else, or the setting may not have been applied. Reading it back means
+// the drawer never claims a brightness the screen is not at.
+function currentBrightness() {
+  try {
+    for (const device of fsSync.readdirSync("/sys/class/backlight")) {
+      const root = path.join("/sys/class/backlight", device);
+      const maximum = Number(fsSync.readFileSync(path.join(root, "max_brightness"), "utf8"));
+      const value = Number(fsSync.readFileSync(path.join(root, "brightness"), "utf8"));
+      if (maximum && Number.isFinite(value)) return Math.round((value / maximum) * 100);
+    }
+  } catch { /* no backlight to read */ }
+  return null;
+}
+
+// systemVolume is the volume of the mixer.
+//
+// It is kept rather than read every time, because reading it means
+// running a command and the state is sent often. It is refreshed when the
+// drawer opens and when the volume is changed.
+let systemVolume = null;
+
+function currentVolume() {
+  return systemVolume;
+}
+
+// refreshVolume reads the volume of the mixer.
+//
+// It is called when the drawer opens and when the volume is changed. A
+// panel that read it every time it sent its state would run a command
+// every time it sent its state.
+async function refreshVolume() {
+  const value = await systemVolumePercent();
+  if (value === null) return false;
+  if (value === systemVolume) return true;
+  systemVolume = value;
+  sendState();
+  return true;
+}
+
 async function setBrightness(value) {
   const percent = Math.max(0, Math.min(100, Number(value)));
   if (!Number.isFinite(percent)) return;
@@ -488,12 +531,30 @@ async function setBrightness(value) {
       if (!maximum) continue;
       await fs.writeFile(path.join(root, "brightness"), String(Math.round(maximum * percent / 100)));
       if (mqttClient?.connected) mqttClient.publish(`${settings.mqttPrefix}/brightness`, String(percent), { qos: 1, retain: true });
+      // The drawer shows the brightness, so it has to be told.
+      sendState();
       return;
     }
   } catch (error) {
     console.warn("Backlight control unavailable:", error.message);
   }
   showNotice({ title: "Brightness control unavailable", message: "No writable Linux backlight device was found." });
+}
+
+// setVolume changes the volume of the system.
+//
+// The volume a person means when they reach for it on a panel is the
+// volume of the room, which is the system mixer and not the device
+// program's own gain.
+//
+// It is best effort: a machine with no mixer is not a failure, it is a
+// machine whose volume cannot be changed from here.
+async function setVolume(value) {
+  const percent = Math.max(0, Math.min(100, Number(value)));
+  if (!Number.isFinite(percent)) return;
+  await setSystemVolume(percent);
+  // The drawer shows the volume, so it has to be told.
+  await refreshVolume();
 }
 
 function handleCommand(command) {
@@ -1085,8 +1146,17 @@ function registerIpc() {
     ensureOverlayView();
     resizeOverlay();
   });
-  ipcMain.on("app:side-panel", (event, open) => { assertOverlaySender(event); setSidePanel(open); });
+  ipcMain.on("app:side-panel", (event, open) => {
+    assertOverlaySender(event);
+    setSidePanel(open);
+    // The drawer shows the volume, and the mixer may have been changed by
+    // something else while the drawer was shut, so it is read when the
+    // drawer opens rather than every time the state is sent.
+    if (open) refreshVolume();
+  });
   ipcMain.on("app:keyboard", (event, visible) => { assertOverlaySender(event); setKeyboardVisible(visible); });
+  ipcMain.handle("app:set-brightness", (event, value) => { assertOverlaySender(event); return setBrightness(value); });
+  ipcMain.handle("app:set-volume", (event, value) => { assertOverlaySender(event); return setVolume(value); });
   ipcMain.on("app:keyboard-key", (event, key) => { assertOverlaySender(event); sendKeyboardKey(key); });
   ipcMain.on("remote:text-input", (event, focused) => {
     if (event.sender !== win?.webContents) return;

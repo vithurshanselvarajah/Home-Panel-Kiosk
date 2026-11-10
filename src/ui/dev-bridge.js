@@ -106,6 +106,8 @@
     setOverlayExpanded: (expanded) => notify("app:overlay-expanded", expanded),
     setSidePanel: (open) => notify("app:side-panel", open),
     setKeyboard: (visible) => notify("app:keyboard", visible),
+    setBrightness: (value) => send("app:set-brightness", value),
+    setVolume: (value) => send("app:set-volume", value),
     keyboardKey: (key) => notify("app:keyboard-key", key),
     editFieldValue: (field, key) => window.__editFieldValue(field, key),
     onState: (callback) => on("app:state", callback),
