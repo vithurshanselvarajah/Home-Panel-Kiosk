@@ -68,6 +68,9 @@ type deviceAudio struct {
 	monitorDone chan struct{}
 	// testSound is the counter that says a tone should be played.
 	testSound int
+	// testSoundSeen is whether a counter has arrived, so the first one is
+	// adopted rather than played.
+	testSoundSeen bool
 	// bounded is whether the turn is bounded, which is the case when the
 	// controller asked for a locked microphone.
 	bounded bool
@@ -441,10 +444,17 @@ func (a *deviceAudio) stopMonitor() {
 // The counter is what says whether the tone should play: a button that is
 // pressed twice has to make two sounds, and a flag cannot tell the
 // difference between the first press and the second.
+//
+// The first counter the device is given is adopted rather than acted on.
+// It is the counter the application had when it started, and a tone is
+// only wanted when somebody asks for one — a counter that arrived with
+// the configuration is a tone from a previous run.
 func (a *deviceAudio) setTestSound(counter int) {
 	a.mu.Lock()
-	changed := counter != a.testSound
+	first := !a.testSoundSeen
+	changed := counter != a.testSound && !first
 	a.testSound = counter
+	a.testSoundSeen = true
 	a.mu.Unlock()
 	if !changed {
 		return
