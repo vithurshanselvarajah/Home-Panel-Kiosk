@@ -225,8 +225,18 @@ func main() {
 
 	backend := audio.New(*mic, *speaker)
 
+	// The identity the credentials belong to wins over the one that was
+	// asked for. The controller issues a link credential to one device,
+	// and a device that presents it under a different name is a different
+	// device — so the controller creates one, and the dashboard fills up
+	// with copies of the same panel.
+	identity := resolveIdentity(*creds, *deviceID)
+	if identity != *deviceID {
+		log.Info("the device keeps the identity its credentials belong to", "asked", *deviceID, "identity", identity)
+	}
+
 	device, err := echomuse.New(echomuse.Options{
-		DeviceID:       *deviceID,
+		DeviceID:       identity,
 		Version:        "0.1.0",
 		Board:          *board,
 		Capabilities:   capabilities(),
@@ -237,6 +247,15 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "echomuse-device: %v\n", err)
 		os.Exit(1)
+	}
+
+	// The identity is recorded once the device has been admitted, so a
+	// device that is admitted keeps the identity it was admitted with
+	// from then on.
+	if hasCredentials(*creds) {
+		if err := writeIdentity(*creds, identity); err != nil {
+			log.Warn("the device identity could not be recorded", "error", err)
+		}
 	}
 
 	ring := display.NewTracker()

@@ -27,10 +27,19 @@ const DEFAULTS = {
   echomuseBoard: "home-panel",
   echomuseAudioInput: "",
   echomuseAudioOutput: "",
-  echomuseMonitorMic: false,
-  echomuseTestSound: 0,
   echomusePair: true,
 };
+
+// The microphone monitor and the test sound are not settings.
+//
+// They act at once rather than being saved: the monitor holds the
+// microphone open, and a saved "on" would leave it open after a restart
+// with nobody watching the meter; and the test sound is a counter, so a
+// saved one plays the tone again every time the device starts.
+//
+// They live here rather than in the settings for that reason.
+let echomuseMonitorMic = false;
+let echomuseTestSound = 0;
 
 let win;
 let overlayView;
@@ -45,6 +54,14 @@ let notificationTimer;
 let urlTimer;
 let overlayAttached = false;
 let overlayExpanded = false;
+// voiceOverlay is whether the voice indicator wants the overlay.
+//
+// The indicator is shown over whatever the panel is showing, so the
+// overlay has to be attached for it. It is kept apart from the other
+// reasons the overlay is needed, because it is the one that comes and
+// goes on its own: the device starts listening and the indicator has to
+// appear, and it stops and the indicator has to go.
+let voiceOverlay = false;
 let sidePanelOpen = false;
 let keyboardVisible = false;
 let inputBlurTimer;
@@ -182,7 +199,22 @@ function sendState() {
 // the overlay draws it differently from the rest of the state.
 function sendEchoMuseState() {
   if (!echomuseClient) return;
-  sendToOverlay("app:echomuse", echomuseClient.state);
+  const state = echomuseClient.state;
+  sendToOverlay("app:echomuse", state);
+  // The voice indicator is shown over whatever the panel is showing, so
+  // the overlay has to be there for it. It is not only there when the
+  // settings page is open: the point of the indicator is that somebody
+  // can see the assistant is listening from across the room.
+  setVoiceOverlay(voiceOverlayNeeded(state));
+}
+
+// voiceOverlayNeeded says whether the voice indicator wants the overlay.
+//
+// The indicator is on while the device is listening or speaking, and off
+// the rest of the time. It is not on while the settings page is open
+// either: the page has its own row that says the same thing.
+function voiceOverlayNeeded(state) {
+  return Boolean(state.listening || state.speaking);
 }
 
 function publishState(state) {
@@ -325,7 +357,7 @@ function resizeOverlay() {
   if (!win || win.isDestroyed() || !overlayView) return;
   const { width, height } = win.getContentBounds();
   const homeButtonVisible = mode === "url";
-  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible;
+  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlay;
   if (!needsOverlay) {
     if (overlayAttached) {
       win.contentView.removeChildView(overlayView);
@@ -341,10 +373,27 @@ function resizeOverlay() {
     overlayAttached = true;
   }
   if (overlayExpanded || sidePanelOpen) overlayView.setBounds({ x: 0, y: 0, width, height });
-  else if (keyboardVisible) {
+  else if (voiceOverlay) {
+    // The indicator is along the bottom of the view, over whatever the
+    // panel is showing.
+    overlayView.setBounds({ x: 0, y: Math.max(0, height - 90), width, height: 90 });
+  } else if (keyboardVisible) {
     const keyboardHeight = Math.min(300, height);
     overlayView.setBounds({ x: 0, y: height - keyboardHeight, width, height: keyboardHeight });
   } else overlayView.setBounds({ x: Math.max(0, width - 210), y: 0, width: Math.min(210, width), height: Math.min(58, height) });
+}
+
+// setVoiceOverlay says whether the voice indicator wants the overlay, and
+// attaches it if it does.
+//
+// The overlay is a whole renderer process, so it is only kept while
+// something needs it. The voice indicator is the one thing that needs it
+// on the dashboard, where nothing else does.
+function setVoiceOverlay(needed) {
+  if (voiceOverlay === needed) return;
+  voiceOverlay = needed;
+  if (needed) ensureOverlayView();
+  resizeOverlay();
 }
 
 // The overlay is a whole renderer process. Once nothing needs it for a while,
@@ -354,7 +403,7 @@ function scheduleOverlayRecycle() {
   if (overlayRecycleTimer) return;
   overlayRecycleTimer = setTimeout(() => {
     overlayRecycleTimer = undefined;
-    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url") return;
+    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url" || voiceOverlay) return;
     destroyOverlayView();
   }, OVERLAY_RECYCLE_DELAY_MS);
 }
@@ -682,8 +731,8 @@ function sendEchoMuseConfig() {
     wakeSound: settings.echomuseWakeSound !== "off",
     audioInput: settings.echomuseAudioInput || "",
     audioOutput: settings.echomuseAudioOutput || "",
-    monitorMic: settings.echomuseMonitorMic === true,
-    testSound: settings.echomuseTestSound || 0,
+    monitorMic: echomuseMonitorMic,
+    testSound: echomuseTestSound,
   });
 }
 
@@ -945,15 +994,15 @@ function registerIpc() {
   ipcMain.handle("app:test-sound", (event) => {
     assertOverlaySender(event);
     // The counter is what tells the device a new tone was asked for.
-    settings.echomuseTestSound = (settings.echomuseTestSound || 0) + 1;
+    echomuseTestSound += 1;
     sendEchoMuseConfig();
-    return settings.echomuseTestSound;
+    return echomuseTestSound;
   });
   ipcMain.handle("app:monitor-mic", (event, on) => {
     assertOverlaySender(event);
-    settings.echomuseMonitorMic = Boolean(on);
+    echomuseMonitorMic = Boolean(on);
     sendEchoMuseConfig();
-    return settings.echomuseMonitorMic;
+    return echomuseMonitorMic;
   });
   ipcMain.on("app:activity", (event, source) => { assertOverlaySender(event); recordActivity(source === "keydown" ? "overlay-key" : "overlay"); });
   ipcMain.on("app:overlay-expanded", (event, expanded) => {
