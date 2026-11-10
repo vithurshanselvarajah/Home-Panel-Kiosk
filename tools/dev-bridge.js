@@ -81,14 +81,19 @@ function broadcast(channel, payload) {
 
 // The sidecar. The interface is shown what it reports, so what is on screen
 // is what the device is doing.
+//
+// The identity comes from the settings, not from here. The controller
+// issues a link credential to one device, and a device that presents it
+// under a different name is a different device — so the controller creates
+// one, and the dashboard fills up with copies of the same panel.
 const binary = findSidecar(root, root, process.execPath);
 const client = new EchoMuseClient({
   binary,
   stateFile,
   configFile,
   credentialsDir,
-  deviceId: "test-instance",
-  board: "test-instance",
+  deviceId: "",
+  board: "",
   controllerUrl: process.env.ECHOMUSE_CONTROLLER_URL || "",
   pair: true,
   onState: (echomuseState) => broadcast("app:echomuse", echomuseState),
@@ -101,6 +106,13 @@ async function startSidecar() {
     console.log("dev: the EchoMuse link is off in the settings");
     return;
   }
+  // The identity comes from the settings, so a development run is the same
+  // device as the application is. The controller issues a link credential
+  // to one device, and a device that presents it under a different name
+  // is a different device — so the controller creates one, and the
+  // dashboard fills up with copies of the same panel.
+  client.deviceId = settings.echomuseDeviceId || "home-panel";
+  client.board = settings.echomuseBoard || "home-panel";
   fs.mkdirSync(credentialsDir, { recursive: true, mode: 0o700 });
   if (!client.start()) {
     console.log("dev: the sidecar was not started");
@@ -109,7 +121,7 @@ async function startSidecar() {
   // The configuration is written before the sidecar reads it, so the
   // settings are in force from the first frame.
   await client.sendConfig({
-    board: settings.echomuseBoard || "test-instance",
+    board: client.board,
     wakeThreshold: Number(settings.echomuseWakeThreshold) || undefined,
     wakeWordEnabled: typeof settings.echomuseWakeWordEnabled === "boolean" ? settings.echomuseWakeWordEnabled : undefined,
     audioInput: settings.echomuseAudioInput || "",

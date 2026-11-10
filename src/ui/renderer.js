@@ -429,6 +429,18 @@ window.homePanel.getSettings().then((settings) => {
   if (!settings.configured) openSettings();
 });
 
+// The microphone and speaker test controls.
+//
+// The microphone is monitored while the settings page is open, so a person
+// can see what the microphone hears before they commit to it. The speaker
+// is tested by a tone, because a person choosing a speaker needs to hear
+// it to know which one it is.
+//
+// They are found before the EchoMuse state handler is wired, because the
+// handler paints the button and the meter.
+const micTestButton = $("#mic-test-button");
+const speakerTestButton = $("#speaker-test-button");
+
 // The EchoMuse state comes from the sidecar, which owns the link to the
 // controller and the audio. The main process pushes it whenever it changes.
 if (echomuseUI && window.homePanel.onEchoMuseState) {
@@ -439,15 +451,6 @@ if (echomuseUI && window.homePanel.onEchoMuseState) {
   });
 }
 
-// The microphone and speaker test controls.
-//
-// The microphone is monitored while the settings page is open, so a person
-// can see what the microphone hears before they commit to it. The speaker
-// is tested by a tone, because a person choosing a speaker needs to hear
-// it to know which one it is.
-const micTestButton = $("#mic-test-button");
-const speakerTestButton = $("#speaker-test-button");
-
 if (micTestButton) {
   micTestButton.addEventListener("click", async () => {
     // The button is a toggle, because the microphone has to be released
@@ -457,6 +460,19 @@ if (micTestButton) {
     micTestButton.textContent = on ? "Stop monitoring" : "Test microphone";
     await window.homePanel.monitorMic(on);
   });
+}
+
+// The button follows the device rather than the other way round.
+//
+// The device is what holds the microphone, so it is what knows whether
+// the microphone is being monitored. A button that remembers what it was
+// asked for says "Stop monitoring" when the device is not monitoring, and
+// a person presses it and nothing happens.
+function paintMicMonitor(state) {
+  if (!micTestButton) return;
+  const monitoring = Boolean(state.monitoring);
+  micTestButton.setAttribute("aria-pressed", String(monitoring));
+  micTestButton.textContent = monitoring ? "Stop monitoring" : "Test microphone";
 }
 
 if (speakerTestButton) {
@@ -470,10 +486,23 @@ if (speakerTestButton) {
 // The microphone meter shows what the microphone is hearing, and the
 // speaker meter shows the volume that was asked for, which is what the
 // device will play at.
+//
+// The microphone meter is only shown while the microphone is being
+// monitored. The device reports a level whenever it has one — the
+// controller's capture has a level too — and a meter that moved without
+// anybody listening to the microphone was answering a question nobody
+// asked.
 function paintAudioMeters(state) {
-  const level = Number(state.level) || 0;
-  setMeter($("#mic-meter-fill"), $("#mic-level-value"), level);
+  const monitoring = Boolean(state.monitoring);
+  const micMeter = $("#mic-meter");
+  const micValue = $("#mic-level-value");
+  if (micMeter) micMeter.hidden = !monitoring;
+  if (micValue) micValue.hidden = !monitoring;
+  if (monitoring) {
+    setMeter($("#mic-meter-fill"), micValue, Number(state.level) || 0);
+  }
   setMeter($("#speaker-meter-fill"), $("#speaker-level-value"), Number(state.volume) || 0);
+  paintMicMonitor(state);
 }
 
 function setMeter(fill, value, level) {
