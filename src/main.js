@@ -183,11 +183,19 @@ function sendToOverlay(channel, payload) {
   } catch { /* the frame was disposed between the check and the send */ }
 }
 
-function sendState() {
+// sendState tells the overlay and Home Assistant what the panel is doing.
+//
+// The overlay is only told when something it draws has changed, because
+// the state is sent often and the overlay redraws when it arrives.
+//
+// A caller that needs the overlay to have the state even if it has not
+// changed asks for it to be forced. The overlay is destroyed and made
+// again while the drawer is shut, so a drawer that was not there when
+// the state last changed has never been told about it.
+function sendState(force = false) {
   const state = { mode, displayIsOff, keyboardVisible, sidePanelOpen, displayMode: displayMode(), brightness: currentBrightness(), volume: currentVolume(), version: app.getVersion(), serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
-  // Only message the overlay when something it renders has actually changed.
   const fingerprint = `${state.mode}|${state.displayIsOff}|${state.keyboardVisible}|${state.sidePanelOpen}|${state.displayMode}|${state.brightness}|${state.volume}|${JSON.stringify(state.serviceStatus)}`;
-  if (fingerprint !== lastSentState) {
+  if (force || fingerprint !== lastSentState) {
     lastSentState = fingerprint;
     sendToOverlay("app:state", state);
   }
@@ -514,9 +522,11 @@ function currentVolume() {
 async function refreshVolume() {
   const value = await systemVolumePercent();
   if (value === null) return false;
-  if (value === systemVolume) return true;
   systemVolume = value;
-  sendState();
+  // The state is sent whatever the value is. The overlay is destroyed and
+  // made again while the drawer is shut, so a drawer that was not there
+  // when the volume was last read has never been told what it is.
+  sendState(true);
   return true;
 }
 
@@ -1146,13 +1156,18 @@ function registerIpc() {
     ensureOverlayView();
     resizeOverlay();
   });
-  ipcMain.on("app:side-panel", (event, open) => {
+  ipcMain.on("app:side-panel", async (event, open) => {
     assertOverlaySender(event);
-    setSidePanel(open);
     // The drawer shows the volume, and the mixer may have been changed by
     // something else while the drawer was shut, so it is read when the
     // drawer opens rather than every time the state is sent.
-    if (open) refreshVolume();
+    //
+    // It is read first, and waited for, because setSidePanel sends the
+    // state and the state is what carries the volume to the drawer.
+    // Reading it after would send the state with the old volume and the
+    // new one a moment later, which is the delay this is here to remove.
+    if (open) await refreshVolume();
+    setSidePanel(open);
   });
   ipcMain.on("app:keyboard", (event, visible) => { assertOverlaySender(event); setKeyboardVisible(visible); });
   ipcMain.handle("app:set-brightness", (event, value) => { assertOverlaySender(event); return setBrightness(value); });
@@ -1338,6 +1353,15 @@ app.whenReady().then(async () => {
   healthChecker.start();
   registerIpc();
   createWindow();
+  // The volume is read once when the app starts. It is read again when
+  // the drawer opens, because the mixer may have been changed by
+  // something else while the drawer was shut, but reading it here means
+  // the first drawer has it rather than showing it a moment after it
+  // opens.
+  //
+  // It is not waited for: the panel is the thing a person is waiting
+  // for, and a quarter of a second of mixer work does not hold it up.
+  refreshVolume();
   connectMqtt();
   await startEchoMuse();
   app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
