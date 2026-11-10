@@ -16,7 +16,27 @@
       <button class="notice-close" data-action="dismiss_notification" aria-label="Dismiss">×</button>
     </main>
     <aside id="side-panel" class="side-panel" aria-hidden="true">
-      <header class="drawer-heading"><div><span class="eyebrow">HOME PANEL</span><h2>Quick controls</h2></div></header>
+      <header class="drawer-heading"><div><h2>Quick controls</h2></div></header>
+      <!-- Brightness and volume. The two things a person reaches for most
+           often, so they are at the top rather than in the settings. -->
+      <section class="quick-controls" aria-label="Display and sound">
+        <div class="quick-control" id="brightness-control" hidden>
+          <div class="quick-control__head">
+            <span class="quick-control__icon" aria-hidden="true">☀</span>
+            <span class="quick-control__label">Brightness</span>
+            <span class="quick-control__value" id="brightness-value">—</span>
+          </div>
+          <input class="slider" id="brightness-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Brightness" />
+        </div>
+        <div class="quick-control" id="volume-control" hidden>
+          <div class="quick-control__head">
+            <span class="quick-control__icon" aria-hidden="true">♪</span>
+            <span class="quick-control__label">Volume</span>
+            <span class="quick-control__value" id="volume-value">—</span>
+          </div>
+          <input class="slider" id="volume-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Volume" />
+        </div>
+      </section>
       <section class="service-status" aria-label="Service status">
         <div class="service-row"><i class="service-led" data-service="mqtt"></i><span>MQTT</span><b id="mqtt-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="immich"></i><span>Immich Kiosk</span><b id="immich-state">Checking</b></div>
@@ -31,7 +51,10 @@
         <button class="drawer-button" id="display-mode-button"><span>⛶</span><span id="display-mode-label" class="button-label">Window mode</span></button>
         <button class="drawer-button drawer-button--exit" id="exit-button"><span>⏻</span>Exit</button>
       </div>
-      <footer id="mode-label">Dashboard</footer>
+      <footer class="drawer-footer">
+        <span id="mode-label">Dashboard</span>
+        <span id="version-label" class="version-label"></span>
+      </footer>
     </aside>
     <section id="keyboard" class="keyboard" aria-label="Touch keyboard" hidden></section>
     <div id="voice-dim" class="voice-dim" hidden></div>
