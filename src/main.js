@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, screen, safeStorage } = require("electron");
+const { app, BrowserWindow, WebContentsView, ipcMain, screen, safeStorage, session } = require("electron");
 const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const path = require("node:path");
@@ -757,6 +757,64 @@ function publicSettings() {
 //
 // The sidecar owns the controller link and the audio. It reports what the
 // device is doing, and the overlay draws it.
+// runtimeDirectory is where the live state of a device lives.
+//
+// It is in memory, because the live state is a reading and not a record:
+// it changes as the device listens and speaks, and it is worth nothing
+// once the process is gone. Writing it to the flash would wear the flash
+// out for nothing.
+//
+// The service gives the application a directory in memory, and that is
+// where the state goes when there is one. Without it the shared memory
+// directory is used, and failing that the application’s own directory —
+// which is the disk, and is worse but works.
+function runtimeDirectory(identity) {
+  const name = identity.replace(/[^a-zA-Z0-9_-]/g, "-") || "device";
+  for (const base of [runtimeBase(), "/dev/shm/homepanel"]) {
+    const dir = path.join(base, name);
+    try {
+      fsSync.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      // The directory has to be in memory, or the live state goes to the
+      // disk and the flash wears out for nothing. A directory that was
+      // made on the disk is not one.
+      if (!isMemory(dir)) continue;
+      return dir;
+    } catch { /* try the next one */ }
+  }
+  return path.join(app.getPath("userData"), "echomuse-runtime");
+}
+
+/**
+ * The directory the live state is kept in.
+ *
+ * The service makes a directory in memory and names it through
+ * RUNTIME_DIRECTORY. The device program looks in the same place, and it
+ * is told which place that is when it is started, so the two cannot
+ * disagree about where the state is.
+ *
+ * The shared memory directory is the fallback, because it is a memory
+ * filesystem on every Linux and it needs nothing set up.
+ */
+function runtimeBase() {
+  return process.env.RUNTIME_DIRECTORY || "/dev/shm/homepanel";
+}
+
+/**
+ * Says whether a path is on a memory filesystem.
+ *
+ * The state is a few kilobytes, so the memory filesystem does not have to
+ * be big. What matters is that it is not the disk.
+ */
+function isMemory(directory) {
+  try {
+    const stats = fsSync.statfsSync(directory);
+    // TMPFS_MAGIC and RAMFS_MAGIC.
+    return stats.type === 0x01021994 || stats.type === 0x858458f6;
+  } catch {
+    return false;
+  }
+}
+
 async function startEchoMuse() {
   if (echomuseClient) {
     // The old sidecar has to be gone before the new one starts. It holds
@@ -770,17 +828,33 @@ async function startEchoMuse() {
   if (!settings.echomuseEnabled) return;
 
   const binary = findSidecar(app.getAppPath(), process.resourcesPath, process.execPath);
-  const stateFile = path.join(app.getPath("userData"), "echomuse-state.json");
+  // The live state and the live level are written into memory, not onto
+  // the disk: they change as the device listens and speaks, and they are
+  // worth nothing once the process is gone. The device program decides
+  // where they go — it is the one that writes them — and the application
+  // reads them from the same place.
+  //
+  // The path is derived from the device's identity, which is what the
+  // device program derives it from too.
+  const identity = settings.echomuseDeviceId || deviceId;
+  const runtimeDir = runtimeDirectory(identity);
+  // The device program is told where the live state lives, so that it
+  // writes it where this reads it.
+  const runtimeBaseDir = path.dirname(runtimeDir);
+  const stateFile = path.join(runtimeDir, "state.json");
+  const levelFile = path.join(runtimeDir, "level");
   const configFile = path.join(app.getPath("userData"), "echomuse-config.json");
   const credentialsDir = path.join(app.getPath("userData"), "echomuse");
 
   echomuseClient = new EchoMuseClient({
     binary,
     stateFile,
+    levelFile,
     configFile,
     credentialsDir,
-    deviceId: settings.echomuseDeviceId || deviceId,
+    deviceId: identity,
     board: settings.echomuseBoard || "home-panel",
+    runtimeDirectory: runtimeBaseDir,
     // The environment wins over the setting, so a development run can be
     // pointed at a controller on another machine without changing the
     // device's own configuration.
@@ -1030,8 +1104,112 @@ function registerIpc() {
   });
 }
 
+// Chromium's profile is split: the parts that are caches go into memory,
+// and the parts that are records stay on the disk.
+//
+// Chromium writes its caches on every page load, and they are the largest
+// thing the application writes. On a device whose storage is eMMC that is
+// the main source of write wear, and the caches are worth nothing once
+// the device is off.
+//
+// The records are the opposite: the settings, the cookies and the local
+// storage are worth keeping, and they are small. They stay where they
+// are.
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) app.quit();
+
+// cacheDirectories are the parts of Chromium's profile that are caches.
+//
+// They are moved into memory. The names are the ones Chromium uses for
+// them under the profile directory.
+const cacheDirectories = [
+  "Cache",
+  "Code Cache",
+  "GPUCache",
+  "GPUPersistentCache",
+  "DawnGraphiteCache",
+  "DawnWebGPUCache",
+  "GrShaderCache",
+  "ShaderCache",
+  // The spellchecker writes its dictionary here, whether or not the
+  // spellchecker is turned off: the dictionary is downloaded by the
+  // browser process before the session is asked to do anything.
+  "Dictionaries",
+  // The shared dictionary is downloaded the same way.
+  "Shared Dictionary",
+];
+
+/**
+ * Puts Chromium's caches in memory.
+ *
+ * They are rewritten on every page load, and they are worth nothing once
+ * the device is off. On a device whose storage is eMMC they are the main
+ * source of write wear.
+ *
+ * The move is a bind, not a copy: the directory is a link to a directory
+ * in memory, so Chromium writes through it and the memory is given back
+ * when the link is removed.
+ *
+ * The link has to be made before Chromium starts. Chromium makes the
+ * cache directories itself when it runs and keeps them open, so a link
+ * made afterwards is a link to a directory Chromium is already writing
+ * to: the name changes but the writes still land on the disk. That is why
+ * this is called while the module is loading and not after the app is
+ * ready.
+ */
+function moveCachesToMemory() {
+  const profile = app.getPath("userData");
+  const memory = runtimeDirectory("chromium");
+  let moved = 0;
+  try {
+    // Chromium makes the profile when it starts. It has to be there first,
+    // or the link has nothing to hang from.
+    fsSync.mkdirSync(profile, { recursive: true, mode: 0o700 });
+  } catch (error) {
+    console.warn("the Chromium profile could not be prepared:", error.message);
+    return 0;
+  }
+  for (const name of cacheDirectories) {
+    const source = path.join(profile, name);
+    // A link that is already there is done.
+    try {
+      if (fsSync.lstatSync(source).isSymbolicLink()) {
+        moved += 1;
+        continue;
+      }
+    } catch { /* it is not there yet, which is the usual case */ }
+    const target = path.join(memory, name);
+    try {
+      fsSync.mkdirSync(target, { recursive: true, mode: 0o700 });
+      // What is in the directory is a cache from a previous run. It is
+      // worth nothing, so it goes to make room for the link.
+      fsSync.rmSync(source, { recursive: true, force: true });
+      fsSync.symlinkSync(target, source, "dir");
+      moved += 1;
+    } catch (error) {
+      // A cache that stays on the disk is worse than one in memory, but it
+      // is not a failure.
+      console.warn("the cache could not be moved into memory:", error.message);
+    }
+  }
+  return moved;
+}
+
+// Chromium's caches are put in memory while the module is loading, before
+// Chromium has made its cache directories and opened them.
+moveCachesToMemory();
+
+// The spellchecker downloads a dictionary of half a megabyte into the
+// profile on every start, and a kiosk never corrects a spelling.
+//
+// It is turned off when the app is ready, because the session cannot be
+// asked for before then, and before the first page is loaded, because that
+// is when the download starts.
+function disableSpellChecker() {
+  // The default session is the only one the app uses. Asking for a
+  // partition would make one, and it would make one on the disk.
+  session.defaultSession.setSpellCheckerEnabled(false);
+}
 
 // The command line overrides the saved display mode for this run.
 //
@@ -1053,11 +1231,18 @@ function readDisplayModeFlag() {
 
 // Trim Chromium features a kiosk never uses. Hardware acceleration is kept
 // because the target device has a GPU.
-app.commandLine.appendSwitch("disable-features", "Translate,MediaRouter,OptimizationHints,CalculateNativeWinOcclusion,InterestFeedContentSuggestions,BackForwardCache,AcceptCHFrame,AutofillServerCommunication,CertificateTransparencyComponentUpdater,DialMediaRouteProvider,GlobalMediaControls,PrivacySandboxSettings4,DiskCacheBackendInMemory");
+// The disabled features are one list. A second call with the same switch
+// replaces the first, so the spellchecker has to be in this list rather
+// than in a list of its own.
+app.commandLine.appendSwitch("disable-features", "Translate,MediaRouter,OptimizationHints,CalculateNativeWinOcclusion,InterestFeedContentSuggestions,BackForwardCache,AcceptCHFrame,AutofillServerCommunication,CertificateTransparencyComponentUpdater,DialMediaRouteProvider,GlobalMediaControls,PrivacySandboxSettings4,SpellcheckService");
 // Keep Chromium's disk caches out of the eMMC: they are rewritten on every
 // page load and are the main source of write wear on the target device.
-app.commandLine.appendSwitch("disk-cache-size", "0");
-app.commandLine.appendSwitch("media-cache-size", "0");
+// The caches are in memory and the memory is capped, so the caches
+// themselves are capped. The default is a share of the free disk, which
+// on a device with 4 GB of eMMC is a hundred times more than a kiosk
+// needs.
+app.commandLine.appendSwitch("disk-cache-size", String(16 * 1024 * 1024));
+app.commandLine.appendSwitch("media-cache-size", String(4 * 1024 * 1024));
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 app.commandLine.appendSwitch("password-store", "basic");
 app.commandLine.appendSwitch("disable-background-networking");
@@ -1069,6 +1254,7 @@ app.commandLine.appendSwitch("no-default-browser-check");
 
 app.whenReady().then(async () => {
   if (!hasLock) return;
+  disableSpellChecker();
   await loadSettings();
   // The flag wins over the saved setting, but only for this run.
   const flagMode = readDisplayModeFlag();

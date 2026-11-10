@@ -59,8 +59,13 @@ type deviceAudio struct {
 	captureCancel context.CancelFunc
 	// capturing is whether a capture is running.
 	capturing bool
-	// monitoring is whether the microphone is open for the level meter
-	// alone.
+	// monitoring is whether the level meter was asked for.
+	//
+	// It is asked for by the settings page, and the meter opens the
+	// microphone for it when the controller is not using it. The
+	// controller's capture takes the microphone back when it needs it, and
+	// the meter gives it up — but the meter is wanted again as soon as
+	// the controller has finished, so the request is kept.
 	monitoring bool
 	// monitorCancel stops the monitored capture.
 	monitorCancel context.CancelFunc
@@ -324,6 +329,32 @@ func (a *deviceAudio) setMonitoring(on bool) {
 	}
 }
 
+// stopMonitor closes the monitored microphone.
+//
+// It does not forget that the meter was asked for. The controller's
+// capture takes the microphone back when it needs it, and the meter gives
+// it up — but the meter is wanted again as soon as the controller has
+// finished, so the request is kept and the meter is reopened when the
+// microphone is free.
+func (a *deviceAudio) stopMonitor() {
+	a.mu.Lock()
+	cancel := a.monitorCancel
+	done := a.monitorDone
+	a.monitorCancel = nil
+	a.monitorDone = nil
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	// The wait is outside the lock on purpose. The monitor's own cleanup
+	// takes the lock, so waiting for it while holding it would be a
+	// deadlock: the monitor would be waiting for the lock and this would
+	// be waiting for the monitor.
+	if done != nil {
+		<-done
+	}
+}
+
 // startMonitor opens the microphone for the level meter alone.
 //
 // It is only called when the controller is not already using the
@@ -412,31 +443,6 @@ func (a *deviceAudio) startMonitor() {
 			}
 		}
 	}()
-}
-
-// stopMonitor closes the monitored microphone.
-//
-// It waits for the monitor to let go of the sound card, because the card
-// cannot be opened twice: a capture that starts while the monitor still
-// has it is told the card is busy, and the device goes deaf until the
-// controller asks again.
-func (a *deviceAudio) stopMonitor() {
-	a.mu.Lock()
-	cancel := a.monitorCancel
-	done := a.monitorDone
-	a.monitorCancel = nil
-	a.monitoring = false
-	a.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-	// The wait is outside the lock on purpose. The monitor's own cleanup
-	// takes the lock, so waiting for it while holding it would be a
-	// deadlock: the monitor would be waiting for the lock and this would
-	// be waiting for the monitor.
-	if done != nil {
-		<-done
-	}
 }
 
 // setTestSound plays a tone when the counter changes.
@@ -578,8 +584,15 @@ func (a *deviceAudio) startCapture(bounded bool) {
 			a.capturing = false
 			a.captureCancel = nil
 			a.capture = nil
+			wantMonitor := a.monitoring
 			a.mu.Unlock()
 			cancel()
+			// The level meter takes the microphone back when the
+			// controller has finished with it, because it was asked for
+			// and there is nothing else to do with it.
+			if wantMonitor {
+				a.startMonitor()
+			}
 		}()
 
 		defer reader.Close()

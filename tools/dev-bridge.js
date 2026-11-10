@@ -26,7 +26,6 @@ const uiDir = path.join(root, "src", "ui");
 const port = Number(process.env.DEV_UI_PORT || 8769);
 
 const userData = path.join(process.env.XDG_CONFIG_HOME || path.join(process.env.HOME, ".config"), "homepanel-kiosk");
-const stateFile = path.join(userData, "echomuse-state.json");
 const configFile = path.join(userData, "echomuse-config.json");
 const credentialsDir = path.join(userData, "echomuse");
 
@@ -89,7 +88,8 @@ function broadcast(channel, payload) {
 const binary = findSidecar(root, root, process.execPath);
 const client = new EchoMuseClient({
   binary,
-  stateFile,
+  stateFile: "",
+  levelFile: "",
   configFile,
   credentialsDir,
   deviceId: "",
@@ -113,6 +113,12 @@ async function startSidecar() {
   // dashboard fills up with copies of the same panel.
   client.deviceId = settings.echomuseDeviceId || "home-panel";
   client.board = settings.echomuseBoard || "home-panel";
+  // The live state lives in memory, not on the disk, and the device
+  // program decides where: it is the one that writes it. The application
+  // reads it from the same place.
+  const runtimeDir = path.join("/dev/shm/homepanel", client.deviceId.replace(/[^a-zA-Z0-9_-]/g, "-") || "device");
+  client.stateFile = path.join(runtimeDir, "state.json");
+  client.levelFile = path.join(runtimeDir, "level");
   fs.mkdirSync(credentialsDir, { recursive: true, mode: 0o700 });
   if (!client.start()) {
     console.log("dev: the sidecar was not started");

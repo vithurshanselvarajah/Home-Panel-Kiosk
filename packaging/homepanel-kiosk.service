@@ -7,6 +7,33 @@ Wants=network-online.target
 ExecStart=/usr/bin/homepanel-kiosk
 Restart=on-failure
 RestartSec=5
+# A directory in memory for the things that are worth having while the
+# device is running and worth nothing after it: the live state, and
+# anything else that is rewritten rather than kept.
+#
+# It is created before the service starts and removed when it stops, so
+# nothing is left behind and nothing is written to the disk.
+RuntimeDirectory=homepanel
+RuntimeDirectoryMode=0700
+# The directory is a memory one and it is small: the live state is a few
+# kilobytes and the caches are a couple of megabytes. The application
+# caps what it puts there, and the memory the whole service may use is
+# capped below.
+#
+# The memory the app may use.
+#
+# The app keeps its working state in memory — the live device state and
+# Chromium's caches — and a device with 2 GB of RAM cannot be given all
+# of it. The ceiling is high enough for the app to work and low enough
+# that the system still has room for everything else.
+#
+# The limit is on the memory, not on the disk: nothing here is written.
+MemoryHigh=600M
+MemoryMax=900M
+# The number of processes the app may have. Chromium makes a process for
+# each kind of work, and a runaway page that keeps making them would
+# otherwise take the device with it.
+TasksMax=256
 
 [Install]
 WantedBy=default.target

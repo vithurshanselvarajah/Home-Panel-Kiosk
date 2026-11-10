@@ -263,25 +263,10 @@ PY
 
 configure_pi_touch
 
-# Chromium rewrites its disk caches on every page load, which is the main
-# source of write wear on eMMC storage. Point the cache directories at tmpfs
-# so they live in RAM instead.
-if [[ "${PITOUCH_SKIP_CACHE_TMPFS:-0}" != "1" && -d /dev/shm ]]; then
-  CACHE_TMPFS_DIR="/dev/shm/homepanel-kiosk-cache"
-  mkdir -p "$CACHE_TMPFS_DIR"
-  for cache_dir in Cache Cache_Data Code Cache GPUCache DawnCache GrShaderCache ShaderCache; do
-    target="$APP_CONFIG_DIR/$cache_dir"
-    if [[ -L "$target" ]]; then
-      continue
-    fi
-    if [[ -d "$target" ]]; then
-      rm -rf "$target"
-    fi
-    mkdir -p "$APP_CONFIG_DIR"
-    ln -sfn "$CACHE_TMPFS_DIR/$cache_dir" "$target"
-  done
-  echo "Chromium caches redirected to $CACHE_TMPFS_DIR."
-fi
+# The Chromium caches are put in memory by the application itself, when it
+# starts. It knows which directories Chromium makes and it can make the
+# links before Chromium opens them, which an install script cannot: the
+# profile is made by Chromium when the app runs.
 
 DISPLAY_VALUE=${DISPLAY:-:0}
 WAYLAND_VALUE=${WAYLAND_DISPLAY:-}
@@ -306,6 +291,26 @@ Wants=network-online.target
 ExecStart=/usr/bin/homepanel-kiosk
 Restart=on-failure
 RestartSec=5
+# A directory in memory for the things that are worth having while the
+# device is running and worth nothing after it: the live state, and
+# Chromium's caches.
+#
+# It is made before the service starts and taken away when it stops, so
+# nothing is left behind and nothing is written to the disk. The
+# application is told where it is through RUNTIME_DIRECTORY.
+RuntimeDirectory=homepanel
+RuntimeDirectoryMode=0700
+# The memory the service may use.
+#
+# The app keeps its working state in memory and a device with 2 GB of RAM
+# cannot be given all of it. The ceiling is high enough for the app to
+# work and low enough that the system still has room for everything else.
+MemoryHigh=600M
+MemoryMax=900M
+# The number of processes the app may have. Chromium makes a process for
+# each kind of work, and a runaway page that keeps making them would
+# otherwise take the device with it.
+TasksMax=256
 UNIT
     printf 'Environment="DISPLAY=%s"\n' "$DISPLAY_VALUE"
     if [[ -n "$WAYLAND_VALUE" ]]; then printf 'Environment="WAYLAND_DISPLAY=%s"\n' "$WAYLAND_VALUE"; fi
