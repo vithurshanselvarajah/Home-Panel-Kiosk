@@ -10,6 +10,7 @@
     "dev:ui": "node tools/dev-bridge.js",
     "packaged": "node tools/run-packaged.js",
     "build:device": "node tools/build-device.js",
+    "build:esphome-proto": "sh tools/build-esphome-proto.sh",
     "test": "node --test",
     "package": "electron-forge package",
     "make": "electron-forge make",
