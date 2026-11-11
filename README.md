@@ -63,7 +63,7 @@ target:
   entity_id: switch.home_panel_screen
 ```
 
-The panel's own interface sends the same commands to itself, and they are the actions the MQTT contract used:
+The panel's own interface sends the same commands to itself, and they are the actions it has always used:
 
 ```json
 {"action":"wake"}

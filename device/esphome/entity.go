@@ -27,6 +27,8 @@ const (
 	KindSensor
 	// KindTextSensor is a string that is read, not written.
 	KindTextSensor
+	// KindBinarySensor is true or false that is read, not written.
+	KindBinarySensor
 )
 
 func (k EntityKind) String() string {
@@ -45,6 +47,8 @@ func (k EntityKind) String() string {
 		return "sensor"
 	case KindTextSensor:
 		return "text_sensor"
+	case KindBinarySensor:
+		return "binary_sensor"
 	}
 	return "unknown"
 }
@@ -134,6 +138,11 @@ func (v EntityValue) String() string {
 		return formatFloat(v.Number)
 	case KindTextSensor:
 		return v.Text
+	case KindBinarySensor:
+		if v.Bool {
+			return "ON"
+		}
+		return "OFF"
 	}
 	return ""
 }
