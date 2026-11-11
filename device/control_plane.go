@@ -139,6 +139,15 @@ func startControlPlane(
 		}
 	}
 
+	// The panel shows whether it is linked, and only the server knows:
+	// the socket between the panel and this program is on this machine
+	// and is up whatever Home Assistant is doing.
+	api.OnConnect(func(connected bool) {
+		if server != nil {
+			server.SetConnected(connected)
+		}
+	})
+
 	// The services and the entities are what Home Assistant acts on.
 	// Each one turns into a command for the panel.
 	services := panelServices(func(command ControlCommand) {

@@ -109,6 +109,9 @@ type ControlServer struct {
 	listener net.Listener
 	// state is what the panel is told.
 	state ControlState
+	// connected says whether Home Assistant is talking to the device
+	// program.
+	connected bool
 	// connections are the panels that are connected.
 	connections sync.Map
 	// writeMu guards the writes on each connection.
@@ -185,6 +188,14 @@ func (s *ControlServer) serve(conn net.Conn) {
 	s.connections.Store(conn, struct{}{})
 	defer s.connections.Delete(conn)
 
+	// The panel is told the link state as soon as it arrives, so it
+	// does not have to wait for Home Assistant to come and go before it
+	// knows where things stand.
+	s.mu.Lock()
+	connected := s.connected
+	s.mu.Unlock()
+	_ = s.writeMessage(conn, ControlMessage{Action: "link", Connected: connected})
+
 	// The reader is made once and kept: a reader made per message
 	// would throw away whatever it had read ahead.
 	reader := bufio.NewReader(conn)
@@ -219,6 +230,50 @@ type ControlMessage struct {
 	Action string `json:"action"`
 	// State is the state of the panel, for the state message.
 	State ControlState `json:"value"`
+	// Connected says whether Home Assistant is talking to the device
+	// program, for the link message.
+	//
+	// It is always sent, even when it is false, because "not connected"
+	// is the answer half the time.
+	Connected bool `json:"connected"`
+}
+
+// SetConnected records whether Home Assistant is talking to the device
+// program.
+//
+// The panel shows this in the drawer, and it cannot find out for itself:
+// the socket between the panel and the device program is on this
+// machine and is up whatever Home Assistant is doing.
+func (s *ControlServer) SetConnected(connected bool) {
+	s.mu.Lock()
+	changed := s.connected != connected
+	s.connected = connected
+	s.mu.Unlock()
+	if !changed {
+		return
+	}
+	s.connections.Range(func(key, _ any) bool {
+		conn, ok := key.(net.Conn)
+		if !ok {
+			return true
+		}
+		if err := s.writeMessage(conn, ControlMessage{Action: "link", Connected: connected}); err != nil {
+			s.log.Debug("the link state could not be sent", "error", err)
+		}
+		return true
+	})
+}
+
+// writeMessage writes one message to one panel.
+func (s *ControlServer) writeMessage(conn net.Conn, message ControlMessage) error {
+	payload, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	_, err = conn.Write(append(payload, '\n'))
+	return err
 }
 
 // SetState records the state of the panel.
