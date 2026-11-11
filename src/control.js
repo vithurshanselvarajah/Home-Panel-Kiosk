@@ -165,15 +165,14 @@ class ControlClient {
  * RUNTIME_DIRECTORY, so the two cannot disagree about where it is.
  *
  * @param {string} runtimeDirectory the directory the runtime lives in
- * @param {string} deviceId the identity of the device
  * @returns {string|null} the path to the socket, or null when there is none
  */
-function findControlSocket(runtimeDirectory, deviceId) {
+function findControlSocket(runtimeDirectory) {
+  // The socket is in the device's own directory, beside the live state.
   const base = runtimeDirectory || "/dev/shm/homepanel";
-  const name = String(deviceId || "home-panel").replace(/[^A-Za-z0-9_-]/g, "-") || "device";
   const candidates = [
-    path.join(base, name, "control.sock"),
     path.join(base, "control.sock"),
+    path.join(path.dirname(base), "control.sock"),
   ];
   for (const candidate of candidates) {
     try {
