@@ -358,39 +358,70 @@ func isBridge(candidate net.Interface) bool {
 // rather than the name being the whole of it, so two panels on the same
 // machine — two kiosks, or a kiosk and a development run — are told
 // apart.
+// panelMAC is the hardware address the device is known by.
+//
+// Home Assistant identifies a device by this address, so it has to be
+// stable: a device that changes its address is a new device, and the old
+// one is left behind with all its entities.
+//
+// It is the hardware address of the interface the panel is on the network
+// with — the one that carries the default route — with the last three
+// bytes mixed from the device's name. The name is mixed in so that two
+// panels on one machine are told apart, and the address of the interface
+// is used rather than a made-up one so that the same panel is the same
+// device after a restart.
+//
+// The interface matters: a machine has several, and taking the first one
+// found means the address changes when the machine's interfaces are
+// enumerated in a different order or when a new one appears. The panel
+// announces itself on the interface that carries the default route, and
+// the address has to be that interface's.
 func panelMAC(name string) string {
 	seed := name
 	if seed == "" {
 		seed = "home-panel"
 	}
-	// The hardware address of the machine, when there is one.
+
+	// The interface the panel is on the network with.
 	machine := ""
-	entries, err := os.ReadDir("/sys/class/net")
-	if err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-			address, err := os.ReadFile(filepath.Join("/sys/class/net", entry.Name(), "address"))
-			if err != nil {
-				continue
-			}
+	if interfaceName := defaultRouteInterface(); interfaceName != "" {
+		if address, err := os.ReadFile(filepath.Join("/sys/class/net", interfaceName, "address")); err == nil {
 			candidate := strings.TrimSpace(string(address))
 			if len(candidate) == 17 && candidate[2] == ':' {
 				machine = candidate
-				break
 			}
 		}
 	}
+
 	if machine == "" {
-		// There is no hardware address, so the host name is used.
-		host, err := os.Hostname()
-		if err != nil {
-			host = "home-panel"
+		// The interface could not be read, so the first hardware address
+		// on the machine is used. It is better than nothing, and it is
+		// better than a made-up one: the point of the address is that it
+		// is the same on every run.
+		entries, err := os.ReadDir("/sys/class/net")
+		if err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				address, err := os.ReadFile(filepath.Join("/sys/class/net", entry.Name(), "address"))
+				if err != nil {
+					continue
+				}
+				candidate := strings.TrimSpace(string(address))
+				if len(candidate) == 17 && candidate[2] == ':' {
+					machine = candidate
+					break
+				}
+			}
 		}
-		machine = "02:00:00:00:00:00"
-		_ = host
 	}
+
+	if machine == "" {
+		// There is no hardware address at all, so a local one is made up.
+		machine = "02:00:00:00:00:00"
+	}
+
 	// The name is mixed into the last three bytes, so two panels on the
 	// same machine are told apart.
 	sum := uint32(2166136261)
