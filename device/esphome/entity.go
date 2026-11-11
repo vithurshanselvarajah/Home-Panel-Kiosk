@@ -73,6 +73,12 @@ type Entity struct {
 	Options []string
 	// Min, Max and Step are the range, for a number.
 	Min, Max, Step float64
+	// MinLength and MaxLength are how long the text may be, for a text.
+	//
+	// The protocol has no "unlimited", so a text that may be any length
+	// says so here rather than saying nothing: a length of zero on the
+	// wire means a text that may not be typed into at all.
+	MinLength, MaxLength uint32
 	// Mode is the behaviour of a text entity: a plain field or a field
 	// that hides what is typed.
 	Mode TextInputMode
@@ -231,7 +237,18 @@ func (r *Registry) HandleCommand(key uint32, value EntityValue) error {
 		return err
 	}
 	entity.mu.Lock()
-	entity.State = value
+	// The state is not changed here.
+	//
+	// The state is what the device is doing, and the command is what
+	// Home Assistant asked for. The two are the same most of the time,
+	// but not always: the panel may be in a window when Home Assistant
+	// asks for a fullscreen, because the panel cannot change its own
+	// window at once.
+	//
+	// So the command is passed on and the state is set when the device
+	// reports what it is actually doing. Setting it here would mean the
+	// device's own report was ignored, because the value would be the
+	// same and a change that is the same is not a change.
 	handler := entity.onCommand
 	entity.mu.Unlock()
 	if handler != nil {

@@ -130,3 +130,47 @@ func TestProjectNameHasBothParts(t *testing.T) {
 		t.Fatalf("the project name %q has an empty part", info.ProjectName)
 	}
 }
+
+// TestCommandDoesNotSetTheState checks that a command does not set the
+// state of the entity.
+//
+// The state is what the device is doing, and the command is what Home
+// Assistant asked for. The two are the same most of the time, but not
+// always: the panel may be in a window when Home Assistant asks for a
+// fullscreen, because the panel cannot change its own window at once.
+//
+// Setting the state from the command would mean the device's own report
+// was ignored, because the value would be the same and a change that
+// is the same is not a change. The state would then never move.
+func TestCommandDoesNotSetTheState(t *testing.T) {
+	registry := NewRegistry()
+	entity := registry.Add(&Entity{
+		Kind: KindSelect, Name: "Display mode", ObjectID: "display_mode",
+		Options: []string{"fullscreen", "window"},
+		State:   EntityValue{Kind: KindSelect, Text: "fullscreen"},
+	})
+
+	changed := 0
+	registry.OnChange(func(*Entity) { changed++ })
+
+	// Home Assistant asks for the window.
+	if err := registry.HandleCommand(entity.Key, EntityValue{Kind: KindSelect, Text: "window"}); err != nil {
+		t.Fatalf("the command was refused: %v", err)
+	}
+	// The state is still what the device is doing.
+	if got := entity.StateOf(); got.Text != "fullscreen" {
+		t.Errorf("the state is %q, the command should not have changed it", got.Text)
+	}
+	if changed != 0 {
+		t.Errorf("the change was published %d times, it should not have been published at all", changed)
+	}
+
+	// The device reports what it is actually doing.
+	registry.SetState(entity.Key, EntityValue{Kind: KindSelect, Text: "window"})
+	if got := entity.StateOf(); got.Text != "window" {
+		t.Errorf("the state is %q, it should be window", got.Text)
+	}
+	if changed != 1 {
+		t.Errorf("the change was published %d times, it should have been published once", changed)
+	}
+}
