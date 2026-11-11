@@ -67,10 +67,14 @@ type MediaPlayer struct {
 	mu sync.Mutex
 	// state is what the player is doing.
 	state MediaPlayerState
-	// volume is the level, 0.0 to 1.0.
-	volume float32
 	// muted is whether the player is muted.
 	muted bool
+	// volume is the level, 0.0 to 1.0.
+	//
+	// The player owns the volume. The panel's own slider, the music
+	// server and the system mixer all follow it, because it is one
+	// setting: the volume of the room.
+	volume float32
 
 	// onPlay is called with a URL to play.
 	onPlay func(url string, announcement bool)
@@ -85,11 +89,22 @@ type MediaPlayer struct {
 }
 
 // NewMediaPlayer makes a media player.
+//
+// The player starts at full volume rather than at zero.
+//
+// It has to: the volume is pushed to Home Assistant as the speaker's
+// state, and Home Assistant sends the volume back as a command. A player
+// that started at zero would tell Home Assistant the speaker is silent,
+// and Home Assistant would then set it to silent for real.
 func NewMediaPlayer(log *slog.Logger) *MediaPlayer {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &MediaPlayer{log: log, state: MediaPlayerState_MEDIA_PLAYER_STATE_IDLE}
+	return &MediaPlayer{
+		log:    log,
+		state:  MediaPlayerState_MEDIA_PLAYER_STATE_IDLE,
+		volume: 1.0,
+	}
 }
 
 // Entity describes the speaker to Home Assistant.
@@ -223,18 +238,14 @@ func (m *MediaPlayer) SetState(state MediaPlayerState) {
 }
 
 // SetVolume records the volume level.
+//
+// The player owns it. The panel's own slider and the system mixer follow
+// it, and the music server is told about it, because it is one setting:
+// the volume of the room.
 func (m *MediaPlayer) SetVolume(volume float32) {
 	m.mu.Lock()
 	m.volume = volume
 	m.mu.Unlock()
-	if m.onVolume != nil {
-		m.onVolume(volume)
-	}
-}
-
-// SetMuted records the mute state.
-func (m *MediaPlayer) SetMuted(muted bool) {
-	m.setMuted(muted)
 }
 
 // Volume returns the level, 0.0 to 1.0.
@@ -242,6 +253,11 @@ func (m *MediaPlayer) Volume() float32 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.volume
+}
+
+// SetMuted records the mute state.
+func (m *MediaPlayer) SetMuted(muted bool) {
+	m.setMuted(muted)
 }
 
 // Muted reports whether the player is muted.

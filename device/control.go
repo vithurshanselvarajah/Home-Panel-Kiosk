@@ -82,7 +82,11 @@ type ControlState struct {
 	// Brightness is the screen brightness.
 	Brightness int `json:"brightness"`
 	// Volume is the volume of the room.
-	Volume int `json:"volume"`
+	//
+	// It is the speaker's volume, and the panel's own slider sets it.
+	// A panel that has not read the mixer sends nothing rather than
+	// zero: zero is a volume, and sending it would silence the speaker.
+	Volume *int `json:"volume,omitempty"`
 	// LastActivity is when somebody last did something on the panel.
 	LastActivity string `json:"lastActivity"`
 	// Version is the version of the application.
@@ -103,6 +107,17 @@ type ControlServer struct {
 	log *slog.Logger
 	// onCommand is called when the panel asks for something.
 	onCommand func(ControlCommand)
+	// onVolume is called when the panel reports a volume.
+	//
+	// The panel's volume is the speaker's volume, and the speaker is
+	// what Home Assistant shows. So the panel's volume is handed on, and
+	// the speaker takes it.
+	//
+	// The two do not chase each other, because each only acts on what
+	// it has just been told: the panel sends its volume when it changes
+	// and the speaker sends its volume when it changes, and a change
+	// settles rather than going round for ever.
+	onVolume func(level int)
 	// mu guards the state and the listener.
 	mu sync.Mutex
 	// listener is the socket, when it is listening.
@@ -175,6 +190,7 @@ func (s *ControlServer) accept(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			s.log.Debug("the control socket stopped taking panels", "error", err)
 			return
 		}
 		go s.serve(conn)
@@ -202,9 +218,22 @@ func (s *ControlServer) serve(conn net.Conn) {
 	for {
 		message, err := readMessage(reader)
 		if err != nil {
+			s.log.Debug("the panel's connection ended", "error", err)
 			return
 		}
-		s.handle(message)
+		// A panic in the handling takes the whole program down with it,
+		// because a panic in a goroutine is not recovered by the code
+		// that started it. It is recovered here instead, and the panel is
+		// disconnected so that it reconnects to a program that is
+		// working.
+		func() {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					s.log.Error("the panel's message could not be handled", "panic", recovered)
+				}
+			}()
+			s.handle(message)
+		}()
 	}
 }
 
@@ -280,15 +309,46 @@ func (s *ControlServer) writeMessage(conn net.Conn, message ControlMessage) erro
 //
 // This is how the panel's own state reaches Home Assistant: the
 // entities are changed here, and the change is pushed.
+// SetVolumeFollower sets what is called when the panel reports a volume.
+//
+// The panel's volume is the speaker's volume, and the speaker is what
+// Home Assistant shows. So the panel's volume is handed on, and the
+// speaker takes it.
+//
+// The two do not chase each other, because each only acts on what it has
+// just been told: the panel sends its volume when it changes and the
+// speaker sends its volume when it changes, and a change settles rather
+// than going round for ever.
+func (s *ControlServer) SetVolumeFollower(fn func(level int)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onVolume = fn
+}
+
 func (s *ControlServer) SetState(state ControlState) {
 	s.mu.Lock()
 	changed := s.state != state
+	volumeChanged := s.state.Volume == nil != (state.Volume == nil) ||
+		(state.Volume != nil && s.state.Volume != nil && *s.state.Volume != *state.Volume)
 	s.state = state
+	follower := s.onVolume
 	s.mu.Unlock()
 	if !changed {
 		return
 	}
 	s.applyEntities(state)
+
+	// The volume is handed on when it changes, and only then: a change
+	// that is passed on every time would go round for ever between the
+	// panel and the speaker.
+	//
+	// A panel that has not read the mixer yet reports no volume, and a
+	// panel that reports none is not saying the volume is zero. It is
+	// saying it does not know, and telling the speaker that would
+	// silence it.
+	if volumeChanged && state.Volume != nil && *state.Volume > 0 && follower != nil {
+		follower(*state.Volume)
+	}
 }
 
 // State returns the state of the panel.
@@ -359,11 +419,6 @@ func (s *ControlServer) applyEntities(state ControlState) {
 			s.registry.SetState(entity.Key, esphome.EntityValue{
 				Kind:   esphome.KindNumber,
 				Number: float64(state.Brightness),
-			})
-		case "volume":
-			s.registry.SetState(entity.Key, esphome.EntityValue{
-				Kind:   esphome.KindNumber,
-				Number: float64(state.Volume),
 			})
 		}
 	}
