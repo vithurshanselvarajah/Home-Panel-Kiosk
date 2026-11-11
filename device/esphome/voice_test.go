@@ -1,6 +1,10 @@
 package esphome
 
 import (
+	"fmt"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -378,4 +382,69 @@ func TestTheWakeWordCallbackIsNotCalledForAModelThePanelDoesNotHave(t *testing.T
 	if called {
 		t.Error("the device was told about a request the panel could not satisfy")
 	}
+}
+
+// TestTheVoiceMessageNumbersMatchTheProtocol checks the message numbers.
+//
+// The numbers are the wire format, and getting one wrong is a silent bug:
+// home assistant sends the message, the device does not recognise it, and
+// the device sits there waiting for a reply that was never asked for.
+//
+// The numbers are read out of the upstream protocol file, so they cannot
+// drift from it.
+func TestTheVoiceMessageNumbersMatchTheProtocol(t *testing.T) {
+	upstream, err := os.ReadFile("api.proto.upstream")
+	if err != nil {
+		t.Skipf("the upstream protocol file could not be read: %v", err)
+	}
+	text := string(upstream)
+
+	for _, want := range []struct {
+		name string
+		id   uint32
+	}{
+		{"SubscribeVoiceAssistantRequest", TypeSubscribeVoiceAssistantRequest},
+		{"VoiceAssistantRequest", TypeVoiceAssistantRequest},
+		{"VoiceAssistantResponse", TypeVoiceAssistantResponse},
+		{"VoiceAssistantEventResponse", TypeVoiceAssistantEventResponse},
+		{"VoiceAssistantAudio", TypeVoiceAssistantAudio},
+		{"VoiceAssistantAnnounceRequest", TypeVoiceAssistantAnnounceRequest},
+		{"VoiceAssistantAnnounceFinished", TypeVoiceAssistantAnnounceFinished},
+		{"VoiceAssistantConfigurationRequest", TypeVoiceAssistantConfigurationRequest},
+		{"VoiceAssistantConfigurationResponse", TypeVoiceAssistantConfigurationResponse},
+		{"VoiceAssistantSetConfiguration", TypeVoiceAssistantSetConfiguration},
+		{"VoiceAssistantTimerEventResponse", TypeVoiceAssistantTimerEventResponse},
+	} {
+		block := messageBlock(t, text, want.name)
+		id, ok := block["id"]
+		if !ok {
+			t.Errorf("%s has no id in the upstream protocol", want.name)
+			continue
+		}
+		if id != fmt.Sprint(want.id) {
+			t.Errorf("%s is message %s upstream, but the device handles %d",
+				want.name, id, want.id)
+		}
+	}
+}
+
+// messageBlock returns the id of a message in the upstream protocol.
+//
+// The upstream file is the source of the wire format, so the numbers in it
+// are the numbers the device has to use.
+func messageBlock(t *testing.T, text, name string) map[string]string {
+	t.Helper()
+	pattern := regexp.MustCompile(`(?s)message ` + name + ` \{(.*?)\n\}`)
+	match := pattern.FindStringSubmatch(text)
+	if match == nil {
+		t.Fatalf("%s is not in the upstream protocol", name)
+	}
+	fields := map[string]string{}
+	for _, line := range strings.Split(match[1], "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "option (id) = ") {
+			fields["id"] = strings.TrimSuffix(strings.TrimPrefix(line, "option (id) = "), ";")
+		}
+	}
+	return fields
 }
