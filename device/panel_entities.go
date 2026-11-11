@@ -11,9 +11,20 @@ import (
 // way to describe anything else: a switch for the screen, a number for
 // the brightness, a select for the view, and so on.
 //
-// The MQTT version of this published the same controls as discovery
-// messages with a Jinja template for the state and another one for the
-// command. These are the same controls without the templates.
+// The MQTT version of this published twelve controls. Some of them
+// said the same thing twice, and some of them were a text box where a
+// command belongs, so the set is smaller now.
+//
+// A control that says the same thing as another is not offered. The
+// screen switch turns the screen off and on, so there is no separate
+// button for waking it and no separate button for turning it off. The
+// view select chooses between the dashboard and the slideshow, so there
+// is no separate button for the slideshow.
+//
+// A notification and an address are not controls. They are commands
+// with an argument, and they are offered as services rather than as
+// text boxes: a text box is a value that sits there after it has been
+// typed, and a command is not a value.
 
 // panelEntities makes the entities the panel offers.
 //
@@ -32,19 +43,6 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 			ObjectID: "screen",
 			Icon:     "mdi:monitor",
 			State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: true},
-		})
-		registry.Add(&esphome.Entity{
-			Kind:        esphome.KindButton,
-			Name:        "Wake screen",
-			ObjectID:    "wake",
-			Icon:        "mdi:monitor",
-			DeviceClass: "restart",
-		})
-		registry.Add(&esphome.Entity{
-			Kind:     esphome.KindButton,
-			Name:     "Turn screen off",
-			ObjectID: "screen_off",
-			Icon:     "mdi:monitor-off",
 		})
 	}
 	if capabilities.HasBacklight {
@@ -69,12 +67,6 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 			Options:  []string{"dashboard", "slideshow"},
 			State:    esphome.EntityValue{Kind: esphome.KindSelect, Text: "dashboard"},
 		})
-		registry.Add(&esphome.Entity{
-			Kind:     esphome.KindButton,
-			Name:     "Open slideshow",
-			ObjectID: "slideshow",
-			Icon:     "mdi:image-multiple",
-		})
 	}
 	registry.Add(&esphome.Entity{
 		Kind:     esphome.KindButton,
@@ -89,18 +81,6 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 		Icon:     "mdi:monitor",
 		Options:  []string{"fullscreen", "window"},
 		State:    esphome.EntityValue{Kind: esphome.KindSelect, Text: "fullscreen"},
-	})
-	registry.Add(&esphome.Entity{
-		Kind:     esphome.KindText,
-		Name:     "Send notification",
-		ObjectID: "notification",
-		Icon:     "mdi:message-text",
-	})
-	registry.Add(&esphome.Entity{
-		Kind:     esphome.KindText,
-		Name:     "Open display URL",
-		ObjectID: "open_url",
-		Icon:     "mdi:link-variant",
 	})
 	registry.Add(&esphome.Entity{
 		Kind:     esphome.KindButton,

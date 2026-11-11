@@ -259,11 +259,13 @@ func (s *Server) entityMessage(entity *Entity) (entityMessage, error) {
 		return entityMessage{
 			Type: TypeListEntitiesTextResponse,
 			Body: &ListEntitiesTextResponse{
-				Key:      entity.Key,
-				Name:     entity.Name,
-				ObjectId: entity.ObjectID,
-				Icon:     entity.Icon,
-				Mode:     TextMode(entity.Mode),
+				Key:       entity.Key,
+				Name:      entity.Name,
+				ObjectId:  entity.ObjectID,
+				Icon:      entity.Icon,
+				Mode:      TextMode(entity.Mode),
+				MinLength: entity.MinLength,
+				MaxLength: entity.MaxLength,
 			},
 		}, nil
 	case KindButton:

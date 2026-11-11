@@ -295,7 +295,7 @@ function recordActivity(source = "local") {
   sendState();
 }
 
-function openMode(nextMode, target = "") {
+function openMode(nextMode, target = "", urlDuration) {
   if (nextMode !== "url") {
     clearTimeout(urlTimer);
     urlTimer = undefined;
@@ -315,9 +315,12 @@ function openMode(nextMode, target = "") {
   resizeOverlay();
   if (nextMode === "url") {
     clearTimeout(urlTimer);
+    // How long the address stays is how long the caller asked for, and
+    // half a minute when nobody said.
+    const seconds = Number(urlDuration) > 0 ? Math.round(Number(urlDuration) / 1000) : 30;
     urlTimer = setTimeout(() => {
       if (mode === "url") openMode("dashboard");
-    }, 30_000);
+    }, seconds * 1000);
   }
   if (nextMode === "dashboard" || nextMode === "slideshow") {
     const key = nextMode === "dashboard" ? "dashboard" : "immich";
@@ -603,7 +606,7 @@ function handleCommand(command) {
     case "open_url":
     case "url":
       recordActivity("home-assistant");
-      openMode("url", command.url || command.target || command.value || "");
+      openMode("url", command.url || command.target || command.value || "", command.duration);
       break;
     case "brightness": recordActivity("home-assistant"); setBrightness(command.value); break;
     case "notification": recordActivity("home-assistant"); showNotice(command); break;
