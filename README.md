@@ -10,14 +10,52 @@ An independent Electron kiosk for a Home Assistant touch display. Immich photos 
 - Optional automatic touch keyboard appears when an editable Home Assistant field receives focus. Enable or disable it in Settings.
 - Configurable dashboard and external Immich Kiosk URLs.
 - Idle transition from dashboard to slideshow, then optional display power-off.
-- MQTT command topic and Home Assistant MQTT discovery for supported view, screen, brightness, notification, and URL controls. Unsupported device controls are omitted; legacy keyboard, camera, and duplicate exit entities are cleared.
-- Drawer indicators for MQTT connection, Immich Kiosk page load, and Home Assistant dashboard page load.
+- The panel is an ESPHome device to Home Assistant, over the ESPHome native API. It announces itself on the network and appears in Home Assistant like any other device.
+- Entities for the supported view, screen, brightness, notification, and URL controls. Unsupported device controls are omitted.
+- Drawer indicators for the link to Home Assistant, Immich Kiosk page load, and Home Assistant dashboard page load.
 - Local notification overlay and settings UI.
 - Display power commands for `wlopm`, `kscreen-doctor`, and `xset`.
 
-## MQTT command contract
+## The Home Assistant connection
 
-Configure a broker and topic prefix in the settings panel. Publish JSON commands to `<prefix>/command`:
+The panel talks to Home Assistant over the ESPHome native API: the protocol every ESPHome device speaks. The device program makes the connection and holds the entities, and the panel tells it what it is doing.
+
+The panel announces itself on the network, so Home Assistant finds it on its own. The address that is announced is the one on the interface that carries the default route, which is the one Home Assistant can reach it on.
+
+Put the **encryption key** in the settings and Home Assistant asks for the same key when the device is added. The key is what the connection is made with; without one the connection is made in plain text, which is what the protocol allows and what a device on a trusted network does.
+
+The key is kept out of the settings file and encrypted with Electron `safeStorage`, the same way a password would be.
+
+### The entities
+
+| Entity | Kind | What it does |
+|---|---|---|
+| Screen | switch | Turns the screen off and on |
+| Wake screen | button | Wakes the screen |
+| Turn screen off | button | Turns the screen off |
+| Brightness | number | The screen brightness, 0 to 100 |
+| View | select | `dashboard` or `slideshow` |
+| Open slideshow | button | Shows the slideshow |
+| Return to Home | button | Shows the dashboard |
+| Display mode | select | `fullscreen` or `window` |
+| Send notification | text | Shows a notification on the panel |
+| Open display URL | text | Shows an address on the panel |
+| Exit | button | Shuts the app down |
+| Panel state | text sensor | What the panel is doing, as JSON |
+
+The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface.
+
+### The command contract
+
+Home Assistant acts on the panel through the entities above, so an automation uses the ordinary services:
+
+```yaml
+action: switch.turn_off
+target:
+  entity_id: switch.home_panel_screen
+```
+
+The panel's own interface sends the same commands to itself, and they are the actions the MQTT contract used:
 
 ```json
 {"action":"wake"}
@@ -34,12 +72,6 @@ Configure a broker and topic prefix in the settings panel. Publish JSON commands
 ```
 
 `display_mode` takes `fullscreen` or `window`. `exit` shuts the app down, so the service is left stopped until it is started again.
-
-The app publishes JSON state to `<prefix>/state` and online status to `<prefix>/availability`. Discovery is published with retained configuration messages and refreshed when Home Assistant announces that its MQTT integration is online. The brightness number uses `<prefix>/brightness` for its retained state.
-
-Home Assistant MQTT discovery entities use the default `homeassistant` discovery prefix. Configure the broker and prefix in the app before expecting entities to appear. The configured topic prefix only changes the app's command and state topics; it does not change Home Assistant's discovery prefix.
-
-The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface. Enter an HTTP(S) URL in **Open display URL** to show it on the display. The MQTT text value clears after use and the display returns to the dashboard after 30 seconds. A **Return to Home** button appears over custom URLs; Home Assistant automations can also send `{"action":"dashboard"}`.
 
 ## Install on Debian or Raspberry Pi OS
 
@@ -63,11 +95,8 @@ The installer writes a `settings.json` into Electron's per-user app config direc
 | `PITOUCH_SLIDESHOW_OFF_MINUTES` | Slideshow minutes before the screen turns off (`0` disables). |
 | `PITOUCH_TOUCH_KEYBOARD` | `true` / `false` — enable the automatic touch keyboard. |
 | `PITOUCH_DISPLAY_MODE` | `fullscreen` / `window` — how the device starts (default `fullscreen`). |
-| `PITOUCH_MQTT_URL` | Optional MQTT broker URL (`mqtt://` or `mqtts://`). |
-| `PITOUCH_MQTT_USERNAME` | MQTT username. |
-| `PITOUCH_MQTT_PASSWORD` | MQTT password (written in plain text; the app re-encrypts it on first save with Electron `safeStorage`). |
-| `PITOUCH_MQTT_PREFIX` | MQTT topic prefix (default `homepanel`). |
 | `PITOUCH_DEVICE_NAME` | Device name shown in Home Assistant (default `Home Panel`). |
+| `PITOUCH_ESPHOME_KEY` | Optional encryption key for the Home Assistant connection. The same key is given to Home Assistant when the device is added. |
 | `PITOUCH_SKIP_SETUP` | Set to `1` to skip install-time setup entirely; the app will open its settings UI on first launch. |
 | `PITOUCH_SKIP_SERVICE` | Set to `1` to skip installing, enabling, or starting the systemd user service. |
 | `PITOUCH_INSTALL_WLOPM` | Set to `0` to skip installing the optional Wayland display power helper. |
@@ -77,10 +106,6 @@ Example fully unattended install:
 ```sh
 PITOUCH_DASHBOARD_URL="https://homeassistant.example.com" \
 PITOUCH_SLIDESHOW_URL="https://immich-kiosk.example.com" \
-PITOUCH_MQTT_URL="mqtt://10.0.0.10:1883" \
-PITOUCH_MQTT_USERNAME="home-panel" \
-PITOUCH_MQTT_PASSWORD="$MQTT_PASSWORD" \
-PITOUCH_MQTT_PREFIX="homepanel_kitchen" \
 PITOUCH_DEVICE_NAME="Kitchen Display" \
 bash <(wget -qO- https://raw.githubusercontent.com/vithurshanselvarajah/Home-Panel-Kiosk/main/install.sh)
 ```
@@ -240,14 +265,47 @@ ECHOMUSE_SDK=/path/to/EchoMuse-SDK npm run build:device
 `npm run build:device` writes the binaries into `vendor/`, one per
 architecture, and the packaging step copies them into the package.
 
+### The ESPHome protocol
+
+The device program is also the device half of the ESPHome native API. It
+is in `device/esphome/`, and it is the part that speaks to Home
+Assistant.
+
+The protocol file is trimmed down to the messages the kiosk needs, and
+the Go types are generated from the trimmed file. The upstream file is
+kept beside it, so the trim can be run again when the protocol changes:
+
+```sh
+pip3 install grpcio-tools
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+npm run build:esphome-proto
+```
+
+The wire format is checked against the other implementation of it. Home
+Assistant speaks this protocol with `aioesphomeapi`, so the types here
+are compared against `aioesphomeapi`'s own generated types, message by
+message, and the bytes have to be identical. A difference would be a
+silent bug: the message would parse, the field would be wrong, and the
+symptom would be an entity that never changes.
+
+```sh
+python3 tools/check_wire.py
+go test ./device/esphome/
+```
+
+The tests drive `aioesphomeapi` itself rather than a peer written for
+them, so what is checked is what Home Assistant will do. They are skipped
+when Python or `aioesphomeapi` is not there, so the device still builds
+without either of them.
+
 ## Suggested next improvements
 
-- Add per-command acknowledgements and error reporting to MQTT so automations can confirm that a URL opened.
+- Add per-command acknowledgements and error reporting so automations can confirm that a URL opened.
 - Support a configurable hardware wake source and test display power support against the exact kiosk hardware.
-- Add multiple dashboard profiles and optional allowlists for URLs accepted over MQTT.
+- Add multiple dashboard profiles and optional allowlists for the URLs the panel accepts.
 
 ## Notes
 
 - Screen power support depends on the Linux desktop session, permissions, and display hardware. A successful command is not proof that every monitor physically powered down.
 - A touch display may not deliver input while powered off. Configure a Home Assistant wake automation, motion sensor, or other external wake source for that case.
-- MQTT is optional. Dashboard and slideshow views can run without it.
+- The Home Assistant connection is optional. Dashboard and slideshow views can run without it.
