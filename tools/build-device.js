@@ -104,6 +104,29 @@ for (const architecture of ARCHITECTURES) {
   const target = path.join(vendorDir, `home-panel-device-linux-${architecture.goarch}`);
   console.log(`build: the device for ${architecture.goarch}`);
 
+  // The runtime travels beside the binary.
+  //
+  // The binary is linked against it and looks for it where it is, so
+  // putting it beside the binary is what makes the wake word work. A
+  // device that has the binary and not the runtime has a panel that
+  // cannot hear its wake word.
+  const runtimeLibrary = path.join(libraryDirectory, "libonnxruntime.so.1.23.2");
+  // The name is the one the loader looks for: the binary is linked
+  // against the soname, and the loader finds a library by its soname and
+  // not by the file's name.
+  //
+  // The two architectures cannot both be called that in one directory,
+  // so each is built into its own directory.
+  const runtimeDirectory = path.join(vendorDir, architecture.goarch);
+  fs.mkdirSync(runtimeDirectory, { recursive: true });
+  const runtimeTarget = path.join(runtimeDirectory, "libonnxruntime.so.1");
+  if (!fs.existsSync(runtimeLibrary)) {
+    fail(`the onnx runtime for ${architecture.goarch} was not found: ${runtimeLibrary}`);
+  }
+  fs.copyFileSync(runtimeLibrary, runtimeTarget);
+  fs.chmodSync(runtimeTarget, 0o755);
+  console.log(`build: the onnx runtime for ${architecture.goarch} is at ${runtimeTarget}`);
+
   // CGO is on, because the ONNX Runtime is a C library and it is linked
   // into the binary. The cross-compiler is the target's own, so the binary
   // is built for the target and not for this machine.

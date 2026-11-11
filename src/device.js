@@ -90,11 +90,19 @@ function findSidecar(appPath, resourcesPath, execPath) {
  * DeviceClient runs the sidecar and reads the state it reports.
  */
 class DeviceClient {
-  constructor({ binary, stateFile, levelFile, configFile, deviceId, board, mic, speaker, runtimeDirectory, controlSocket, esphomeKey, esphomeName, onState, onLog }) {
+  constructor({ binary, stateFile, levelFile, configFile, dataDirectory, deviceId, board, mic, speaker, runtimeDirectory, controlSocket, esphomeKey, esphomeName, onState, onLog }) {
     this.binary = binary;
     this.stateFile = stateFile;
     this.levelFile = levelFile || `${stateFile}.level`;
     this.configFile = configFile;
+    // The data directory is where the device program keeps the things it
+    // has to keep: the music player's identity and its pairing records.
+    //
+    // It is on the disk, unlike the live state, because the music
+    // player's identity has to survive a restart — a player that forgets
+    // its identity is a new player, and the server has to pair with it
+    // again.
+    this.dataDirectory = dataDirectory;
     // The directory the live state is in. The device program is told
     // about it so that it writes the state where this reads it.
     this.runtimeDirectory = runtimeDirectory;
@@ -134,7 +142,7 @@ class DeviceClient {
     const args = [
       "--device-id", this.deviceId,
       "--board", this.board,
-      "--credentials-dir", this.credentialsDir,
+      "--credentials-dir", this.dataDirectory,
       "--state-file", this.stateFile,
       "--level-file", this.levelFile,
     ];
@@ -160,7 +168,11 @@ class DeviceClient {
       // the other reads it.
       this.child = spawn(this.binary, args, {
         stdio: ["ignore", "ignore", "pipe"],
-        env: { ...process.env, RUNTIME_DIRECTORY: this.runtimeDirectory || "" },
+        env: {
+          ...process.env,
+          RUNTIME_DIRECTORY: this.runtimeDirectory || "",
+          ...this.libraryPath(),
+        },
       });
     } catch (error) {
       this.child = null;
@@ -179,6 +191,44 @@ class DeviceClient {
 
     this.timer = setInterval(() => this.read(), POLL_INTERVAL_MS);
     return true;
+  }
+
+  /**
+   * The library path the device program is started with.
+   *
+   * The device program is linked against the ONNX Runtime, which it
+   * looks for beside itself. In the package the runtime is beside the
+   * binary, so nothing is needed. In a development run the binary is in
+   * the repository's vendor directory and the runtime is beside it too,
+   * but the loader does not look there for a development run, so the
+   * directory is named here.
+   *
+   * @returns {object} the environment to add
+   */
+  libraryPath() {
+    // The runtime is beside the binary in the package, and in the
+    // repository's own directory in a development run. The loader finds
+    // a library by its soname, so the directory has to hold a file with
+    // that name.
+    const architecture = process.arch === "x64" ? "amd64" : process.arch;
+    const directories = [
+      path.dirname(this.binary || ""),
+      path.join(path.dirname(this.binary || ""), architecture),
+    ];
+    const found = directories.find((directory) => {
+      try {
+        fs.accessSync(path.join(directory, "libonnxruntime.so.1"), fs.constants.R_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    if (!found) return {};
+
+    const current = process.env.LD_LIBRARY_PATH;
+    return {
+      LD_LIBRARY_PATH: current ? `${found}:${current}` : found,
+    };
   }
 
   /**
