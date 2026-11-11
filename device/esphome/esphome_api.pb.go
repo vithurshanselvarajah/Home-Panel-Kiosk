@@ -169,6 +169,195 @@ func (EntityCategory) EnumDescriptor() ([]byte, []int) {
 	return file_esphome_api_proto_rawDescGZIP(), []int{2}
 }
 
+type MediaPlayerCommand int32
+
+const (
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PLAY           MediaPlayerCommand = 0
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PAUSE          MediaPlayerCommand = 1
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_STOP           MediaPlayerCommand = 2
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_MUTE           MediaPlayerCommand = 3
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_UNMUTE         MediaPlayerCommand = 4
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_TOGGLE         MediaPlayerCommand = 5
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_VOLUME_UP      MediaPlayerCommand = 6
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_VOLUME_DOWN    MediaPlayerCommand = 7
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_ENQUEUE        MediaPlayerCommand = 8
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_REPEAT_ONE     MediaPlayerCommand = 9
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_REPEAT_OFF     MediaPlayerCommand = 10
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_CLEAR_PLAYLIST MediaPlayerCommand = 11
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_TURN_ON        MediaPlayerCommand = 12
+	MediaPlayerCommand_MEDIA_PLAYER_COMMAND_TURN_OFF       MediaPlayerCommand = 13
+)
+
+// Enum value maps for MediaPlayerCommand.
+var (
+	MediaPlayerCommand_name = map[int32]string{
+		0:  "MEDIA_PLAYER_COMMAND_PLAY",
+		1:  "MEDIA_PLAYER_COMMAND_PAUSE",
+		2:  "MEDIA_PLAYER_COMMAND_STOP",
+		3:  "MEDIA_PLAYER_COMMAND_MUTE",
+		4:  "MEDIA_PLAYER_COMMAND_UNMUTE",
+		5:  "MEDIA_PLAYER_COMMAND_TOGGLE",
+		6:  "MEDIA_PLAYER_COMMAND_VOLUME_UP",
+		7:  "MEDIA_PLAYER_COMMAND_VOLUME_DOWN",
+		8:  "MEDIA_PLAYER_COMMAND_ENQUEUE",
+		9:  "MEDIA_PLAYER_COMMAND_REPEAT_ONE",
+		10: "MEDIA_PLAYER_COMMAND_REPEAT_OFF",
+		11: "MEDIA_PLAYER_COMMAND_CLEAR_PLAYLIST",
+		12: "MEDIA_PLAYER_COMMAND_TURN_ON",
+		13: "MEDIA_PLAYER_COMMAND_TURN_OFF",
+	}
+	MediaPlayerCommand_value = map[string]int32{
+		"MEDIA_PLAYER_COMMAND_PLAY":           0,
+		"MEDIA_PLAYER_COMMAND_PAUSE":          1,
+		"MEDIA_PLAYER_COMMAND_STOP":           2,
+		"MEDIA_PLAYER_COMMAND_MUTE":           3,
+		"MEDIA_PLAYER_COMMAND_UNMUTE":         4,
+		"MEDIA_PLAYER_COMMAND_TOGGLE":         5,
+		"MEDIA_PLAYER_COMMAND_VOLUME_UP":      6,
+		"MEDIA_PLAYER_COMMAND_VOLUME_DOWN":    7,
+		"MEDIA_PLAYER_COMMAND_ENQUEUE":        8,
+		"MEDIA_PLAYER_COMMAND_REPEAT_ONE":     9,
+		"MEDIA_PLAYER_COMMAND_REPEAT_OFF":     10,
+		"MEDIA_PLAYER_COMMAND_CLEAR_PLAYLIST": 11,
+		"MEDIA_PLAYER_COMMAND_TURN_ON":        12,
+		"MEDIA_PLAYER_COMMAND_TURN_OFF":       13,
+	}
+)
+
+func (x MediaPlayerCommand) Enum() *MediaPlayerCommand {
+	p := new(MediaPlayerCommand)
+	*p = x
+	return p
+}
+
+func (x MediaPlayerCommand) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MediaPlayerCommand) Descriptor() protoreflect.EnumDescriptor {
+	return file_esphome_api_proto_enumTypes[3].Descriptor()
+}
+
+func (MediaPlayerCommand) Type() protoreflect.EnumType {
+	return &file_esphome_api_proto_enumTypes[3]
+}
+
+func (x MediaPlayerCommand) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MediaPlayerCommand.Descriptor instead.
+func (MediaPlayerCommand) EnumDescriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{3}
+}
+
+type MediaPlayerFormatPurpose int32
+
+const (
+	MediaPlayerFormatPurpose_MEDIA_PLAYER_FORMAT_PURPOSE_DEFAULT      MediaPlayerFormatPurpose = 0
+	MediaPlayerFormatPurpose_MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT MediaPlayerFormatPurpose = 1
+)
+
+// Enum value maps for MediaPlayerFormatPurpose.
+var (
+	MediaPlayerFormatPurpose_name = map[int32]string{
+		0: "MEDIA_PLAYER_FORMAT_PURPOSE_DEFAULT",
+		1: "MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT",
+	}
+	MediaPlayerFormatPurpose_value = map[string]int32{
+		"MEDIA_PLAYER_FORMAT_PURPOSE_DEFAULT":      0,
+		"MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT": 1,
+	}
+)
+
+func (x MediaPlayerFormatPurpose) Enum() *MediaPlayerFormatPurpose {
+	p := new(MediaPlayerFormatPurpose)
+	*p = x
+	return p
+}
+
+func (x MediaPlayerFormatPurpose) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MediaPlayerFormatPurpose) Descriptor() protoreflect.EnumDescriptor {
+	return file_esphome_api_proto_enumTypes[4].Descriptor()
+}
+
+func (MediaPlayerFormatPurpose) Type() protoreflect.EnumType {
+	return &file_esphome_api_proto_enumTypes[4]
+}
+
+func (x MediaPlayerFormatPurpose) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MediaPlayerFormatPurpose.Descriptor instead.
+func (MediaPlayerFormatPurpose) EnumDescriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{4}
+}
+
+type MediaPlayerState int32
+
+const (
+	MediaPlayerState_MEDIA_PLAYER_STATE_NONE       MediaPlayerState = 0
+	MediaPlayerState_MEDIA_PLAYER_STATE_IDLE       MediaPlayerState = 1
+	MediaPlayerState_MEDIA_PLAYER_STATE_PLAYING    MediaPlayerState = 2
+	MediaPlayerState_MEDIA_PLAYER_STATE_PAUSED     MediaPlayerState = 3
+	MediaPlayerState_MEDIA_PLAYER_STATE_ANNOUNCING MediaPlayerState = 4
+	MediaPlayerState_MEDIA_PLAYER_STATE_OFF        MediaPlayerState = 5
+	MediaPlayerState_MEDIA_PLAYER_STATE_ON         MediaPlayerState = 6
+)
+
+// Enum value maps for MediaPlayerState.
+var (
+	MediaPlayerState_name = map[int32]string{
+		0: "MEDIA_PLAYER_STATE_NONE",
+		1: "MEDIA_PLAYER_STATE_IDLE",
+		2: "MEDIA_PLAYER_STATE_PLAYING",
+		3: "MEDIA_PLAYER_STATE_PAUSED",
+		4: "MEDIA_PLAYER_STATE_ANNOUNCING",
+		5: "MEDIA_PLAYER_STATE_OFF",
+		6: "MEDIA_PLAYER_STATE_ON",
+	}
+	MediaPlayerState_value = map[string]int32{
+		"MEDIA_PLAYER_STATE_NONE":       0,
+		"MEDIA_PLAYER_STATE_IDLE":       1,
+		"MEDIA_PLAYER_STATE_PLAYING":    2,
+		"MEDIA_PLAYER_STATE_PAUSED":     3,
+		"MEDIA_PLAYER_STATE_ANNOUNCING": 4,
+		"MEDIA_PLAYER_STATE_OFF":        5,
+		"MEDIA_PLAYER_STATE_ON":         6,
+	}
+)
+
+func (x MediaPlayerState) Enum() *MediaPlayerState {
+	p := new(MediaPlayerState)
+	*p = x
+	return p
+}
+
+func (x MediaPlayerState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MediaPlayerState) Descriptor() protoreflect.EnumDescriptor {
+	return file_esphome_api_proto_enumTypes[5].Descriptor()
+}
+
+func (MediaPlayerState) Type() protoreflect.EnumType {
+	return &file_esphome_api_proto_enumTypes[5]
+}
+
+func (x MediaPlayerState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MediaPlayerState.Descriptor instead.
+func (MediaPlayerState) EnumDescriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{5}
+}
+
 type NumberMode int32
 
 const (
@@ -202,11 +391,11 @@ func (x NumberMode) String() string {
 }
 
 func (NumberMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_esphome_api_proto_enumTypes[3].Descriptor()
+	return file_esphome_api_proto_enumTypes[6].Descriptor()
 }
 
 func (NumberMode) Type() protoreflect.EnumType {
-	return &file_esphome_api_proto_enumTypes[3]
+	return &file_esphome_api_proto_enumTypes[6]
 }
 
 func (x NumberMode) Number() protoreflect.EnumNumber {
@@ -215,7 +404,66 @@ func (x NumberMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use NumberMode.Descriptor instead.
 func (NumberMode) EnumDescriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{3}
+	return file_esphome_api_proto_rawDescGZIP(), []int{6}
+}
+
+type SendspinPairingTokenStatus int32
+
+const (
+	// The Sendspin client has not started yet, so the token does not exist yet. Ask again later.
+	SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_NOT_READY SendspinPairingTokenStatus = 0
+	SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_OK        SendspinPairingTokenStatus = 1
+	// The device has no API encryption key, so it will not send the token. Ask again once a key is set.
+	SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_ENCRYPTION_REQUIRED SendspinPairingTokenStatus = 2
+	// Sendspin is turned off and has not started since boot, so the token does not exist yet.
+	SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_DISABLED SendspinPairingTokenStatus = 3
+	// The Sendspin client failed to start, and will not start until the device reboots.
+	SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_FAILED SendspinPairingTokenStatus = 4
+)
+
+// Enum value maps for SendspinPairingTokenStatus.
+var (
+	SendspinPairingTokenStatus_name = map[int32]string{
+		0: "SENDSPIN_PAIRING_TOKEN_STATUS_NOT_READY",
+		1: "SENDSPIN_PAIRING_TOKEN_STATUS_OK",
+		2: "SENDSPIN_PAIRING_TOKEN_STATUS_ENCRYPTION_REQUIRED",
+		3: "SENDSPIN_PAIRING_TOKEN_STATUS_DISABLED",
+		4: "SENDSPIN_PAIRING_TOKEN_STATUS_FAILED",
+	}
+	SendspinPairingTokenStatus_value = map[string]int32{
+		"SENDSPIN_PAIRING_TOKEN_STATUS_NOT_READY":           0,
+		"SENDSPIN_PAIRING_TOKEN_STATUS_OK":                  1,
+		"SENDSPIN_PAIRING_TOKEN_STATUS_ENCRYPTION_REQUIRED": 2,
+		"SENDSPIN_PAIRING_TOKEN_STATUS_DISABLED":            3,
+		"SENDSPIN_PAIRING_TOKEN_STATUS_FAILED":              4,
+	}
+)
+
+func (x SendspinPairingTokenStatus) Enum() *SendspinPairingTokenStatus {
+	p := new(SendspinPairingTokenStatus)
+	*p = x
+	return p
+}
+
+func (x SendspinPairingTokenStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SendspinPairingTokenStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_esphome_api_proto_enumTypes[7].Descriptor()
+}
+
+func (SendspinPairingTokenStatus) Type() protoreflect.EnumType {
+	return &file_esphome_api_proto_enumTypes[7]
+}
+
+func (x SendspinPairingTokenStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SendspinPairingTokenStatus.Descriptor instead.
+func (SendspinPairingTokenStatus) EnumDescriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{7}
 }
 
 // Deprecated: Marked as deprecated in esphome_api.proto.
@@ -252,11 +500,11 @@ func (x SensorLastResetType) String() string {
 }
 
 func (SensorLastResetType) Descriptor() protoreflect.EnumDescriptor {
-	return file_esphome_api_proto_enumTypes[4].Descriptor()
+	return file_esphome_api_proto_enumTypes[8].Descriptor()
 }
 
 func (SensorLastResetType) Type() protoreflect.EnumType {
-	return &file_esphome_api_proto_enumTypes[4]
+	return &file_esphome_api_proto_enumTypes[8]
 }
 
 func (x SensorLastResetType) Number() protoreflect.EnumNumber {
@@ -265,7 +513,7 @@ func (x SensorLastResetType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SensorLastResetType.Descriptor instead.
 func (SensorLastResetType) EnumDescriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{4}
+	return file_esphome_api_proto_rawDescGZIP(), []int{8}
 }
 
 type SensorStateClass int32
@@ -307,11 +555,11 @@ func (x SensorStateClass) String() string {
 }
 
 func (SensorStateClass) Descriptor() protoreflect.EnumDescriptor {
-	return file_esphome_api_proto_enumTypes[5].Descriptor()
+	return file_esphome_api_proto_enumTypes[9].Descriptor()
 }
 
 func (SensorStateClass) Type() protoreflect.EnumType {
-	return &file_esphome_api_proto_enumTypes[5]
+	return &file_esphome_api_proto_enumTypes[9]
 }
 
 func (x SensorStateClass) Number() protoreflect.EnumNumber {
@@ -320,7 +568,7 @@ func (x SensorStateClass) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SensorStateClass.Descriptor instead.
 func (SensorStateClass) EnumDescriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{5}
+	return file_esphome_api_proto_rawDescGZIP(), []int{9}
 }
 
 type SerialProxyPortType int32
@@ -359,11 +607,11 @@ func (x SerialProxyPortType) String() string {
 }
 
 func (SerialProxyPortType) Descriptor() protoreflect.EnumDescriptor {
-	return file_esphome_api_proto_enumTypes[6].Descriptor()
+	return file_esphome_api_proto_enumTypes[10].Descriptor()
 }
 
 func (SerialProxyPortType) Type() protoreflect.EnumType {
-	return &file_esphome_api_proto_enumTypes[6]
+	return &file_esphome_api_proto_enumTypes[10]
 }
 
 func (x SerialProxyPortType) Number() protoreflect.EnumNumber {
@@ -372,7 +620,7 @@ func (x SerialProxyPortType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SerialProxyPortType.Descriptor instead.
 func (SerialProxyPortType) EnumDescriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{6}
+	return file_esphome_api_proto_rawDescGZIP(), []int{10}
 }
 
 type ServiceArgType int32
@@ -423,11 +671,11 @@ func (x ServiceArgType) String() string {
 }
 
 func (ServiceArgType) Descriptor() protoreflect.EnumDescriptor {
-	return file_esphome_api_proto_enumTypes[7].Descriptor()
+	return file_esphome_api_proto_enumTypes[11].Descriptor()
 }
 
 func (ServiceArgType) Type() protoreflect.EnumType {
-	return &file_esphome_api_proto_enumTypes[7]
+	return &file_esphome_api_proto_enumTypes[11]
 }
 
 func (x ServiceArgType) Number() protoreflect.EnumNumber {
@@ -436,7 +684,7 @@ func (x ServiceArgType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ServiceArgType.Descriptor instead.
 func (ServiceArgType) EnumDescriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{7}
+	return file_esphome_api_proto_rawDescGZIP(), []int{11}
 }
 
 type SupportsResponseType int32
@@ -477,11 +725,11 @@ func (x SupportsResponseType) String() string {
 }
 
 func (SupportsResponseType) Descriptor() protoreflect.EnumDescriptor {
-	return file_esphome_api_proto_enumTypes[8].Descriptor()
+	return file_esphome_api_proto_enumTypes[12].Descriptor()
 }
 
 func (SupportsResponseType) Type() protoreflect.EnumType {
-	return &file_esphome_api_proto_enumTypes[8]
+	return &file_esphome_api_proto_enumTypes[12]
 }
 
 func (x SupportsResponseType) Number() protoreflect.EnumNumber {
@@ -490,7 +738,7 @@ func (x SupportsResponseType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SupportsResponseType.Descriptor instead.
 func (SupportsResponseType) EnumDescriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{8}
+	return file_esphome_api_proto_rawDescGZIP(), []int{12}
 }
 
 type TextMode int32
@@ -523,11 +771,11 @@ func (x TextMode) String() string {
 }
 
 func (TextMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_esphome_api_proto_enumTypes[9].Descriptor()
+	return file_esphome_api_proto_enumTypes[13].Descriptor()
 }
 
 func (TextMode) Type() protoreflect.EnumType {
-	return &file_esphome_api_proto_enumTypes[9]
+	return &file_esphome_api_proto_enumTypes[13]
 }
 
 func (x TextMode) Number() protoreflect.EnumNumber {
@@ -536,7 +784,150 @@ func (x TextMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TextMode.Descriptor instead.
 func (TextMode) EnumDescriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{9}
+	return file_esphome_api_proto_rawDescGZIP(), []int{13}
+}
+
+type VoiceAssistantEvent int32
+
+const (
+	VoiceAssistantEvent_VOICE_ASSISTANT_ERROR              VoiceAssistantEvent = 0
+	VoiceAssistantEvent_VOICE_ASSISTANT_RUN_START          VoiceAssistantEvent = 1
+	VoiceAssistantEvent_VOICE_ASSISTANT_RUN_END            VoiceAssistantEvent = 2
+	VoiceAssistantEvent_VOICE_ASSISTANT_STT_START          VoiceAssistantEvent = 3
+	VoiceAssistantEvent_VOICE_ASSISTANT_STT_END            VoiceAssistantEvent = 4
+	VoiceAssistantEvent_VOICE_ASSISTANT_INTENT_START       VoiceAssistantEvent = 5
+	VoiceAssistantEvent_VOICE_ASSISTANT_INTENT_END         VoiceAssistantEvent = 6
+	VoiceAssistantEvent_VOICE_ASSISTANT_TTS_START          VoiceAssistantEvent = 7
+	VoiceAssistantEvent_VOICE_ASSISTANT_TTS_END            VoiceAssistantEvent = 8
+	VoiceAssistantEvent_VOICE_ASSISTANT_WAKE_WORD_START    VoiceAssistantEvent = 9
+	VoiceAssistantEvent_VOICE_ASSISTANT_WAKE_WORD_END      VoiceAssistantEvent = 10
+	VoiceAssistantEvent_VOICE_ASSISTANT_STT_VAD_START      VoiceAssistantEvent = 11
+	VoiceAssistantEvent_VOICE_ASSISTANT_STT_VAD_END        VoiceAssistantEvent = 12
+	VoiceAssistantEvent_VOICE_ASSISTANT_WAKE_WORD_REJECTED VoiceAssistantEvent = 13
+	VoiceAssistantEvent_VOICE_ASSISTANT_TTS_STREAM_START   VoiceAssistantEvent = 98
+	VoiceAssistantEvent_VOICE_ASSISTANT_TTS_STREAM_END     VoiceAssistantEvent = 99
+	VoiceAssistantEvent_VOICE_ASSISTANT_INTENT_PROGRESS    VoiceAssistantEvent = 100
+)
+
+// Enum value maps for VoiceAssistantEvent.
+var (
+	VoiceAssistantEvent_name = map[int32]string{
+		0:   "VOICE_ASSISTANT_ERROR",
+		1:   "VOICE_ASSISTANT_RUN_START",
+		2:   "VOICE_ASSISTANT_RUN_END",
+		3:   "VOICE_ASSISTANT_STT_START",
+		4:   "VOICE_ASSISTANT_STT_END",
+		5:   "VOICE_ASSISTANT_INTENT_START",
+		6:   "VOICE_ASSISTANT_INTENT_END",
+		7:   "VOICE_ASSISTANT_TTS_START",
+		8:   "VOICE_ASSISTANT_TTS_END",
+		9:   "VOICE_ASSISTANT_WAKE_WORD_START",
+		10:  "VOICE_ASSISTANT_WAKE_WORD_END",
+		11:  "VOICE_ASSISTANT_STT_VAD_START",
+		12:  "VOICE_ASSISTANT_STT_VAD_END",
+		13:  "VOICE_ASSISTANT_WAKE_WORD_REJECTED",
+		98:  "VOICE_ASSISTANT_TTS_STREAM_START",
+		99:  "VOICE_ASSISTANT_TTS_STREAM_END",
+		100: "VOICE_ASSISTANT_INTENT_PROGRESS",
+	}
+	VoiceAssistantEvent_value = map[string]int32{
+		"VOICE_ASSISTANT_ERROR":              0,
+		"VOICE_ASSISTANT_RUN_START":          1,
+		"VOICE_ASSISTANT_RUN_END":            2,
+		"VOICE_ASSISTANT_STT_START":          3,
+		"VOICE_ASSISTANT_STT_END":            4,
+		"VOICE_ASSISTANT_INTENT_START":       5,
+		"VOICE_ASSISTANT_INTENT_END":         6,
+		"VOICE_ASSISTANT_TTS_START":          7,
+		"VOICE_ASSISTANT_TTS_END":            8,
+		"VOICE_ASSISTANT_WAKE_WORD_START":    9,
+		"VOICE_ASSISTANT_WAKE_WORD_END":      10,
+		"VOICE_ASSISTANT_STT_VAD_START":      11,
+		"VOICE_ASSISTANT_STT_VAD_END":        12,
+		"VOICE_ASSISTANT_WAKE_WORD_REJECTED": 13,
+		"VOICE_ASSISTANT_TTS_STREAM_START":   98,
+		"VOICE_ASSISTANT_TTS_STREAM_END":     99,
+		"VOICE_ASSISTANT_INTENT_PROGRESS":    100,
+	}
+)
+
+func (x VoiceAssistantEvent) Enum() *VoiceAssistantEvent {
+	p := new(VoiceAssistantEvent)
+	*p = x
+	return p
+}
+
+func (x VoiceAssistantEvent) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (VoiceAssistantEvent) Descriptor() protoreflect.EnumDescriptor {
+	return file_esphome_api_proto_enumTypes[14].Descriptor()
+}
+
+func (VoiceAssistantEvent) Type() protoreflect.EnumType {
+	return &file_esphome_api_proto_enumTypes[14]
+}
+
+func (x VoiceAssistantEvent) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use VoiceAssistantEvent.Descriptor instead.
+func (VoiceAssistantEvent) EnumDescriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{14}
+}
+
+type VoiceAssistantTimerEvent int32
+
+const (
+	VoiceAssistantTimerEvent_VOICE_ASSISTANT_TIMER_STARTED   VoiceAssistantTimerEvent = 0
+	VoiceAssistantTimerEvent_VOICE_ASSISTANT_TIMER_UPDATED   VoiceAssistantTimerEvent = 1
+	VoiceAssistantTimerEvent_VOICE_ASSISTANT_TIMER_CANCELLED VoiceAssistantTimerEvent = 2
+	VoiceAssistantTimerEvent_VOICE_ASSISTANT_TIMER_FINISHED  VoiceAssistantTimerEvent = 3
+)
+
+// Enum value maps for VoiceAssistantTimerEvent.
+var (
+	VoiceAssistantTimerEvent_name = map[int32]string{
+		0: "VOICE_ASSISTANT_TIMER_STARTED",
+		1: "VOICE_ASSISTANT_TIMER_UPDATED",
+		2: "VOICE_ASSISTANT_TIMER_CANCELLED",
+		3: "VOICE_ASSISTANT_TIMER_FINISHED",
+	}
+	VoiceAssistantTimerEvent_value = map[string]int32{
+		"VOICE_ASSISTANT_TIMER_STARTED":   0,
+		"VOICE_ASSISTANT_TIMER_UPDATED":   1,
+		"VOICE_ASSISTANT_TIMER_CANCELLED": 2,
+		"VOICE_ASSISTANT_TIMER_FINISHED":  3,
+	}
+)
+
+func (x VoiceAssistantTimerEvent) Enum() *VoiceAssistantTimerEvent {
+	p := new(VoiceAssistantTimerEvent)
+	*p = x
+	return p
+}
+
+func (x VoiceAssistantTimerEvent) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (VoiceAssistantTimerEvent) Descriptor() protoreflect.EnumDescriptor {
+	return file_esphome_api_proto_enumTypes[15].Descriptor()
+}
+
+func (VoiceAssistantTimerEvent) Type() protoreflect.EnumType {
+	return &file_esphome_api_proto_enumTypes[15]
+}
+
+func (x VoiceAssistantTimerEvent) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use VoiceAssistantTimerEvent.Descriptor instead.
+func (VoiceAssistantTimerEvent) EnumDescriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{15}
 }
 
 type AreaInfo struct {
@@ -768,6 +1159,126 @@ func (x *ButtonCommandRequest) GetDeviceId() uint32 {
 	return 0
 }
 
+type CameraImageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Single        bool                   `protobuf:"varint,1,opt,name=single,proto3" json:"single,omitempty"`
+	Stream        bool                   `protobuf:"varint,2,opt,name=stream,proto3" json:"stream,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CameraImageRequest) Reset() {
+	*x = CameraImageRequest{}
+	mi := &file_esphome_api_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CameraImageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CameraImageRequest) ProtoMessage() {}
+
+func (x *CameraImageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CameraImageRequest.ProtoReflect.Descriptor instead.
+func (*CameraImageRequest) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CameraImageRequest) GetSingle() bool {
+	if x != nil {
+		return x.Single
+	}
+	return false
+}
+
+func (x *CameraImageRequest) GetStream() bool {
+	if x != nil {
+		return x.Stream
+	}
+	return false
+}
+
+type CameraImageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           uint32                 `protobuf:"fixed32,1,opt,name=key,proto3" json:"key,omitempty"`
+	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Done          bool                   `protobuf:"varint,3,opt,name=done,proto3" json:"done,omitempty"`
+	DeviceId      uint32                 `protobuf:"varint,4,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CameraImageResponse) Reset() {
+	*x = CameraImageResponse{}
+	mi := &file_esphome_api_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CameraImageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CameraImageResponse) ProtoMessage() {}
+
+func (x *CameraImageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CameraImageResponse.ProtoReflect.Descriptor instead.
+func (*CameraImageResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CameraImageResponse) GetKey() uint32 {
+	if x != nil {
+		return x.Key
+	}
+	return 0
+}
+
+func (x *CameraImageResponse) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *CameraImageResponse) GetDone() bool {
+	if x != nil {
+		return x.Done
+	}
+	return false
+}
+
+func (x *CameraImageResponse) GetDeviceId() uint32 {
+	if x != nil {
+		return x.DeviceId
+	}
+	return 0
+}
+
 type CrashReportCapabilities struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Bitmask of CrashReportFlag. ESP32 checks BUILD_MATCHES against the build time stored with the record;
@@ -779,7 +1290,7 @@ type CrashReportCapabilities struct {
 
 func (x *CrashReportCapabilities) Reset() {
 	*x = CrashReportCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[4]
+	mi := &file_esphome_api_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +1302,7 @@ func (x *CrashReportCapabilities) String() string {
 func (*CrashReportCapabilities) ProtoMessage() {}
 
 func (x *CrashReportCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[4]
+	mi := &file_esphome_api_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +1315,7 @@ func (x *CrashReportCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CrashReportCapabilities.ProtoReflect.Descriptor instead.
 func (*CrashReportCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{4}
+	return file_esphome_api_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CrashReportCapabilities) GetFlags() uint32 {
@@ -822,7 +1333,7 @@ type DeviceCapabilitiesRequest struct {
 
 func (x *DeviceCapabilitiesRequest) Reset() {
 	*x = DeviceCapabilitiesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[5]
+	mi := &file_esphome_api_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -834,7 +1345,7 @@ func (x *DeviceCapabilitiesRequest) String() string {
 func (*DeviceCapabilitiesRequest) ProtoMessage() {}
 
 func (x *DeviceCapabilitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[5]
+	mi := &file_esphome_api_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -847,7 +1358,7 @@ func (x *DeviceCapabilitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceCapabilitiesRequest.ProtoReflect.Descriptor instead.
 func (*DeviceCapabilitiesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{5}
+	return file_esphome_api_proto_rawDescGZIP(), []int{7}
 }
 
 type DeviceCapabilitiesResponse struct {
@@ -866,7 +1377,7 @@ type DeviceCapabilitiesResponse struct {
 
 func (x *DeviceCapabilitiesResponse) Reset() {
 	*x = DeviceCapabilitiesResponse{}
-	mi := &file_esphome_api_proto_msgTypes[6]
+	mi := &file_esphome_api_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -878,7 +1389,7 @@ func (x *DeviceCapabilitiesResponse) String() string {
 func (*DeviceCapabilitiesResponse) ProtoMessage() {}
 
 func (x *DeviceCapabilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[6]
+	mi := &file_esphome_api_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -891,7 +1402,7 @@ func (x *DeviceCapabilitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceCapabilitiesResponse.ProtoReflect.Descriptor instead.
 func (*DeviceCapabilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{6}
+	return file_esphome_api_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DeviceCapabilitiesResponse) GetBluetoothProxy() *BluetoothProxyCapabilities {
@@ -963,7 +1474,7 @@ type DeviceInfo struct {
 
 func (x *DeviceInfo) Reset() {
 	*x = DeviceInfo{}
-	mi := &file_esphome_api_proto_msgTypes[7]
+	mi := &file_esphome_api_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -975,7 +1486,7 @@ func (x *DeviceInfo) String() string {
 func (*DeviceInfo) ProtoMessage() {}
 
 func (x *DeviceInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[7]
+	mi := &file_esphome_api_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -988,7 +1499,7 @@ func (x *DeviceInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceInfo.ProtoReflect.Descriptor instead.
 func (*DeviceInfo) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{7}
+	return file_esphome_api_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeviceInfo) GetDeviceId() uint32 {
@@ -1027,7 +1538,7 @@ type DeviceInfoRequest struct {
 
 func (x *DeviceInfoRequest) Reset() {
 	*x = DeviceInfoRequest{}
-	mi := &file_esphome_api_proto_msgTypes[8]
+	mi := &file_esphome_api_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1039,7 +1550,7 @@ func (x *DeviceInfoRequest) String() string {
 func (*DeviceInfoRequest) ProtoMessage() {}
 
 func (x *DeviceInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[8]
+	mi := &file_esphome_api_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1052,7 +1563,7 @@ func (x *DeviceInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceInfoRequest.ProtoReflect.Descriptor instead.
 func (*DeviceInfoRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{8}
+	return file_esphome_api_proto_rawDescGZIP(), []int{10}
 }
 
 type DeviceInfoResponse struct {
@@ -1120,7 +1631,7 @@ type DeviceInfoResponse struct {
 
 func (x *DeviceInfoResponse) Reset() {
 	*x = DeviceInfoResponse{}
-	mi := &file_esphome_api_proto_msgTypes[9]
+	mi := &file_esphome_api_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1132,7 +1643,7 @@ func (x *DeviceInfoResponse) String() string {
 func (*DeviceInfoResponse) ProtoMessage() {}
 
 func (x *DeviceInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[9]
+	mi := &file_esphome_api_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1145,7 +1656,7 @@ func (x *DeviceInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceInfoResponse.ProtoReflect.Descriptor instead.
 func (*DeviceInfoResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{9}
+	return file_esphome_api_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DeviceInfoResponse) GetUsesPassword() bool {
@@ -1345,7 +1856,7 @@ type DeviceWizardRequest struct {
 
 func (x *DeviceWizardRequest) Reset() {
 	*x = DeviceWizardRequest{}
-	mi := &file_esphome_api_proto_msgTypes[10]
+	mi := &file_esphome_api_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1357,7 +1868,7 @@ func (x *DeviceWizardRequest) String() string {
 func (*DeviceWizardRequest) ProtoMessage() {}
 
 func (x *DeviceWizardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[10]
+	mi := &file_esphome_api_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1370,7 +1881,7 @@ func (x *DeviceWizardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceWizardRequest.ProtoReflect.Descriptor instead.
 func (*DeviceWizardRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{10}
+	return file_esphome_api_proto_rawDescGZIP(), []int{12}
 }
 
 type DisconnectRequest struct {
@@ -1384,7 +1895,7 @@ type DisconnectRequest struct {
 
 func (x *DisconnectRequest) Reset() {
 	*x = DisconnectRequest{}
-	mi := &file_esphome_api_proto_msgTypes[11]
+	mi := &file_esphome_api_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1396,7 +1907,7 @@ func (x *DisconnectRequest) String() string {
 func (*DisconnectRequest) ProtoMessage() {}
 
 func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[11]
+	mi := &file_esphome_api_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1409,7 +1920,7 @@ func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectRequest.ProtoReflect.Descriptor instead.
 func (*DisconnectRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{11}
+	return file_esphome_api_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DisconnectRequest) GetReason() DisconnectReason {
@@ -1427,7 +1938,7 @@ type DisconnectResponse struct {
 
 func (x *DisconnectResponse) Reset() {
 	*x = DisconnectResponse{}
-	mi := &file_esphome_api_proto_msgTypes[12]
+	mi := &file_esphome_api_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1439,7 +1950,7 @@ func (x *DisconnectResponse) String() string {
 func (*DisconnectResponse) ProtoMessage() {}
 
 func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[12]
+	mi := &file_esphome_api_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1452,7 +1963,7 @@ func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectResponse.ProtoReflect.Descriptor instead.
 func (*DisconnectResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{12}
+	return file_esphome_api_proto_rawDescGZIP(), []int{14}
 }
 
 type ExecuteServiceArgument struct {
@@ -1473,7 +1984,7 @@ type ExecuteServiceArgument struct {
 
 func (x *ExecuteServiceArgument) Reset() {
 	*x = ExecuteServiceArgument{}
-	mi := &file_esphome_api_proto_msgTypes[13]
+	mi := &file_esphome_api_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1485,7 +1996,7 @@ func (x *ExecuteServiceArgument) String() string {
 func (*ExecuteServiceArgument) ProtoMessage() {}
 
 func (x *ExecuteServiceArgument) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[13]
+	mi := &file_esphome_api_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1498,7 +2009,7 @@ func (x *ExecuteServiceArgument) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteServiceArgument.ProtoReflect.Descriptor instead.
 func (*ExecuteServiceArgument) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{13}
+	return file_esphome_api_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ExecuteServiceArgument) GetBool_() bool {
@@ -1576,7 +2087,7 @@ type ExecuteServiceRequest struct {
 
 func (x *ExecuteServiceRequest) Reset() {
 	*x = ExecuteServiceRequest{}
-	mi := &file_esphome_api_proto_msgTypes[14]
+	mi := &file_esphome_api_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1588,7 +2099,7 @@ func (x *ExecuteServiceRequest) String() string {
 func (*ExecuteServiceRequest) ProtoMessage() {}
 
 func (x *ExecuteServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[14]
+	mi := &file_esphome_api_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1601,7 +2112,7 @@ func (x *ExecuteServiceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteServiceRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteServiceRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{14}
+	return file_esphome_api_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ExecuteServiceRequest) GetKey() uint32 {
@@ -1644,7 +2155,7 @@ type ExecuteServiceResponse struct {
 
 func (x *ExecuteServiceResponse) Reset() {
 	*x = ExecuteServiceResponse{}
-	mi := &file_esphome_api_proto_msgTypes[15]
+	mi := &file_esphome_api_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1656,7 +2167,7 @@ func (x *ExecuteServiceResponse) String() string {
 func (*ExecuteServiceResponse) ProtoMessage() {}
 
 func (x *ExecuteServiceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[15]
+	mi := &file_esphome_api_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1669,7 +2180,7 @@ func (x *ExecuteServiceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteServiceResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteServiceResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{15}
+	return file_esphome_api_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ExecuteServiceResponse) GetCallId() uint32 {
@@ -1719,7 +2230,7 @@ type HelloRequest struct {
 
 func (x *HelloRequest) Reset() {
 	*x = HelloRequest{}
-	mi := &file_esphome_api_proto_msgTypes[16]
+	mi := &file_esphome_api_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +2242,7 @@ func (x *HelloRequest) String() string {
 func (*HelloRequest) ProtoMessage() {}
 
 func (x *HelloRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[16]
+	mi := &file_esphome_api_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +2255,7 @@ func (x *HelloRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloRequest.ProtoReflect.Descriptor instead.
 func (*HelloRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{16}
+	return file_esphome_api_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *HelloRequest) GetClientInfo() string {
@@ -1796,7 +2307,7 @@ type HelloResponse struct {
 
 func (x *HelloResponse) Reset() {
 	*x = HelloResponse{}
-	mi := &file_esphome_api_proto_msgTypes[17]
+	mi := &file_esphome_api_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1808,7 +2319,7 @@ func (x *HelloResponse) String() string {
 func (*HelloResponse) ProtoMessage() {}
 
 func (x *HelloResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[17]
+	mi := &file_esphome_api_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1821,7 +2332,7 @@ func (x *HelloResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloResponse.ProtoReflect.Descriptor instead.
 func (*HelloResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{17}
+	return file_esphome_api_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *HelloResponse) GetApiVersionMajor() uint32 {
@@ -1863,7 +2374,7 @@ type HomeAssistantStateResponse struct {
 
 func (x *HomeAssistantStateResponse) Reset() {
 	*x = HomeAssistantStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[18]
+	mi := &file_esphome_api_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1875,7 +2386,7 @@ func (x *HomeAssistantStateResponse) String() string {
 func (*HomeAssistantStateResponse) ProtoMessage() {}
 
 func (x *HomeAssistantStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[18]
+	mi := &file_esphome_api_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1888,7 +2399,7 @@ func (x *HomeAssistantStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HomeAssistantStateResponse.ProtoReflect.Descriptor instead.
 func (*HomeAssistantStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{18}
+	return file_esphome_api_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *HomeAssistantStateResponse) GetEntityId() string {
@@ -1928,7 +2439,7 @@ type HomeassistantActionRequest struct {
 
 func (x *HomeassistantActionRequest) Reset() {
 	*x = HomeassistantActionRequest{}
-	mi := &file_esphome_api_proto_msgTypes[19]
+	mi := &file_esphome_api_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1940,7 +2451,7 @@ func (x *HomeassistantActionRequest) String() string {
 func (*HomeassistantActionRequest) ProtoMessage() {}
 
 func (x *HomeassistantActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[19]
+	mi := &file_esphome_api_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1953,7 +2464,7 @@ func (x *HomeassistantActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HomeassistantActionRequest.ProtoReflect.Descriptor instead.
 func (*HomeassistantActionRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{19}
+	return file_esphome_api_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *HomeassistantActionRequest) GetService() string {
@@ -2022,7 +2533,7 @@ type HomeassistantServiceMap struct {
 
 func (x *HomeassistantServiceMap) Reset() {
 	*x = HomeassistantServiceMap{}
-	mi := &file_esphome_api_proto_msgTypes[20]
+	mi := &file_esphome_api_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2034,7 +2545,7 @@ func (x *HomeassistantServiceMap) String() string {
 func (*HomeassistantServiceMap) ProtoMessage() {}
 
 func (x *HomeassistantServiceMap) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[20]
+	mi := &file_esphome_api_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2047,7 +2558,7 @@ func (x *HomeassistantServiceMap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HomeassistantServiceMap.ProtoReflect.Descriptor instead.
 func (*HomeassistantServiceMap) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{20}
+	return file_esphome_api_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *HomeassistantServiceMap) GetKey() string {
@@ -2081,7 +2592,7 @@ type ListEntitiesBinarySensorResponse struct {
 
 func (x *ListEntitiesBinarySensorResponse) Reset() {
 	*x = ListEntitiesBinarySensorResponse{}
-	mi := &file_esphome_api_proto_msgTypes[21]
+	mi := &file_esphome_api_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2093,7 +2604,7 @@ func (x *ListEntitiesBinarySensorResponse) String() string {
 func (*ListEntitiesBinarySensorResponse) ProtoMessage() {}
 
 func (x *ListEntitiesBinarySensorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[21]
+	mi := &file_esphome_api_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2106,7 +2617,7 @@ func (x *ListEntitiesBinarySensorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesBinarySensorResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesBinarySensorResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{21}
+	return file_esphome_api_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListEntitiesBinarySensorResponse) GetObjectId() string {
@@ -2188,7 +2699,7 @@ type ListEntitiesButtonResponse struct {
 
 func (x *ListEntitiesButtonResponse) Reset() {
 	*x = ListEntitiesButtonResponse{}
-	mi := &file_esphome_api_proto_msgTypes[22]
+	mi := &file_esphome_api_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2200,7 +2711,7 @@ func (x *ListEntitiesButtonResponse) String() string {
 func (*ListEntitiesButtonResponse) ProtoMessage() {}
 
 func (x *ListEntitiesButtonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[22]
+	mi := &file_esphome_api_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2213,7 +2724,7 @@ func (x *ListEntitiesButtonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesButtonResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesButtonResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{22}
+	return file_esphome_api_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListEntitiesButtonResponse) GetObjectId() string {
@@ -2272,6 +2783,98 @@ func (x *ListEntitiesButtonResponse) GetDeviceId() uint32 {
 	return 0
 }
 
+type ListEntitiesCameraResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ObjectId          string                 `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	Key               uint32                 `protobuf:"fixed32,2,opt,name=key,proto3" json:"key,omitempty"`
+	Name              string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	DisabledByDefault bool                   `protobuf:"varint,5,opt,name=disabled_by_default,json=disabledByDefault,proto3" json:"disabled_by_default,omitempty"`
+	Icon              string                 `protobuf:"bytes,6,opt,name=icon,proto3" json:"icon,omitempty"`
+	EntityCategory    EntityCategory         `protobuf:"varint,7,opt,name=entity_category,json=entityCategory,proto3,enum=esphome.EntityCategory" json:"entity_category,omitempty"`
+	DeviceId          uint32                 `protobuf:"varint,8,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ListEntitiesCameraResponse) Reset() {
+	*x = ListEntitiesCameraResponse{}
+	mi := &file_esphome_api_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEntitiesCameraResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEntitiesCameraResponse) ProtoMessage() {}
+
+func (x *ListEntitiesCameraResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEntitiesCameraResponse.ProtoReflect.Descriptor instead.
+func (*ListEntitiesCameraResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListEntitiesCameraResponse) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
+func (x *ListEntitiesCameraResponse) GetKey() uint32 {
+	if x != nil {
+		return x.Key
+	}
+	return 0
+}
+
+func (x *ListEntitiesCameraResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ListEntitiesCameraResponse) GetDisabledByDefault() bool {
+	if x != nil {
+		return x.DisabledByDefault
+	}
+	return false
+}
+
+func (x *ListEntitiesCameraResponse) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *ListEntitiesCameraResponse) GetEntityCategory() EntityCategory {
+	if x != nil {
+		return x.EntityCategory
+	}
+	return EntityCategory_ENTITY_CATEGORY_NONE
+}
+
+func (x *ListEntitiesCameraResponse) GetDeviceId() uint32 {
+	if x != nil {
+		return x.DeviceId
+	}
+	return 0
+}
+
 type ListEntitiesDoneResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2280,7 +2883,7 @@ type ListEntitiesDoneResponse struct {
 
 func (x *ListEntitiesDoneResponse) Reset() {
 	*x = ListEntitiesDoneResponse{}
-	mi := &file_esphome_api_proto_msgTypes[23]
+	mi := &file_esphome_api_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2292,7 +2895,7 @@ func (x *ListEntitiesDoneResponse) String() string {
 func (*ListEntitiesDoneResponse) ProtoMessage() {}
 
 func (x *ListEntitiesDoneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[23]
+	mi := &file_esphome_api_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2305,7 +2908,232 @@ func (x *ListEntitiesDoneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesDoneResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesDoneResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{23}
+	return file_esphome_api_proto_rawDescGZIP(), []int{26}
+}
+
+type ListEntitiesEventResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ObjectId          string                 `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	Key               uint32                 `protobuf:"fixed32,2,opt,name=key,proto3" json:"key,omitempty"`
+	Name              string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Icon              string                 `protobuf:"bytes,5,opt,name=icon,proto3" json:"icon,omitempty"`
+	DisabledByDefault bool                   `protobuf:"varint,6,opt,name=disabled_by_default,json=disabledByDefault,proto3" json:"disabled_by_default,omitempty"`
+	EntityCategory    EntityCategory         `protobuf:"varint,7,opt,name=entity_category,json=entityCategory,proto3,enum=esphome.EntityCategory" json:"entity_category,omitempty"`
+	DeviceClass       string                 `protobuf:"bytes,8,opt,name=device_class,json=deviceClass,proto3" json:"device_class,omitempty"`
+	EventTypes        []string               `protobuf:"bytes,9,rep,name=event_types,json=eventTypes,proto3" json:"event_types,omitempty"`
+	DeviceId          uint32                 `protobuf:"varint,10,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ListEntitiesEventResponse) Reset() {
+	*x = ListEntitiesEventResponse{}
+	mi := &file_esphome_api_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEntitiesEventResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEntitiesEventResponse) ProtoMessage() {}
+
+func (x *ListEntitiesEventResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEntitiesEventResponse.ProtoReflect.Descriptor instead.
+func (*ListEntitiesEventResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ListEntitiesEventResponse) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
+func (x *ListEntitiesEventResponse) GetKey() uint32 {
+	if x != nil {
+		return x.Key
+	}
+	return 0
+}
+
+func (x *ListEntitiesEventResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ListEntitiesEventResponse) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *ListEntitiesEventResponse) GetDisabledByDefault() bool {
+	if x != nil {
+		return x.DisabledByDefault
+	}
+	return false
+}
+
+func (x *ListEntitiesEventResponse) GetEntityCategory() EntityCategory {
+	if x != nil {
+		return x.EntityCategory
+	}
+	return EntityCategory_ENTITY_CATEGORY_NONE
+}
+
+func (x *ListEntitiesEventResponse) GetDeviceClass() string {
+	if x != nil {
+		return x.DeviceClass
+	}
+	return ""
+}
+
+func (x *ListEntitiesEventResponse) GetEventTypes() []string {
+	if x != nil {
+		return x.EventTypes
+	}
+	return nil
+}
+
+func (x *ListEntitiesEventResponse) GetDeviceId() uint32 {
+	if x != nil {
+		return x.DeviceId
+	}
+	return 0
+}
+
+type ListEntitiesMediaPlayerResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ObjectId          string                 `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	Key               uint32                 `protobuf:"fixed32,2,opt,name=key,proto3" json:"key,omitempty"`
+	Name              string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Icon              string                 `protobuf:"bytes,5,opt,name=icon,proto3" json:"icon,omitempty"`
+	DisabledByDefault bool                   `protobuf:"varint,6,opt,name=disabled_by_default,json=disabledByDefault,proto3" json:"disabled_by_default,omitempty"`
+	EntityCategory    EntityCategory         `protobuf:"varint,7,opt,name=entity_category,json=entityCategory,proto3,enum=esphome.EntityCategory" json:"entity_category,omitempty"`
+	// Deprecated in ESPHome 2026.9.0; use feature_flags instead.
+	SupportsPause    bool                          `protobuf:"varint,8,opt,name=supports_pause,json=supportsPause,proto3" json:"supports_pause,omitempty"`
+	SupportedFormats []*MediaPlayerSupportedFormat `protobuf:"bytes,9,rep,name=supported_formats,json=supportedFormats,proto3" json:"supported_formats,omitempty"`
+	DeviceId         uint32                        `protobuf:"varint,10,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	FeatureFlags     uint32                        `protobuf:"varint,11,opt,name=feature_flags,json=featureFlags,proto3" json:"feature_flags,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ListEntitiesMediaPlayerResponse) Reset() {
+	*x = ListEntitiesMediaPlayerResponse{}
+	mi := &file_esphome_api_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEntitiesMediaPlayerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEntitiesMediaPlayerResponse) ProtoMessage() {}
+
+func (x *ListEntitiesMediaPlayerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEntitiesMediaPlayerResponse.ProtoReflect.Descriptor instead.
+func (*ListEntitiesMediaPlayerResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetKey() uint32 {
+	if x != nil {
+		return x.Key
+	}
+	return 0
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetDisabledByDefault() bool {
+	if x != nil {
+		return x.DisabledByDefault
+	}
+	return false
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetEntityCategory() EntityCategory {
+	if x != nil {
+		return x.EntityCategory
+	}
+	return EntityCategory_ENTITY_CATEGORY_NONE
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetSupportsPause() bool {
+	if x != nil {
+		return x.SupportsPause
+	}
+	return false
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetSupportedFormats() []*MediaPlayerSupportedFormat {
+	if x != nil {
+		return x.SupportedFormats
+	}
+	return nil
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetDeviceId() uint32 {
+	if x != nil {
+		return x.DeviceId
+	}
+	return 0
+}
+
+func (x *ListEntitiesMediaPlayerResponse) GetFeatureFlags() uint32 {
+	if x != nil {
+		return x.FeatureFlags
+	}
+	return 0
 }
 
 type ListEntitiesNumberResponse struct {
@@ -2329,7 +3157,7 @@ type ListEntitiesNumberResponse struct {
 
 func (x *ListEntitiesNumberResponse) Reset() {
 	*x = ListEntitiesNumberResponse{}
-	mi := &file_esphome_api_proto_msgTypes[24]
+	mi := &file_esphome_api_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2341,7 +3169,7 @@ func (x *ListEntitiesNumberResponse) String() string {
 func (*ListEntitiesNumberResponse) ProtoMessage() {}
 
 func (x *ListEntitiesNumberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[24]
+	mi := &file_esphome_api_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2354,7 +3182,7 @@ func (x *ListEntitiesNumberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesNumberResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesNumberResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{24}
+	return file_esphome_api_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListEntitiesNumberResponse) GetObjectId() string {
@@ -2456,7 +3284,7 @@ type ListEntitiesRequest struct {
 
 func (x *ListEntitiesRequest) Reset() {
 	*x = ListEntitiesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[25]
+	mi := &file_esphome_api_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2468,7 +3296,7 @@ func (x *ListEntitiesRequest) String() string {
 func (*ListEntitiesRequest) ProtoMessage() {}
 
 func (x *ListEntitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[25]
+	mi := &file_esphome_api_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2481,7 +3309,7 @@ func (x *ListEntitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesRequest.ProtoReflect.Descriptor instead.
 func (*ListEntitiesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{25}
+	return file_esphome_api_proto_rawDescGZIP(), []int{30}
 }
 
 type ListEntitiesSelectResponse struct {
@@ -2500,7 +3328,7 @@ type ListEntitiesSelectResponse struct {
 
 func (x *ListEntitiesSelectResponse) Reset() {
 	*x = ListEntitiesSelectResponse{}
-	mi := &file_esphome_api_proto_msgTypes[26]
+	mi := &file_esphome_api_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2512,7 +3340,7 @@ func (x *ListEntitiesSelectResponse) String() string {
 func (*ListEntitiesSelectResponse) ProtoMessage() {}
 
 func (x *ListEntitiesSelectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[26]
+	mi := &file_esphome_api_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2525,7 +3353,7 @@ func (x *ListEntitiesSelectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesSelectResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesSelectResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{26}
+	return file_esphome_api_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListEntitiesSelectResponse) GetObjectId() string {
@@ -2607,7 +3435,7 @@ type ListEntitiesSensorResponse struct {
 
 func (x *ListEntitiesSensorResponse) Reset() {
 	*x = ListEntitiesSensorResponse{}
-	mi := &file_esphome_api_proto_msgTypes[27]
+	mi := &file_esphome_api_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2619,7 +3447,7 @@ func (x *ListEntitiesSensorResponse) String() string {
 func (*ListEntitiesSensorResponse) ProtoMessage() {}
 
 func (x *ListEntitiesSensorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[27]
+	mi := &file_esphome_api_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2632,7 +3460,7 @@ func (x *ListEntitiesSensorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesSensorResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesSensorResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{27}
+	return file_esphome_api_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListEntitiesSensorResponse) GetObjectId() string {
@@ -2742,7 +3570,7 @@ type ListEntitiesServicesArgument struct {
 
 func (x *ListEntitiesServicesArgument) Reset() {
 	*x = ListEntitiesServicesArgument{}
-	mi := &file_esphome_api_proto_msgTypes[28]
+	mi := &file_esphome_api_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2754,7 +3582,7 @@ func (x *ListEntitiesServicesArgument) String() string {
 func (*ListEntitiesServicesArgument) ProtoMessage() {}
 
 func (x *ListEntitiesServicesArgument) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[28]
+	mi := &file_esphome_api_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2767,7 +3595,7 @@ func (x *ListEntitiesServicesArgument) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesServicesArgument.ProtoReflect.Descriptor instead.
 func (*ListEntitiesServicesArgument) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{28}
+	return file_esphome_api_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListEntitiesServicesArgument) GetName() string {
@@ -2825,7 +3653,7 @@ type ListEntitiesServicesResponse struct {
 
 func (x *ListEntitiesServicesResponse) Reset() {
 	*x = ListEntitiesServicesResponse{}
-	mi := &file_esphome_api_proto_msgTypes[29]
+	mi := &file_esphome_api_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2837,7 +3665,7 @@ func (x *ListEntitiesServicesResponse) String() string {
 func (*ListEntitiesServicesResponse) ProtoMessage() {}
 
 func (x *ListEntitiesServicesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[29]
+	mi := &file_esphome_api_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2850,7 +3678,7 @@ func (x *ListEntitiesServicesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesServicesResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesServicesResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{29}
+	return file_esphome_api_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListEntitiesServicesResponse) GetName() string {
@@ -2905,7 +3733,7 @@ type ListEntitiesSwitchResponse struct {
 
 func (x *ListEntitiesSwitchResponse) Reset() {
 	*x = ListEntitiesSwitchResponse{}
-	mi := &file_esphome_api_proto_msgTypes[30]
+	mi := &file_esphome_api_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2917,7 +3745,7 @@ func (x *ListEntitiesSwitchResponse) String() string {
 func (*ListEntitiesSwitchResponse) ProtoMessage() {}
 
 func (x *ListEntitiesSwitchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[30]
+	mi := &file_esphome_api_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2930,7 +3758,7 @@ func (x *ListEntitiesSwitchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesSwitchResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesSwitchResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{30}
+	return file_esphome_api_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListEntitiesSwitchResponse) GetObjectId() string {
@@ -3015,7 +3843,7 @@ type ListEntitiesTextResponse struct {
 
 func (x *ListEntitiesTextResponse) Reset() {
 	*x = ListEntitiesTextResponse{}
-	mi := &file_esphome_api_proto_msgTypes[31]
+	mi := &file_esphome_api_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3027,7 +3855,7 @@ func (x *ListEntitiesTextResponse) String() string {
 func (*ListEntitiesTextResponse) ProtoMessage() {}
 
 func (x *ListEntitiesTextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[31]
+	mi := &file_esphome_api_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3040,7 +3868,7 @@ func (x *ListEntitiesTextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesTextResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesTextResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{31}
+	return file_esphome_api_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListEntitiesTextResponse) GetObjectId() string {
@@ -3136,7 +3964,7 @@ type ListEntitiesTextSensorResponse struct {
 
 func (x *ListEntitiesTextSensorResponse) Reset() {
 	*x = ListEntitiesTextSensorResponse{}
-	mi := &file_esphome_api_proto_msgTypes[32]
+	mi := &file_esphome_api_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3148,7 +3976,7 @@ func (x *ListEntitiesTextSensorResponse) String() string {
 func (*ListEntitiesTextSensorResponse) ProtoMessage() {}
 
 func (x *ListEntitiesTextSensorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[32]
+	mi := &file_esphome_api_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3161,7 +3989,7 @@ func (x *ListEntitiesTextSensorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesTextSensorResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesTextSensorResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{32}
+	return file_esphome_api_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListEntitiesTextSensorResponse) GetObjectId() string {
@@ -3220,6 +4048,283 @@ func (x *ListEntitiesTextSensorResponse) GetDeviceId() uint32 {
 	return 0
 }
 
+type MediaPlayerCommandRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Key             uint32                 `protobuf:"fixed32,1,opt,name=key,proto3" json:"key,omitempty"`
+	HasCommand      bool                   `protobuf:"varint,2,opt,name=has_command,json=hasCommand,proto3" json:"has_command,omitempty"`
+	Command         MediaPlayerCommand     `protobuf:"varint,3,opt,name=command,proto3,enum=esphome.MediaPlayerCommand" json:"command,omitempty"`
+	HasVolume       bool                   `protobuf:"varint,4,opt,name=has_volume,json=hasVolume,proto3" json:"has_volume,omitempty"`
+	Volume          float32                `protobuf:"fixed32,5,opt,name=volume,proto3" json:"volume,omitempty"`
+	HasMediaUrl     bool                   `protobuf:"varint,6,opt,name=has_media_url,json=hasMediaUrl,proto3" json:"has_media_url,omitempty"`
+	MediaUrl        string                 `protobuf:"bytes,7,opt,name=media_url,json=mediaUrl,proto3" json:"media_url,omitempty"`
+	HasAnnouncement bool                   `protobuf:"varint,8,opt,name=has_announcement,json=hasAnnouncement,proto3" json:"has_announcement,omitempty"`
+	Announcement    bool                   `protobuf:"varint,9,opt,name=announcement,proto3" json:"announcement,omitempty"`
+	DeviceId        uint32                 `protobuf:"varint,10,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *MediaPlayerCommandRequest) Reset() {
+	*x = MediaPlayerCommandRequest{}
+	mi := &file_esphome_api_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaPlayerCommandRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaPlayerCommandRequest) ProtoMessage() {}
+
+func (x *MediaPlayerCommandRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaPlayerCommandRequest.ProtoReflect.Descriptor instead.
+func (*MediaPlayerCommandRequest) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *MediaPlayerCommandRequest) GetKey() uint32 {
+	if x != nil {
+		return x.Key
+	}
+	return 0
+}
+
+func (x *MediaPlayerCommandRequest) GetHasCommand() bool {
+	if x != nil {
+		return x.HasCommand
+	}
+	return false
+}
+
+func (x *MediaPlayerCommandRequest) GetCommand() MediaPlayerCommand {
+	if x != nil {
+		return x.Command
+	}
+	return MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PLAY
+}
+
+func (x *MediaPlayerCommandRequest) GetHasVolume() bool {
+	if x != nil {
+		return x.HasVolume
+	}
+	return false
+}
+
+func (x *MediaPlayerCommandRequest) GetVolume() float32 {
+	if x != nil {
+		return x.Volume
+	}
+	return 0
+}
+
+func (x *MediaPlayerCommandRequest) GetHasMediaUrl() bool {
+	if x != nil {
+		return x.HasMediaUrl
+	}
+	return false
+}
+
+func (x *MediaPlayerCommandRequest) GetMediaUrl() string {
+	if x != nil {
+		return x.MediaUrl
+	}
+	return ""
+}
+
+func (x *MediaPlayerCommandRequest) GetHasAnnouncement() bool {
+	if x != nil {
+		return x.HasAnnouncement
+	}
+	return false
+}
+
+func (x *MediaPlayerCommandRequest) GetAnnouncement() bool {
+	if x != nil {
+		return x.Announcement
+	}
+	return false
+}
+
+func (x *MediaPlayerCommandRequest) GetDeviceId() uint32 {
+	if x != nil {
+		return x.DeviceId
+	}
+	return 0
+}
+
+type MediaPlayerStateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           uint32                 `protobuf:"fixed32,1,opt,name=key,proto3" json:"key,omitempty"`
+	State         MediaPlayerState       `protobuf:"varint,2,opt,name=state,proto3,enum=esphome.MediaPlayerState" json:"state,omitempty"`
+	Volume        float32                `protobuf:"fixed32,3,opt,name=volume,proto3" json:"volume,omitempty"`
+	Muted         bool                   `protobuf:"varint,4,opt,name=muted,proto3" json:"muted,omitempty"`
+	DeviceId      uint32                 `protobuf:"varint,5,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MediaPlayerStateResponse) Reset() {
+	*x = MediaPlayerStateResponse{}
+	mi := &file_esphome_api_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaPlayerStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaPlayerStateResponse) ProtoMessage() {}
+
+func (x *MediaPlayerStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaPlayerStateResponse.ProtoReflect.Descriptor instead.
+func (*MediaPlayerStateResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *MediaPlayerStateResponse) GetKey() uint32 {
+	if x != nil {
+		return x.Key
+	}
+	return 0
+}
+
+func (x *MediaPlayerStateResponse) GetState() MediaPlayerState {
+	if x != nil {
+		return x.State
+	}
+	return MediaPlayerState_MEDIA_PLAYER_STATE_NONE
+}
+
+func (x *MediaPlayerStateResponse) GetVolume() float32 {
+	if x != nil {
+		return x.Volume
+	}
+	return 0
+}
+
+func (x *MediaPlayerStateResponse) GetMuted() bool {
+	if x != nil {
+		return x.Muted
+	}
+	return false
+}
+
+func (x *MediaPlayerStateResponse) GetDeviceId() uint32 {
+	if x != nil {
+		return x.DeviceId
+	}
+	return 0
+}
+
+type MediaPlayerSupportedFormat struct {
+	state       protoimpl.MessageState   `protogen:"open.v1"`
+	Format      string                   `protobuf:"bytes,1,opt,name=format,proto3" json:"format,omitempty"`
+	SampleRate  uint32                   `protobuf:"varint,2,opt,name=sample_rate,json=sampleRate,proto3" json:"sample_rate,omitempty"`
+	NumChannels uint32                   `protobuf:"varint,3,opt,name=num_channels,json=numChannels,proto3" json:"num_channels,omitempty"`
+	Purpose     MediaPlayerFormatPurpose `protobuf:"varint,4,opt,name=purpose,proto3,enum=esphome.MediaPlayerFormatPurpose" json:"purpose,omitempty"`
+	SampleBytes uint32                   `protobuf:"varint,5,opt,name=sample_bytes,json=sampleBytes,proto3" json:"sample_bytes,omitempty"`
+	// Constant bitrate in kbps for lossy formats; 0 means no preference
+	Bitrate       uint32 `protobuf:"varint,6,opt,name=bitrate,proto3" json:"bitrate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MediaPlayerSupportedFormat) Reset() {
+	*x = MediaPlayerSupportedFormat{}
+	mi := &file_esphome_api_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaPlayerSupportedFormat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaPlayerSupportedFormat) ProtoMessage() {}
+
+func (x *MediaPlayerSupportedFormat) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaPlayerSupportedFormat.ProtoReflect.Descriptor instead.
+func (*MediaPlayerSupportedFormat) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *MediaPlayerSupportedFormat) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+func (x *MediaPlayerSupportedFormat) GetSampleRate() uint32 {
+	if x != nil {
+		return x.SampleRate
+	}
+	return 0
+}
+
+func (x *MediaPlayerSupportedFormat) GetNumChannels() uint32 {
+	if x != nil {
+		return x.NumChannels
+	}
+	return 0
+}
+
+func (x *MediaPlayerSupportedFormat) GetPurpose() MediaPlayerFormatPurpose {
+	if x != nil {
+		return x.Purpose
+	}
+	return MediaPlayerFormatPurpose_MEDIA_PLAYER_FORMAT_PURPOSE_DEFAULT
+}
+
+func (x *MediaPlayerSupportedFormat) GetSampleBytes() uint32 {
+	if x != nil {
+		return x.SampleBytes
+	}
+	return 0
+}
+
+func (x *MediaPlayerSupportedFormat) GetBitrate() uint32 {
+	if x != nil {
+		return x.Bitrate
+	}
+	return 0
+}
+
 type NumberCommandRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           uint32                 `protobuf:"fixed32,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -3231,7 +4336,7 @@ type NumberCommandRequest struct {
 
 func (x *NumberCommandRequest) Reset() {
 	*x = NumberCommandRequest{}
-	mi := &file_esphome_api_proto_msgTypes[33]
+	mi := &file_esphome_api_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3243,7 +4348,7 @@ func (x *NumberCommandRequest) String() string {
 func (*NumberCommandRequest) ProtoMessage() {}
 
 func (x *NumberCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[33]
+	mi := &file_esphome_api_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3256,7 +4361,7 @@ func (x *NumberCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NumberCommandRequest.ProtoReflect.Descriptor instead.
 func (*NumberCommandRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{33}
+	return file_esphome_api_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *NumberCommandRequest) GetKey() uint32 {
@@ -3294,7 +4399,7 @@ type NumberStateResponse struct {
 
 func (x *NumberStateResponse) Reset() {
 	*x = NumberStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[34]
+	mi := &file_esphome_api_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3306,7 +4411,7 @@ func (x *NumberStateResponse) String() string {
 func (*NumberStateResponse) ProtoMessage() {}
 
 func (x *NumberStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[34]
+	mi := &file_esphome_api_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3319,7 +4424,7 @@ func (x *NumberStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NumberStateResponse.ProtoReflect.Descriptor instead.
 func (*NumberStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{34}
+	return file_esphome_api_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *NumberStateResponse) GetKey() uint32 {
@@ -3358,7 +4463,7 @@ type PingRequest struct {
 
 func (x *PingRequest) Reset() {
 	*x = PingRequest{}
-	mi := &file_esphome_api_proto_msgTypes[35]
+	mi := &file_esphome_api_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3370,7 +4475,7 @@ func (x *PingRequest) String() string {
 func (*PingRequest) ProtoMessage() {}
 
 func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[35]
+	mi := &file_esphome_api_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3383,7 +4488,7 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{35}
+	return file_esphome_api_proto_rawDescGZIP(), []int{43}
 }
 
 type PingResponse struct {
@@ -3394,7 +4499,7 @@ type PingResponse struct {
 
 func (x *PingResponse) Reset() {
 	*x = PingResponse{}
-	mi := &file_esphome_api_proto_msgTypes[36]
+	mi := &file_esphome_api_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3406,7 +4511,7 @@ func (x *PingResponse) String() string {
 func (*PingResponse) ProtoMessage() {}
 
 func (x *PingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[36]
+	mi := &file_esphome_api_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3419,7 +4524,7 @@ func (x *PingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingResponse.ProtoReflect.Descriptor instead.
 func (*PingResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{36}
+	return file_esphome_api_proto_rawDescGZIP(), []int{44}
 }
 
 type SelectCommandRequest struct {
@@ -3433,7 +4538,7 @@ type SelectCommandRequest struct {
 
 func (x *SelectCommandRequest) Reset() {
 	*x = SelectCommandRequest{}
-	mi := &file_esphome_api_proto_msgTypes[37]
+	mi := &file_esphome_api_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3445,7 +4550,7 @@ func (x *SelectCommandRequest) String() string {
 func (*SelectCommandRequest) ProtoMessage() {}
 
 func (x *SelectCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[37]
+	mi := &file_esphome_api_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3458,7 +4563,7 @@ func (x *SelectCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectCommandRequest.ProtoReflect.Descriptor instead.
 func (*SelectCommandRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{37}
+	return file_esphome_api_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *SelectCommandRequest) GetKey() uint32 {
@@ -3496,7 +4601,7 @@ type SelectStateResponse struct {
 
 func (x *SelectStateResponse) Reset() {
 	*x = SelectStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[38]
+	mi := &file_esphome_api_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3508,7 +4613,7 @@ func (x *SelectStateResponse) String() string {
 func (*SelectStateResponse) ProtoMessage() {}
 
 func (x *SelectStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[38]
+	mi := &file_esphome_api_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3521,7 +4626,7 @@ func (x *SelectStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectStateResponse.ProtoReflect.Descriptor instead.
 func (*SelectStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{38}
+	return file_esphome_api_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *SelectStateResponse) GetKey() uint32 {
@@ -3565,7 +4670,7 @@ type SendspinCapabilities struct {
 
 func (x *SendspinCapabilities) Reset() {
 	*x = SendspinCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[39]
+	mi := &file_esphome_api_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3577,7 +4682,7 @@ func (x *SendspinCapabilities) String() string {
 func (*SendspinCapabilities) ProtoMessage() {}
 
 func (x *SendspinCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[39]
+	mi := &file_esphome_api_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3590,7 +4695,7 @@ func (x *SendspinCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendspinCapabilities.ProtoReflect.Descriptor instead.
 func (*SendspinCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{39}
+	return file_esphome_api_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *SendspinCapabilities) GetFeatureFlags() uint32 {
@@ -3603,6 +4708,95 @@ func (x *SendspinCapabilities) GetFeatureFlags() uint32 {
 func (x *SendspinCapabilities) GetClientId() string {
 	if x != nil {
 		return x.ClientId
+	}
+	return ""
+}
+
+type SendspinPairingTokenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendspinPairingTokenRequest) Reset() {
+	*x = SendspinPairingTokenRequest{}
+	mi := &file_esphome_api_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendspinPairingTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendspinPairingTokenRequest) ProtoMessage() {}
+
+func (x *SendspinPairingTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendspinPairingTokenRequest.ProtoReflect.Descriptor instead.
+func (*SendspinPairingTokenRequest) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{48}
+}
+
+type SendspinPairingTokenResponse struct {
+	state  protoimpl.MessageState     `protogen:"open.v1"`
+	Status SendspinPairingTokenStatus `protobuf:"varint,1,opt,name=status,proto3,enum=esphome.SendspinPairingTokenStatus" json:"status,omitempty"`
+	// The pairing token (Sendspin pairing.md "Pairing Token"). Set only when status is OK.
+	Token         string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendspinPairingTokenResponse) Reset() {
+	*x = SendspinPairingTokenResponse{}
+	mi := &file_esphome_api_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendspinPairingTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendspinPairingTokenResponse) ProtoMessage() {}
+
+func (x *SendspinPairingTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendspinPairingTokenResponse.ProtoReflect.Descriptor instead.
+func (*SendspinPairingTokenResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *SendspinPairingTokenResponse) GetStatus() SendspinPairingTokenStatus {
+	if x != nil {
+		return x.Status
+	}
+	return SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_NOT_READY
+}
+
+func (x *SendspinPairingTokenResponse) GetToken() string {
+	if x != nil {
+		return x.Token
 	}
 	return ""
 }
@@ -3621,7 +4815,7 @@ type SensorStateResponse struct {
 
 func (x *SensorStateResponse) Reset() {
 	*x = SensorStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[40]
+	mi := &file_esphome_api_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3633,7 +4827,7 @@ func (x *SensorStateResponse) String() string {
 func (*SensorStateResponse) ProtoMessage() {}
 
 func (x *SensorStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[40]
+	mi := &file_esphome_api_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3646,7 +4840,7 @@ func (x *SensorStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SensorStateResponse.ProtoReflect.Descriptor instead.
 func (*SensorStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{40}
+	return file_esphome_api_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *SensorStateResponse) GetKey() uint32 {
@@ -3688,7 +4882,7 @@ type SerialProxyInfo struct {
 
 func (x *SerialProxyInfo) Reset() {
 	*x = SerialProxyInfo{}
-	mi := &file_esphome_api_proto_msgTypes[41]
+	mi := &file_esphome_api_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3700,7 +4894,7 @@ func (x *SerialProxyInfo) String() string {
 func (*SerialProxyInfo) ProtoMessage() {}
 
 func (x *SerialProxyInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[41]
+	mi := &file_esphome_api_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3713,7 +4907,7 @@ func (x *SerialProxyInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SerialProxyInfo.ProtoReflect.Descriptor instead.
 func (*SerialProxyInfo) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{41}
+	return file_esphome_api_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SerialProxyInfo) GetName() string {
@@ -3747,7 +4941,7 @@ type StoreYamlCapabilities struct {
 
 func (x *StoreYamlCapabilities) Reset() {
 	*x = StoreYamlCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[42]
+	mi := &file_esphome_api_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3759,7 +4953,7 @@ func (x *StoreYamlCapabilities) String() string {
 func (*StoreYamlCapabilities) ProtoMessage() {}
 
 func (x *StoreYamlCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[42]
+	mi := &file_esphome_api_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3772,7 +4966,7 @@ func (x *StoreYamlCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreYamlCapabilities.ProtoReflect.Descriptor instead.
 func (*StoreYamlCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{42}
+	return file_esphome_api_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *StoreYamlCapabilities) GetSupported() bool {
@@ -3793,7 +4987,7 @@ type SubscribeHomeAssistantStateResponse struct {
 
 func (x *SubscribeHomeAssistantStateResponse) Reset() {
 	*x = SubscribeHomeAssistantStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[43]
+	mi := &file_esphome_api_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3805,7 +4999,7 @@ func (x *SubscribeHomeAssistantStateResponse) String() string {
 func (*SubscribeHomeAssistantStateResponse) ProtoMessage() {}
 
 func (x *SubscribeHomeAssistantStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[43]
+	mi := &file_esphome_api_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3818,7 +5012,7 @@ func (x *SubscribeHomeAssistantStateResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SubscribeHomeAssistantStateResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeHomeAssistantStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{43}
+	return file_esphome_api_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *SubscribeHomeAssistantStateResponse) GetEntityId() string {
@@ -3850,7 +5044,7 @@ type SubscribeHomeAssistantStatesRequest struct {
 
 func (x *SubscribeHomeAssistantStatesRequest) Reset() {
 	*x = SubscribeHomeAssistantStatesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[44]
+	mi := &file_esphome_api_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3862,7 +5056,7 @@ func (x *SubscribeHomeAssistantStatesRequest) String() string {
 func (*SubscribeHomeAssistantStatesRequest) ProtoMessage() {}
 
 func (x *SubscribeHomeAssistantStatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[44]
+	mi := &file_esphome_api_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3875,7 +5069,7 @@ func (x *SubscribeHomeAssistantStatesRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SubscribeHomeAssistantStatesRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeHomeAssistantStatesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{44}
+	return file_esphome_api_proto_rawDescGZIP(), []int{54}
 }
 
 type SubscribeHomeassistantServicesRequest struct {
@@ -3886,7 +5080,7 @@ type SubscribeHomeassistantServicesRequest struct {
 
 func (x *SubscribeHomeassistantServicesRequest) Reset() {
 	*x = SubscribeHomeassistantServicesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[45]
+	mi := &file_esphome_api_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3898,7 +5092,7 @@ func (x *SubscribeHomeassistantServicesRequest) String() string {
 func (*SubscribeHomeassistantServicesRequest) ProtoMessage() {}
 
 func (x *SubscribeHomeassistantServicesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[45]
+	mi := &file_esphome_api_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3911,7 +5105,7 @@ func (x *SubscribeHomeassistantServicesRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use SubscribeHomeassistantServicesRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeHomeassistantServicesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{45}
+	return file_esphome_api_proto_rawDescGZIP(), []int{55}
 }
 
 type SubscribeStatesRequest struct {
@@ -3922,7 +5116,7 @@ type SubscribeStatesRequest struct {
 
 func (x *SubscribeStatesRequest) Reset() {
 	*x = SubscribeStatesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[46]
+	mi := &file_esphome_api_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3934,7 +5128,7 @@ func (x *SubscribeStatesRequest) String() string {
 func (*SubscribeStatesRequest) ProtoMessage() {}
 
 func (x *SubscribeStatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[46]
+	mi := &file_esphome_api_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3947,7 +5141,59 @@ func (x *SubscribeStatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeStatesRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeStatesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{46}
+	return file_esphome_api_proto_rawDescGZIP(), []int{56}
+}
+
+type SubscribeVoiceAssistantRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Subscribe     bool                   `protobuf:"varint,1,opt,name=subscribe,proto3" json:"subscribe,omitempty"`
+	Flags         uint32                 `protobuf:"varint,2,opt,name=flags,proto3" json:"flags,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubscribeVoiceAssistantRequest) Reset() {
+	*x = SubscribeVoiceAssistantRequest{}
+	mi := &file_esphome_api_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscribeVoiceAssistantRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscribeVoiceAssistantRequest) ProtoMessage() {}
+
+func (x *SubscribeVoiceAssistantRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscribeVoiceAssistantRequest.ProtoReflect.Descriptor instead.
+func (*SubscribeVoiceAssistantRequest) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *SubscribeVoiceAssistantRequest) GetSubscribe() bool {
+	if x != nil {
+		return x.Subscribe
+	}
+	return false
+}
+
+func (x *SubscribeVoiceAssistantRequest) GetFlags() uint32 {
+	if x != nil {
+		return x.Flags
+	}
+	return 0
 }
 
 type SwitchCommandRequest struct {
@@ -3961,7 +5207,7 @@ type SwitchCommandRequest struct {
 
 func (x *SwitchCommandRequest) Reset() {
 	*x = SwitchCommandRequest{}
-	mi := &file_esphome_api_proto_msgTypes[47]
+	mi := &file_esphome_api_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3973,7 +5219,7 @@ func (x *SwitchCommandRequest) String() string {
 func (*SwitchCommandRequest) ProtoMessage() {}
 
 func (x *SwitchCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[47]
+	mi := &file_esphome_api_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3986,7 +5232,7 @@ func (x *SwitchCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwitchCommandRequest.ProtoReflect.Descriptor instead.
 func (*SwitchCommandRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{47}
+	return file_esphome_api_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *SwitchCommandRequest) GetKey() uint32 {
@@ -4024,7 +5270,7 @@ type SwitchStateResponse struct {
 
 func (x *SwitchStateResponse) Reset() {
 	*x = SwitchStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[48]
+	mi := &file_esphome_api_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4036,7 +5282,7 @@ func (x *SwitchStateResponse) String() string {
 func (*SwitchStateResponse) ProtoMessage() {}
 
 func (x *SwitchStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[48]
+	mi := &file_esphome_api_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4049,7 +5295,7 @@ func (x *SwitchStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwitchStateResponse.ProtoReflect.Descriptor instead.
 func (*SwitchStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{48}
+	return file_esphome_api_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *SwitchStateResponse) GetKey() uint32 {
@@ -4091,7 +5337,7 @@ type TextCommandRequest struct {
 
 func (x *TextCommandRequest) Reset() {
 	*x = TextCommandRequest{}
-	mi := &file_esphome_api_proto_msgTypes[49]
+	mi := &file_esphome_api_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4103,7 +5349,7 @@ func (x *TextCommandRequest) String() string {
 func (*TextCommandRequest) ProtoMessage() {}
 
 func (x *TextCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[49]
+	mi := &file_esphome_api_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4116,7 +5362,7 @@ func (x *TextCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextCommandRequest.ProtoReflect.Descriptor instead.
 func (*TextCommandRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{49}
+	return file_esphome_api_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *TextCommandRequest) GetKey() uint32 {
@@ -4154,7 +5400,7 @@ type TextSensorStateResponse struct {
 
 func (x *TextSensorStateResponse) Reset() {
 	*x = TextSensorStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[50]
+	mi := &file_esphome_api_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4166,7 +5412,7 @@ func (x *TextSensorStateResponse) String() string {
 func (*TextSensorStateResponse) ProtoMessage() {}
 
 func (x *TextSensorStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[50]
+	mi := &file_esphome_api_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4179,7 +5425,7 @@ func (x *TextSensorStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextSensorStateResponse.ProtoReflect.Descriptor instead.
 func (*TextSensorStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{50}
+	return file_esphome_api_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *TextSensorStateResponse) GetKey() uint32 {
@@ -4224,7 +5470,7 @@ type TextStateResponse struct {
 
 func (x *TextStateResponse) Reset() {
 	*x = TextStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[51]
+	mi := &file_esphome_api_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4236,7 +5482,7 @@ func (x *TextStateResponse) String() string {
 func (*TextStateResponse) ProtoMessage() {}
 
 func (x *TextStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[51]
+	mi := &file_esphome_api_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4249,7 +5495,7 @@ func (x *TextStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextStateResponse.ProtoReflect.Descriptor instead.
 func (*TextStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{51}
+	return file_esphome_api_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *TextStateResponse) GetKey() uint32 {
@@ -4280,6 +5526,238 @@ func (x *TextStateResponse) GetDeviceId() uint32 {
 	return 0
 }
 
+type VoiceAssistantAnnounceFinished struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantAnnounceFinished) Reset() {
+	*x = VoiceAssistantAnnounceFinished{}
+	mi := &file_esphome_api_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantAnnounceFinished) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantAnnounceFinished) ProtoMessage() {}
+
+func (x *VoiceAssistantAnnounceFinished) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantAnnounceFinished.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantAnnounceFinished) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *VoiceAssistantAnnounceFinished) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type VoiceAssistantAnnounceRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	MediaId            string                 `protobuf:"bytes,1,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	Text               string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	PreannounceMediaId string                 `protobuf:"bytes,3,opt,name=preannounce_media_id,json=preannounceMediaId,proto3" json:"preannounce_media_id,omitempty"`
+	StartConversation  bool                   `protobuf:"varint,4,opt,name=start_conversation,json=startConversation,proto3" json:"start_conversation,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantAnnounceRequest) Reset() {
+	*x = VoiceAssistantAnnounceRequest{}
+	mi := &file_esphome_api_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantAnnounceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantAnnounceRequest) ProtoMessage() {}
+
+func (x *VoiceAssistantAnnounceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantAnnounceRequest.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantAnnounceRequest) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *VoiceAssistantAnnounceRequest) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+func (x *VoiceAssistantAnnounceRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *VoiceAssistantAnnounceRequest) GetPreannounceMediaId() string {
+	if x != nil {
+		return x.PreannounceMediaId
+	}
+	return ""
+}
+
+func (x *VoiceAssistantAnnounceRequest) GetStartConversation() bool {
+	if x != nil {
+		return x.StartConversation
+	}
+	return false
+}
+
+type VoiceAssistantAudio struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	End           bool                   `protobuf:"varint,2,opt,name=end,proto3" json:"end,omitempty"`
+	Data2         []byte                 `protobuf:"bytes,3,opt,name=data2,proto3" json:"data2,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantAudio) Reset() {
+	*x = VoiceAssistantAudio{}
+	mi := &file_esphome_api_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantAudio) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantAudio) ProtoMessage() {}
+
+func (x *VoiceAssistantAudio) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantAudio.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantAudio) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *VoiceAssistantAudio) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *VoiceAssistantAudio) GetEnd() bool {
+	if x != nil {
+		return x.End
+	}
+	return false
+}
+
+func (x *VoiceAssistantAudio) GetData2() []byte {
+	if x != nil {
+		return x.Data2
+	}
+	return nil
+}
+
+type VoiceAssistantAudioSettings struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	NoiseSuppressionLevel uint32                 `protobuf:"varint,1,opt,name=noise_suppression_level,json=noiseSuppressionLevel,proto3" json:"noise_suppression_level,omitempty"`
+	AutoGain              uint32                 `protobuf:"varint,2,opt,name=auto_gain,json=autoGain,proto3" json:"auto_gain,omitempty"`
+	VolumeMultiplier      float32                `protobuf:"fixed32,3,opt,name=volume_multiplier,json=volumeMultiplier,proto3" json:"volume_multiplier,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantAudioSettings) Reset() {
+	*x = VoiceAssistantAudioSettings{}
+	mi := &file_esphome_api_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantAudioSettings) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantAudioSettings) ProtoMessage() {}
+
+func (x *VoiceAssistantAudioSettings) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantAudioSettings.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantAudioSettings) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *VoiceAssistantAudioSettings) GetNoiseSuppressionLevel() uint32 {
+	if x != nil {
+		return x.NoiseSuppressionLevel
+	}
+	return 0
+}
+
+func (x *VoiceAssistantAudioSettings) GetAutoGain() uint32 {
+	if x != nil {
+		return x.AutoGain
+	}
+	return 0
+}
+
+func (x *VoiceAssistantAudioSettings) GetVolumeMultiplier() float32 {
+	if x != nil {
+		return x.VolumeMultiplier
+	}
+	return 0
+}
+
 type VoiceAssistantCapabilities struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Bitmask of the features this voice assistant supports
@@ -4290,7 +5768,7 @@ type VoiceAssistantCapabilities struct {
 
 func (x *VoiceAssistantCapabilities) Reset() {
 	*x = VoiceAssistantCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[52]
+	mi := &file_esphome_api_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4302,7 +5780,7 @@ func (x *VoiceAssistantCapabilities) String() string {
 func (*VoiceAssistantCapabilities) ProtoMessage() {}
 
 func (x *VoiceAssistantCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[52]
+	mi := &file_esphome_api_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4315,7 +5793,7 @@ func (x *VoiceAssistantCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantCapabilities.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{52}
+	return file_esphome_api_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *VoiceAssistantCapabilities) GetFeatureFlags() uint32 {
@@ -4323,6 +5801,662 @@ func (x *VoiceAssistantCapabilities) GetFeatureFlags() uint32 {
 		return x.FeatureFlags
 	}
 	return 0
+}
+
+type VoiceAssistantConfigurationRequest struct {
+	state             protoimpl.MessageState            `protogen:"open.v1"`
+	ExternalWakeWords []*VoiceAssistantExternalWakeWord `protobuf:"bytes,1,rep,name=external_wake_words,json=externalWakeWords,proto3" json:"external_wake_words,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantConfigurationRequest) Reset() {
+	*x = VoiceAssistantConfigurationRequest{}
+	mi := &file_esphome_api_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantConfigurationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantConfigurationRequest) ProtoMessage() {}
+
+func (x *VoiceAssistantConfigurationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantConfigurationRequest.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantConfigurationRequest) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *VoiceAssistantConfigurationRequest) GetExternalWakeWords() []*VoiceAssistantExternalWakeWord {
+	if x != nil {
+		return x.ExternalWakeWords
+	}
+	return nil
+}
+
+type VoiceAssistantConfigurationResponse struct {
+	state              protoimpl.MessageState    `protogen:"open.v1"`
+	AvailableWakeWords []*VoiceAssistantWakeWord `protobuf:"bytes,1,rep,name=available_wake_words,json=availableWakeWords,proto3" json:"available_wake_words,omitempty"`
+	ActiveWakeWords    []string                  `protobuf:"bytes,2,rep,name=active_wake_words,json=activeWakeWords,proto3" json:"active_wake_words,omitempty"`
+	MaxActiveWakeWords uint32                    `protobuf:"varint,3,opt,name=max_active_wake_words,json=maxActiveWakeWords,proto3" json:"max_active_wake_words,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantConfigurationResponse) Reset() {
+	*x = VoiceAssistantConfigurationResponse{}
+	mi := &file_esphome_api_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantConfigurationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantConfigurationResponse) ProtoMessage() {}
+
+func (x *VoiceAssistantConfigurationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantConfigurationResponse.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantConfigurationResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *VoiceAssistantConfigurationResponse) GetAvailableWakeWords() []*VoiceAssistantWakeWord {
+	if x != nil {
+		return x.AvailableWakeWords
+	}
+	return nil
+}
+
+func (x *VoiceAssistantConfigurationResponse) GetActiveWakeWords() []string {
+	if x != nil {
+		return x.ActiveWakeWords
+	}
+	return nil
+}
+
+func (x *VoiceAssistantConfigurationResponse) GetMaxActiveWakeWords() uint32 {
+	if x != nil {
+		return x.MaxActiveWakeWords
+	}
+	return 0
+}
+
+type VoiceAssistantEventData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantEventData) Reset() {
+	*x = VoiceAssistantEventData{}
+	mi := &file_esphome_api_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantEventData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantEventData) ProtoMessage() {}
+
+func (x *VoiceAssistantEventData) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantEventData.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantEventData) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *VoiceAssistantEventData) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *VoiceAssistantEventData) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+type VoiceAssistantEventResponse struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	EventType     VoiceAssistantEvent        `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=esphome.VoiceAssistantEvent" json:"event_type,omitempty"`
+	Data          []*VoiceAssistantEventData `protobuf:"bytes,2,rep,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantEventResponse) Reset() {
+	*x = VoiceAssistantEventResponse{}
+	mi := &file_esphome_api_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantEventResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantEventResponse) ProtoMessage() {}
+
+func (x *VoiceAssistantEventResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantEventResponse.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantEventResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *VoiceAssistantEventResponse) GetEventType() VoiceAssistantEvent {
+	if x != nil {
+		return x.EventType
+	}
+	return VoiceAssistantEvent_VOICE_ASSISTANT_ERROR
+}
+
+func (x *VoiceAssistantEventResponse) GetData() []*VoiceAssistantEventData {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type VoiceAssistantExternalWakeWord struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	WakeWord         string                 `protobuf:"bytes,2,opt,name=wake_word,json=wakeWord,proto3" json:"wake_word,omitempty"`
+	TrainedLanguages []string               `protobuf:"bytes,3,rep,name=trained_languages,json=trainedLanguages,proto3" json:"trained_languages,omitempty"`
+	ModelType        string                 `protobuf:"bytes,4,opt,name=model_type,json=modelType,proto3" json:"model_type,omitempty"`
+	ModelSize        uint32                 `protobuf:"varint,5,opt,name=model_size,json=modelSize,proto3" json:"model_size,omitempty"`
+	ModelHash        string                 `protobuf:"bytes,6,opt,name=model_hash,json=modelHash,proto3" json:"model_hash,omitempty"`
+	Url              string                 `protobuf:"bytes,7,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantExternalWakeWord) Reset() {
+	*x = VoiceAssistantExternalWakeWord{}
+	mi := &file_esphome_api_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantExternalWakeWord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantExternalWakeWord) ProtoMessage() {}
+
+func (x *VoiceAssistantExternalWakeWord) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantExternalWakeWord.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantExternalWakeWord) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *VoiceAssistantExternalWakeWord) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *VoiceAssistantExternalWakeWord) GetWakeWord() string {
+	if x != nil {
+		return x.WakeWord
+	}
+	return ""
+}
+
+func (x *VoiceAssistantExternalWakeWord) GetTrainedLanguages() []string {
+	if x != nil {
+		return x.TrainedLanguages
+	}
+	return nil
+}
+
+func (x *VoiceAssistantExternalWakeWord) GetModelType() string {
+	if x != nil {
+		return x.ModelType
+	}
+	return ""
+}
+
+func (x *VoiceAssistantExternalWakeWord) GetModelSize() uint32 {
+	if x != nil {
+		return x.ModelSize
+	}
+	return 0
+}
+
+func (x *VoiceAssistantExternalWakeWord) GetModelHash() string {
+	if x != nil {
+		return x.ModelHash
+	}
+	return ""
+}
+
+func (x *VoiceAssistantExternalWakeWord) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+type VoiceAssistantRequest struct {
+	state                     protoimpl.MessageState       `protogen:"open.v1"`
+	Start                     bool                         `protobuf:"varint,1,opt,name=start,proto3" json:"start,omitempty"`
+	ConversationId            string                       `protobuf:"bytes,2,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	Flags                     uint32                       `protobuf:"varint,3,opt,name=flags,proto3" json:"flags,omitempty"`
+	AudioSettings             *VoiceAssistantAudioSettings `protobuf:"bytes,4,opt,name=audio_settings,json=audioSettings,proto3" json:"audio_settings,omitempty"`
+	WakeWordPhrase            string                       `protobuf:"bytes,5,opt,name=wake_word_phrase,json=wakeWordPhrase,proto3" json:"wake_word_phrase,omitempty"`
+	WakeWordId                string                       `protobuf:"bytes,6,opt,name=wake_word_id,json=wakeWordId,proto3" json:"wake_word_id,omitempty"`
+	WakeWordAudioBytes        uint32                       `protobuf:"varint,7,opt,name=wake_word_audio_bytes,json=wakeWordAudioBytes,proto3" json:"wake_word_audio_bytes,omitempty"`
+	WakeWordProbability       float32                      `protobuf:"fixed32,8,opt,name=wake_word_probability,json=wakeWordProbability,proto3" json:"wake_word_probability,omitempty"`
+	WakeWordProbabilityCutoff float32                      `protobuf:"fixed32,9,opt,name=wake_word_probability_cutoff,json=wakeWordProbabilityCutoff,proto3" json:"wake_word_probability_cutoff,omitempty"`
+	WakeWordAudioBytes2       uint32                       `protobuf:"varint,10,opt,name=wake_word_audio_bytes2,json=wakeWordAudioBytes2,proto3" json:"wake_word_audio_bytes2,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantRequest) Reset() {
+	*x = VoiceAssistantRequest{}
+	mi := &file_esphome_api_proto_msgTypes[73]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantRequest) ProtoMessage() {}
+
+func (x *VoiceAssistantRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[73]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantRequest.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantRequest) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{73}
+}
+
+func (x *VoiceAssistantRequest) GetStart() bool {
+	if x != nil {
+		return x.Start
+	}
+	return false
+}
+
+func (x *VoiceAssistantRequest) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *VoiceAssistantRequest) GetFlags() uint32 {
+	if x != nil {
+		return x.Flags
+	}
+	return 0
+}
+
+func (x *VoiceAssistantRequest) GetAudioSettings() *VoiceAssistantAudioSettings {
+	if x != nil {
+		return x.AudioSettings
+	}
+	return nil
+}
+
+func (x *VoiceAssistantRequest) GetWakeWordPhrase() string {
+	if x != nil {
+		return x.WakeWordPhrase
+	}
+	return ""
+}
+
+func (x *VoiceAssistantRequest) GetWakeWordId() string {
+	if x != nil {
+		return x.WakeWordId
+	}
+	return ""
+}
+
+func (x *VoiceAssistantRequest) GetWakeWordAudioBytes() uint32 {
+	if x != nil {
+		return x.WakeWordAudioBytes
+	}
+	return 0
+}
+
+func (x *VoiceAssistantRequest) GetWakeWordProbability() float32 {
+	if x != nil {
+		return x.WakeWordProbability
+	}
+	return 0
+}
+
+func (x *VoiceAssistantRequest) GetWakeWordProbabilityCutoff() float32 {
+	if x != nil {
+		return x.WakeWordProbabilityCutoff
+	}
+	return 0
+}
+
+func (x *VoiceAssistantRequest) GetWakeWordAudioBytes2() uint32 {
+	if x != nil {
+		return x.WakeWordAudioBytes2
+	}
+	return 0
+}
+
+type VoiceAssistantResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Port          uint32                 `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	Error         bool                   `protobuf:"varint,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantResponse) Reset() {
+	*x = VoiceAssistantResponse{}
+	mi := &file_esphome_api_proto_msgTypes[74]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantResponse) ProtoMessage() {}
+
+func (x *VoiceAssistantResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[74]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantResponse.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{74}
+}
+
+func (x *VoiceAssistantResponse) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *VoiceAssistantResponse) GetError() bool {
+	if x != nil {
+		return x.Error
+	}
+	return false
+}
+
+type VoiceAssistantSetConfiguration struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ActiveWakeWords []string               `protobuf:"bytes,1,rep,name=active_wake_words,json=activeWakeWords,proto3" json:"active_wake_words,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantSetConfiguration) Reset() {
+	*x = VoiceAssistantSetConfiguration{}
+	mi := &file_esphome_api_proto_msgTypes[75]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantSetConfiguration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantSetConfiguration) ProtoMessage() {}
+
+func (x *VoiceAssistantSetConfiguration) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[75]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantSetConfiguration.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantSetConfiguration) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{75}
+}
+
+func (x *VoiceAssistantSetConfiguration) GetActiveWakeWords() []string {
+	if x != nil {
+		return x.ActiveWakeWords
+	}
+	return nil
+}
+
+type VoiceAssistantTimerEventResponse struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	EventType     VoiceAssistantTimerEvent `protobuf:"varint,1,opt,name=event_type,json=eventType,proto3,enum=esphome.VoiceAssistantTimerEvent" json:"event_type,omitempty"`
+	TimerId       string                   `protobuf:"bytes,2,opt,name=timer_id,json=timerId,proto3" json:"timer_id,omitempty"`
+	Name          string                   `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	TotalSeconds  uint32                   `protobuf:"varint,4,opt,name=total_seconds,json=totalSeconds,proto3" json:"total_seconds,omitempty"`
+	SecondsLeft   uint32                   `protobuf:"varint,5,opt,name=seconds_left,json=secondsLeft,proto3" json:"seconds_left,omitempty"`
+	IsActive      bool                     `protobuf:"varint,6,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantTimerEventResponse) Reset() {
+	*x = VoiceAssistantTimerEventResponse{}
+	mi := &file_esphome_api_proto_msgTypes[76]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantTimerEventResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantTimerEventResponse) ProtoMessage() {}
+
+func (x *VoiceAssistantTimerEventResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[76]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantTimerEventResponse.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantTimerEventResponse) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{76}
+}
+
+func (x *VoiceAssistantTimerEventResponse) GetEventType() VoiceAssistantTimerEvent {
+	if x != nil {
+		return x.EventType
+	}
+	return VoiceAssistantTimerEvent_VOICE_ASSISTANT_TIMER_STARTED
+}
+
+func (x *VoiceAssistantTimerEventResponse) GetTimerId() string {
+	if x != nil {
+		return x.TimerId
+	}
+	return ""
+}
+
+func (x *VoiceAssistantTimerEventResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *VoiceAssistantTimerEventResponse) GetTotalSeconds() uint32 {
+	if x != nil {
+		return x.TotalSeconds
+	}
+	return 0
+}
+
+func (x *VoiceAssistantTimerEventResponse) GetSecondsLeft() uint32 {
+	if x != nil {
+		return x.SecondsLeft
+	}
+	return 0
+}
+
+func (x *VoiceAssistantTimerEventResponse) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+type VoiceAssistantWakeWord struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	WakeWord         string                 `protobuf:"bytes,2,opt,name=wake_word,json=wakeWord,proto3" json:"wake_word,omitempty"`
+	TrainedLanguages []string               `protobuf:"bytes,3,rep,name=trained_languages,json=trainedLanguages,proto3" json:"trained_languages,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *VoiceAssistantWakeWord) Reset() {
+	*x = VoiceAssistantWakeWord{}
+	mi := &file_esphome_api_proto_msgTypes[77]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VoiceAssistantWakeWord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VoiceAssistantWakeWord) ProtoMessage() {}
+
+func (x *VoiceAssistantWakeWord) ProtoReflect() protoreflect.Message {
+	mi := &file_esphome_api_proto_msgTypes[77]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VoiceAssistantWakeWord.ProtoReflect.Descriptor instead.
+func (*VoiceAssistantWakeWord) Descriptor() ([]byte, []int) {
+	return file_esphome_api_proto_rawDescGZIP(), []int{77}
+}
+
+func (x *VoiceAssistantWakeWord) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *VoiceAssistantWakeWord) GetWakeWord() string {
+	if x != nil {
+		return x.WakeWord
+	}
+	return ""
+}
+
+func (x *VoiceAssistantWakeWord) GetTrainedLanguages() []string {
+	if x != nil {
+		return x.TrainedLanguages
+	}
+	return nil
 }
 
 type WizardCapabilities struct {
@@ -4335,7 +6469,7 @@ type WizardCapabilities struct {
 
 func (x *WizardCapabilities) Reset() {
 	*x = WizardCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[53]
+	mi := &file_esphome_api_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4347,7 +6481,7 @@ func (x *WizardCapabilities) String() string {
 func (*WizardCapabilities) ProtoMessage() {}
 
 func (x *WizardCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[53]
+	mi := &file_esphome_api_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4360,7 +6494,7 @@ func (x *WizardCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WizardCapabilities.ProtoReflect.Descriptor instead.
 func (*WizardCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{53}
+	return file_esphome_api_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *WizardCapabilities) GetConfigured() bool {
@@ -4381,7 +6515,7 @@ type ZWaveProxyCapabilities struct {
 
 func (x *ZWaveProxyCapabilities) Reset() {
 	*x = ZWaveProxyCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[54]
+	mi := &file_esphome_api_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4393,7 +6527,7 @@ func (x *ZWaveProxyCapabilities) String() string {
 func (*ZWaveProxyCapabilities) ProtoMessage() {}
 
 func (x *ZWaveProxyCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[54]
+	mi := &file_esphome_api_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4406,7 +6540,7 @@ func (x *ZWaveProxyCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ZWaveProxyCapabilities.ProtoReflect.Descriptor instead.
 func (*ZWaveProxyCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{54}
+	return file_esphome_api_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *ZWaveProxyCapabilities) GetFeatureFlags() uint32 {
@@ -4442,7 +6576,15 @@ const file_esphome_api_proto_rawDesc = "" +
 	"macAddress\"E\n" +
 	"\x14ButtonCommandRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\aR\x03key\x12\x1b\n" +
-	"\tdevice_id\x18\x02 \x01(\rR\bdeviceId\"/\n" +
+	"\tdevice_id\x18\x02 \x01(\rR\bdeviceId\"D\n" +
+	"\x12CameraImageRequest\x12\x16\n" +
+	"\x06single\x18\x01 \x01(\bR\x06single\x12\x16\n" +
+	"\x06stream\x18\x02 \x01(\bR\x06stream\"l\n" +
+	"\x13CameraImageResponse\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\aR\x03key\x12\x12\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\x12\x12\n" +
+	"\x04done\x18\x03 \x01(\bR\x04done\x12\x1b\n" +
+	"\tdevice_id\x18\x04 \x01(\rR\bdeviceId\"/\n" +
 	"\x17CrashReportCapabilities\x12\x14\n" +
 	"\x05flags\x18\x01 \x01(\rR\x05flags\"\x1b\n" +
 	"\x19DeviceCapabilitiesRequest\"\xaf\x04\n" +
@@ -4569,8 +6711,40 @@ const file_esphome_api_proto_rawDesc = "" +
 	"\x13disabled_by_default\x18\x06 \x01(\bR\x11disabledByDefault\x12@\n" +
 	"\x0fentity_category\x18\a \x01(\x0e2\x17.esphome.EntityCategoryR\x0eentityCategory\x12!\n" +
 	"\fdevice_class\x18\b \x01(\tR\vdeviceClass\x12\x1b\n" +
-	"\tdevice_id\x18\t \x01(\rR\bdeviceIdJ\x04\b\x04\x10\x05\"\x1a\n" +
-	"\x18ListEntitiesDoneResponse\"\xd2\x03\n" +
+	"\tdevice_id\x18\t \x01(\rR\bdeviceIdJ\x04\b\x04\x10\x05\"\x88\x02\n" +
+	"\x1aListEntitiesCameraResponse\x12\x1b\n" +
+	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\aR\x03key\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12.\n" +
+	"\x13disabled_by_default\x18\x05 \x01(\bR\x11disabledByDefault\x12\x12\n" +
+	"\x04icon\x18\x06 \x01(\tR\x04icon\x12@\n" +
+	"\x0fentity_category\x18\a \x01(\x0e2\x17.esphome.EntityCategoryR\x0eentityCategory\x12\x1b\n" +
+	"\tdevice_id\x18\b \x01(\rR\bdeviceIdJ\x04\b\x04\x10\x05\"\x1a\n" +
+	"\x18ListEntitiesDoneResponse\"\xcb\x02\n" +
+	"\x19ListEntitiesEventResponse\x12\x1b\n" +
+	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\aR\x03key\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x12\n" +
+	"\x04icon\x18\x05 \x01(\tR\x04icon\x12.\n" +
+	"\x13disabled_by_default\x18\x06 \x01(\bR\x11disabledByDefault\x12@\n" +
+	"\x0fentity_category\x18\a \x01(\x0e2\x17.esphome.EntityCategoryR\x0eentityCategory\x12!\n" +
+	"\fdevice_class\x18\b \x01(\tR\vdeviceClass\x12\x1f\n" +
+	"\vevent_types\x18\t \x03(\tR\n" +
+	"eventTypes\x12\x1b\n" +
+	"\tdevice_id\x18\n" +
+	" \x01(\rR\bdeviceIdJ\x04\b\x04\x10\x05\"\xab\x03\n" +
+	"\x1fListEntitiesMediaPlayerResponse\x12\x1b\n" +
+	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\aR\x03key\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x12\n" +
+	"\x04icon\x18\x05 \x01(\tR\x04icon\x12.\n" +
+	"\x13disabled_by_default\x18\x06 \x01(\bR\x11disabledByDefault\x12@\n" +
+	"\x0fentity_category\x18\a \x01(\x0e2\x17.esphome.EntityCategoryR\x0eentityCategory\x12%\n" +
+	"\x0esupports_pause\x18\b \x01(\bR\rsupportsPause\x12P\n" +
+	"\x11supported_formats\x18\t \x03(\v2#.esphome.MediaPlayerSupportedFormatR\x10supportedFormats\x12\x1b\n" +
+	"\tdevice_id\x18\n" +
+	" \x01(\rR\bdeviceId\x12#\n" +
+	"\rfeature_flags\x18\v \x01(\rR\ffeatureFlagsJ\x04\b\x04\x10\x05\"\xd2\x03\n" +
 	"\x1aListEntitiesNumberResponse\x12\x1b\n" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\aR\x03key\x12\x12\n" +
@@ -4659,7 +6833,35 @@ const file_esphome_api_proto_rawDesc = "" +
 	"\x13disabled_by_default\x18\x06 \x01(\bR\x11disabledByDefault\x12@\n" +
 	"\x0fentity_category\x18\a \x01(\x0e2\x17.esphome.EntityCategoryR\x0eentityCategory\x12!\n" +
 	"\fdevice_class\x18\b \x01(\tR\vdeviceClass\x12\x1b\n" +
-	"\tdevice_id\x18\t \x01(\rR\bdeviceIdJ\x04\b\x04\x10\x05\"[\n" +
+	"\tdevice_id\x18\t \x01(\rR\bdeviceIdJ\x04\b\x04\x10\x05\"\xe9\x02\n" +
+	"\x19MediaPlayerCommandRequest\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\aR\x03key\x12\x1f\n" +
+	"\vhas_command\x18\x02 \x01(\bR\n" +
+	"hasCommand\x125\n" +
+	"\acommand\x18\x03 \x01(\x0e2\x1b.esphome.MediaPlayerCommandR\acommand\x12\x1d\n" +
+	"\n" +
+	"has_volume\x18\x04 \x01(\bR\thasVolume\x12\x16\n" +
+	"\x06volume\x18\x05 \x01(\x02R\x06volume\x12\"\n" +
+	"\rhas_media_url\x18\x06 \x01(\bR\vhasMediaUrl\x12\x1b\n" +
+	"\tmedia_url\x18\a \x01(\tR\bmediaUrl\x12)\n" +
+	"\x10has_announcement\x18\b \x01(\bR\x0fhasAnnouncement\x12\"\n" +
+	"\fannouncement\x18\t \x01(\bR\fannouncement\x12\x1b\n" +
+	"\tdevice_id\x18\n" +
+	" \x01(\rR\bdeviceId\"\xa8\x01\n" +
+	"\x18MediaPlayerStateResponse\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\aR\x03key\x12/\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x19.esphome.MediaPlayerStateR\x05state\x12\x16\n" +
+	"\x06volume\x18\x03 \x01(\x02R\x06volume\x12\x14\n" +
+	"\x05muted\x18\x04 \x01(\bR\x05muted\x12\x1b\n" +
+	"\tdevice_id\x18\x05 \x01(\rR\bdeviceId\"\xf2\x01\n" +
+	"\x1aMediaPlayerSupportedFormat\x12\x16\n" +
+	"\x06format\x18\x01 \x01(\tR\x06format\x12\x1f\n" +
+	"\vsample_rate\x18\x02 \x01(\rR\n" +
+	"sampleRate\x12!\n" +
+	"\fnum_channels\x18\x03 \x01(\rR\vnumChannels\x12;\n" +
+	"\apurpose\x18\x04 \x01(\x0e2!.esphome.MediaPlayerFormatPurposeR\apurpose\x12!\n" +
+	"\fsample_bytes\x18\x05 \x01(\rR\vsampleBytes\x12\x18\n" +
+	"\abitrate\x18\x06 \x01(\rR\abitrate\"[\n" +
 	"\x14NumberCommandRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\aR\x03key\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\x02R\x05state\x12\x1b\n" +
@@ -4682,7 +6884,11 @@ const file_esphome_api_proto_rawDesc = "" +
 	"\tdevice_id\x18\x04 \x01(\rR\bdeviceId\"X\n" +
 	"\x14SendspinCapabilities\x12#\n" +
 	"\rfeature_flags\x18\x01 \x01(\rR\ffeatureFlags\x12\x1b\n" +
-	"\tclient_id\x18\x02 \x01(\tR\bclientId\"\x7f\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"\x1d\n" +
+	"\x1bSendspinPairingTokenRequest\"q\n" +
+	"\x1cSendspinPairingTokenResponse\x12;\n" +
+	"\x06status\x18\x01 \x01(\x0e2#.esphome.SendspinPairingTokenStatusR\x06status\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"\x7f\n" +
 	"\x13SensorStateResponse\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\aR\x03key\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\x02R\x05state\x12#\n" +
@@ -4700,7 +6906,10 @@ const file_esphome_api_proto_rawDesc = "" +
 	"\x04once\x18\x03 \x01(\bR\x04once\"%\n" +
 	"#SubscribeHomeAssistantStatesRequest\"'\n" +
 	"%SubscribeHomeassistantServicesRequest\"\x18\n" +
-	"\x16SubscribeStatesRequest\"[\n" +
+	"\x16SubscribeStatesRequest\"T\n" +
+	"\x1eSubscribeVoiceAssistantRequest\x12\x1c\n" +
+	"\tsubscribe\x18\x01 \x01(\bR\tsubscribe\x12\x14\n" +
+	"\x05flags\x18\x02 \x01(\rR\x05flags\"[\n" +
 	"\x14SwitchCommandRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\aR\x03key\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\bR\x05state\x12\x1b\n" +
@@ -4723,9 +6932,78 @@ const file_esphome_api_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\aR\x03key\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x12#\n" +
 	"\rmissing_state\x18\x03 \x01(\bR\fmissingState\x12\x1b\n" +
-	"\tdevice_id\x18\x04 \x01(\rR\bdeviceId\"A\n" +
+	"\tdevice_id\x18\x04 \x01(\rR\bdeviceId\":\n" +
+	"\x1eVoiceAssistantAnnounceFinished\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xaf\x01\n" +
+	"\x1dVoiceAssistantAnnounceRequest\x12\x19\n" +
+	"\bmedia_id\x18\x01 \x01(\tR\amediaId\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x120\n" +
+	"\x14preannounce_media_id\x18\x03 \x01(\tR\x12preannounceMediaId\x12-\n" +
+	"\x12start_conversation\x18\x04 \x01(\bR\x11startConversation\"Q\n" +
+	"\x13VoiceAssistantAudio\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x10\n" +
+	"\x03end\x18\x02 \x01(\bR\x03end\x12\x14\n" +
+	"\x05data2\x18\x03 \x01(\fR\x05data2\"\x9f\x01\n" +
+	"\x1bVoiceAssistantAudioSettings\x126\n" +
+	"\x17noise_suppression_level\x18\x01 \x01(\rR\x15noiseSuppressionLevel\x12\x1b\n" +
+	"\tauto_gain\x18\x02 \x01(\rR\bautoGain\x12+\n" +
+	"\x11volume_multiplier\x18\x03 \x01(\x02R\x10volumeMultiplier\"A\n" +
 	"\x1aVoiceAssistantCapabilities\x12#\n" +
-	"\rfeature_flags\x18\x01 \x01(\rR\ffeatureFlags\"4\n" +
+	"\rfeature_flags\x18\x01 \x01(\rR\ffeatureFlags\"}\n" +
+	"\"VoiceAssistantConfigurationRequest\x12W\n" +
+	"\x13external_wake_words\x18\x01 \x03(\v2'.esphome.VoiceAssistantExternalWakeWordR\x11externalWakeWords\"\xd7\x01\n" +
+	"#VoiceAssistantConfigurationResponse\x12Q\n" +
+	"\x14available_wake_words\x18\x01 \x03(\v2\x1f.esphome.VoiceAssistantWakeWordR\x12availableWakeWords\x12*\n" +
+	"\x11active_wake_words\x18\x02 \x03(\tR\x0factiveWakeWords\x121\n" +
+	"\x15max_active_wake_words\x18\x03 \x01(\rR\x12maxActiveWakeWords\"C\n" +
+	"\x17VoiceAssistantEventData\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"\x90\x01\n" +
+	"\x1bVoiceAssistantEventResponse\x12;\n" +
+	"\n" +
+	"event_type\x18\x01 \x01(\x0e2\x1c.esphome.VoiceAssistantEventR\teventType\x124\n" +
+	"\x04data\x18\x02 \x03(\v2 .esphome.VoiceAssistantEventDataR\x04data\"\xe9\x01\n" +
+	"\x1eVoiceAssistantExternalWakeWord\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\twake_word\x18\x02 \x01(\tR\bwakeWord\x12+\n" +
+	"\x11trained_languages\x18\x03 \x03(\tR\x10trainedLanguages\x12\x1d\n" +
+	"\n" +
+	"model_type\x18\x04 \x01(\tR\tmodelType\x12\x1d\n" +
+	"\n" +
+	"model_size\x18\x05 \x01(\rR\tmodelSize\x12\x1d\n" +
+	"\n" +
+	"model_hash\x18\x06 \x01(\tR\tmodelHash\x12\x10\n" +
+	"\x03url\x18\a \x01(\tR\x03url\"\xe2\x03\n" +
+	"\x15VoiceAssistantRequest\x12\x14\n" +
+	"\x05start\x18\x01 \x01(\bR\x05start\x12'\n" +
+	"\x0fconversation_id\x18\x02 \x01(\tR\x0econversationId\x12\x14\n" +
+	"\x05flags\x18\x03 \x01(\rR\x05flags\x12K\n" +
+	"\x0eaudio_settings\x18\x04 \x01(\v2$.esphome.VoiceAssistantAudioSettingsR\raudioSettings\x12(\n" +
+	"\x10wake_word_phrase\x18\x05 \x01(\tR\x0ewakeWordPhrase\x12 \n" +
+	"\fwake_word_id\x18\x06 \x01(\tR\n" +
+	"wakeWordId\x121\n" +
+	"\x15wake_word_audio_bytes\x18\a \x01(\rR\x12wakeWordAudioBytes\x122\n" +
+	"\x15wake_word_probability\x18\b \x01(\x02R\x13wakeWordProbability\x12?\n" +
+	"\x1cwake_word_probability_cutoff\x18\t \x01(\x02R\x19wakeWordProbabilityCutoff\x123\n" +
+	"\x16wake_word_audio_bytes2\x18\n" +
+	" \x01(\rR\x13wakeWordAudioBytes2\"B\n" +
+	"\x16VoiceAssistantResponse\x12\x12\n" +
+	"\x04port\x18\x01 \x01(\rR\x04port\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\bR\x05error\"L\n" +
+	"\x1eVoiceAssistantSetConfiguration\x12*\n" +
+	"\x11active_wake_words\x18\x01 \x03(\tR\x0factiveWakeWords\"\xf8\x01\n" +
+	" VoiceAssistantTimerEventResponse\x12@\n" +
+	"\n" +
+	"event_type\x18\x01 \x01(\x0e2!.esphome.VoiceAssistantTimerEventR\teventType\x12\x19\n" +
+	"\btimer_id\x18\x02 \x01(\tR\atimerId\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12#\n" +
+	"\rtotal_seconds\x18\x04 \x01(\rR\ftotalSeconds\x12!\n" +
+	"\fseconds_left\x18\x05 \x01(\rR\vsecondsLeft\x12\x1b\n" +
+	"\tis_active\x18\x06 \x01(\bR\bisActive\"r\n" +
+	"\x16VoiceAssistantWakeWord\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\twake_word\x18\x02 \x01(\tR\bwakeWord\x12+\n" +
+	"\x11trained_languages\x18\x03 \x03(\tR\x10trainedLanguages\"4\n" +
 	"\x12WizardCapabilities\x12\x1e\n" +
 	"\n" +
 	"configured\x18\x01 \x01(\bR\n" +
@@ -4742,12 +7020,45 @@ const file_esphome_api_proto_rawDesc = "" +
 	"\x0eEntityCategory\x12\x18\n" +
 	"\x14ENTITY_CATEGORY_NONE\x10\x00\x12\x1a\n" +
 	"\x16ENTITY_CATEGORY_CONFIG\x10\x01\x12\x1e\n" +
-	"\x1aENTITY_CATEGORY_DIAGNOSTIC\x10\x02*O\n" +
+	"\x1aENTITY_CATEGORY_DIAGNOSTIC\x10\x02*\xf7\x03\n" +
+	"\x12MediaPlayerCommand\x12\x1d\n" +
+	"\x19MEDIA_PLAYER_COMMAND_PLAY\x10\x00\x12\x1e\n" +
+	"\x1aMEDIA_PLAYER_COMMAND_PAUSE\x10\x01\x12\x1d\n" +
+	"\x19MEDIA_PLAYER_COMMAND_STOP\x10\x02\x12\x1d\n" +
+	"\x19MEDIA_PLAYER_COMMAND_MUTE\x10\x03\x12\x1f\n" +
+	"\x1bMEDIA_PLAYER_COMMAND_UNMUTE\x10\x04\x12\x1f\n" +
+	"\x1bMEDIA_PLAYER_COMMAND_TOGGLE\x10\x05\x12\"\n" +
+	"\x1eMEDIA_PLAYER_COMMAND_VOLUME_UP\x10\x06\x12$\n" +
+	" MEDIA_PLAYER_COMMAND_VOLUME_DOWN\x10\a\x12 \n" +
+	"\x1cMEDIA_PLAYER_COMMAND_ENQUEUE\x10\b\x12#\n" +
+	"\x1fMEDIA_PLAYER_COMMAND_REPEAT_ONE\x10\t\x12#\n" +
+	"\x1fMEDIA_PLAYER_COMMAND_REPEAT_OFF\x10\n" +
+	"\x12'\n" +
+	"#MEDIA_PLAYER_COMMAND_CLEAR_PLAYLIST\x10\v\x12 \n" +
+	"\x1cMEDIA_PLAYER_COMMAND_TURN_ON\x10\f\x12!\n" +
+	"\x1dMEDIA_PLAYER_COMMAND_TURN_OFF\x10\r*q\n" +
+	"\x18MediaPlayerFormatPurpose\x12'\n" +
+	"#MEDIA_PLAYER_FORMAT_PURPOSE_DEFAULT\x10\x00\x12,\n" +
+	"(MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT\x10\x01*\xe5\x01\n" +
+	"\x10MediaPlayerState\x12\x1b\n" +
+	"\x17MEDIA_PLAYER_STATE_NONE\x10\x00\x12\x1b\n" +
+	"\x17MEDIA_PLAYER_STATE_IDLE\x10\x01\x12\x1e\n" +
+	"\x1aMEDIA_PLAYER_STATE_PLAYING\x10\x02\x12\x1d\n" +
+	"\x19MEDIA_PLAYER_STATE_PAUSED\x10\x03\x12!\n" +
+	"\x1dMEDIA_PLAYER_STATE_ANNOUNCING\x10\x04\x12\x1a\n" +
+	"\x16MEDIA_PLAYER_STATE_OFF\x10\x05\x12\x19\n" +
+	"\x15MEDIA_PLAYER_STATE_ON\x10\x06*O\n" +
 	"\n" +
 	"NumberMode\x12\x14\n" +
 	"\x10NUMBER_MODE_AUTO\x10\x00\x12\x13\n" +
 	"\x0fNUMBER_MODE_BOX\x10\x01\x12\x16\n" +
-	"\x12NUMBER_MODE_SLIDER\x10\x02*Y\n" +
+	"\x12NUMBER_MODE_SLIDER\x10\x02*\xfc\x01\n" +
+	"\x1aSendspinPairingTokenStatus\x12+\n" +
+	"'SENDSPIN_PAIRING_TOKEN_STATUS_NOT_READY\x10\x00\x12$\n" +
+	" SENDSPIN_PAIRING_TOKEN_STATUS_OK\x10\x01\x125\n" +
+	"1SENDSPIN_PAIRING_TOKEN_STATUS_ENCRYPTION_REQUIRED\x10\x02\x12*\n" +
+	"&SENDSPIN_PAIRING_TOKEN_STATUS_DISABLED\x10\x03\x12(\n" +
+	"$SENDSPIN_PAIRING_TOKEN_STATUS_FAILED\x10\x04*Y\n" +
 	"\x13SensorLastResetType\x12\x13\n" +
 	"\x0fLAST_RESET_NONE\x10\x00\x12\x14\n" +
 	"\x10LAST_RESET_NEVER\x10\x01\x12\x13\n" +
@@ -4779,7 +7090,31 @@ const file_esphome_api_proto_rawDesc = "" +
 	"\x18SUPPORTS_RESPONSE_STATUS\x10d*6\n" +
 	"\bTextMode\x12\x12\n" +
 	"\x0eTEXT_MODE_TEXT\x10\x00\x12\x16\n" +
-	"\x12TEXT_MODE_PASSWORD\x10\x01BIZGgithub.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome;esphomeb\x06proto3"
+	"\x12TEXT_MODE_PASSWORD\x10\x01*\xc9\x04\n" +
+	"\x13VoiceAssistantEvent\x12\x19\n" +
+	"\x15VOICE_ASSISTANT_ERROR\x10\x00\x12\x1d\n" +
+	"\x19VOICE_ASSISTANT_RUN_START\x10\x01\x12\x1b\n" +
+	"\x17VOICE_ASSISTANT_RUN_END\x10\x02\x12\x1d\n" +
+	"\x19VOICE_ASSISTANT_STT_START\x10\x03\x12\x1b\n" +
+	"\x17VOICE_ASSISTANT_STT_END\x10\x04\x12 \n" +
+	"\x1cVOICE_ASSISTANT_INTENT_START\x10\x05\x12\x1e\n" +
+	"\x1aVOICE_ASSISTANT_INTENT_END\x10\x06\x12\x1d\n" +
+	"\x19VOICE_ASSISTANT_TTS_START\x10\a\x12\x1b\n" +
+	"\x17VOICE_ASSISTANT_TTS_END\x10\b\x12#\n" +
+	"\x1fVOICE_ASSISTANT_WAKE_WORD_START\x10\t\x12!\n" +
+	"\x1dVOICE_ASSISTANT_WAKE_WORD_END\x10\n" +
+	"\x12!\n" +
+	"\x1dVOICE_ASSISTANT_STT_VAD_START\x10\v\x12\x1f\n" +
+	"\x1bVOICE_ASSISTANT_STT_VAD_END\x10\f\x12&\n" +
+	"\"VOICE_ASSISTANT_WAKE_WORD_REJECTED\x10\r\x12$\n" +
+	" VOICE_ASSISTANT_TTS_STREAM_START\x10b\x12\"\n" +
+	"\x1eVOICE_ASSISTANT_TTS_STREAM_END\x10c\x12#\n" +
+	"\x1fVOICE_ASSISTANT_INTENT_PROGRESS\x10d*\xa9\x01\n" +
+	"\x18VoiceAssistantTimerEvent\x12!\n" +
+	"\x1dVOICE_ASSISTANT_TIMER_STARTED\x10\x00\x12!\n" +
+	"\x1dVOICE_ASSISTANT_TIMER_UPDATED\x10\x01\x12#\n" +
+	"\x1fVOICE_ASSISTANT_TIMER_CANCELLED\x10\x02\x12\"\n" +
+	"\x1eVOICE_ASSISTANT_TIMER_FINISHED\x10\x03BIZGgithub.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome;esphomeb\x06proto3"
 
 var (
 	file_esphome_api_proto_rawDescOnce sync.Once
@@ -4793,115 +7128,160 @@ func file_esphome_api_proto_rawDescGZIP() []byte {
 	return file_esphome_api_proto_rawDescData
 }
 
-var file_esphome_api_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_esphome_api_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
+var file_esphome_api_proto_enumTypes = make([]protoimpl.EnumInfo, 16)
+var file_esphome_api_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
 var file_esphome_api_proto_goTypes = []any{
 	(DeviceRelation)(0),                           // 0: esphome.DeviceRelation
 	(DisconnectReason)(0),                         // 1: esphome.DisconnectReason
 	(EntityCategory)(0),                           // 2: esphome.EntityCategory
-	(NumberMode)(0),                               // 3: esphome.NumberMode
-	(SensorLastResetType)(0),                      // 4: esphome.SensorLastResetType
-	(SensorStateClass)(0),                         // 5: esphome.SensorStateClass
-	(SerialProxyPortType)(0),                      // 6: esphome.SerialProxyPortType
-	(ServiceArgType)(0),                           // 7: esphome.ServiceArgType
-	(SupportsResponseType)(0),                     // 8: esphome.SupportsResponseType
-	(TextMode)(0),                                 // 9: esphome.TextMode
-	(*AreaInfo)(nil),                              // 10: esphome.AreaInfo
-	(*BinarySensorStateResponse)(nil),             // 11: esphome.BinarySensorStateResponse
-	(*BluetoothProxyCapabilities)(nil),            // 12: esphome.BluetoothProxyCapabilities
-	(*ButtonCommandRequest)(nil),                  // 13: esphome.ButtonCommandRequest
-	(*CrashReportCapabilities)(nil),               // 14: esphome.CrashReportCapabilities
-	(*DeviceCapabilitiesRequest)(nil),             // 15: esphome.DeviceCapabilitiesRequest
-	(*DeviceCapabilitiesResponse)(nil),            // 16: esphome.DeviceCapabilitiesResponse
-	(*DeviceInfo)(nil),                            // 17: esphome.DeviceInfo
-	(*DeviceInfoRequest)(nil),                     // 18: esphome.DeviceInfoRequest
-	(*DeviceInfoResponse)(nil),                    // 19: esphome.DeviceInfoResponse
-	(*DeviceWizardRequest)(nil),                   // 20: esphome.DeviceWizardRequest
-	(*DisconnectRequest)(nil),                     // 21: esphome.DisconnectRequest
-	(*DisconnectResponse)(nil),                    // 22: esphome.DisconnectResponse
-	(*ExecuteServiceArgument)(nil),                // 23: esphome.ExecuteServiceArgument
-	(*ExecuteServiceRequest)(nil),                 // 24: esphome.ExecuteServiceRequest
-	(*ExecuteServiceResponse)(nil),                // 25: esphome.ExecuteServiceResponse
-	(*HelloRequest)(nil),                          // 26: esphome.HelloRequest
-	(*HelloResponse)(nil),                         // 27: esphome.HelloResponse
-	(*HomeAssistantStateResponse)(nil),            // 28: esphome.HomeAssistantStateResponse
-	(*HomeassistantActionRequest)(nil),            // 29: esphome.HomeassistantActionRequest
-	(*HomeassistantServiceMap)(nil),               // 30: esphome.HomeassistantServiceMap
-	(*ListEntitiesBinarySensorResponse)(nil),      // 31: esphome.ListEntitiesBinarySensorResponse
-	(*ListEntitiesButtonResponse)(nil),            // 32: esphome.ListEntitiesButtonResponse
-	(*ListEntitiesDoneResponse)(nil),              // 33: esphome.ListEntitiesDoneResponse
-	(*ListEntitiesNumberResponse)(nil),            // 34: esphome.ListEntitiesNumberResponse
-	(*ListEntitiesRequest)(nil),                   // 35: esphome.ListEntitiesRequest
-	(*ListEntitiesSelectResponse)(nil),            // 36: esphome.ListEntitiesSelectResponse
-	(*ListEntitiesSensorResponse)(nil),            // 37: esphome.ListEntitiesSensorResponse
-	(*ListEntitiesServicesArgument)(nil),          // 38: esphome.ListEntitiesServicesArgument
-	(*ListEntitiesServicesResponse)(nil),          // 39: esphome.ListEntitiesServicesResponse
-	(*ListEntitiesSwitchResponse)(nil),            // 40: esphome.ListEntitiesSwitchResponse
-	(*ListEntitiesTextResponse)(nil),              // 41: esphome.ListEntitiesTextResponse
-	(*ListEntitiesTextSensorResponse)(nil),        // 42: esphome.ListEntitiesTextSensorResponse
-	(*NumberCommandRequest)(nil),                  // 43: esphome.NumberCommandRequest
-	(*NumberStateResponse)(nil),                   // 44: esphome.NumberStateResponse
-	(*PingRequest)(nil),                           // 45: esphome.PingRequest
-	(*PingResponse)(nil),                          // 46: esphome.PingResponse
-	(*SelectCommandRequest)(nil),                  // 47: esphome.SelectCommandRequest
-	(*SelectStateResponse)(nil),                   // 48: esphome.SelectStateResponse
-	(*SendspinCapabilities)(nil),                  // 49: esphome.SendspinCapabilities
-	(*SensorStateResponse)(nil),                   // 50: esphome.SensorStateResponse
-	(*SerialProxyInfo)(nil),                       // 51: esphome.SerialProxyInfo
-	(*StoreYamlCapabilities)(nil),                 // 52: esphome.StoreYamlCapabilities
-	(*SubscribeHomeAssistantStateResponse)(nil),   // 53: esphome.SubscribeHomeAssistantStateResponse
-	(*SubscribeHomeAssistantStatesRequest)(nil),   // 54: esphome.SubscribeHomeAssistantStatesRequest
-	(*SubscribeHomeassistantServicesRequest)(nil), // 55: esphome.SubscribeHomeassistantServicesRequest
-	(*SubscribeStatesRequest)(nil),                // 56: esphome.SubscribeStatesRequest
-	(*SwitchCommandRequest)(nil),                  // 57: esphome.SwitchCommandRequest
-	(*SwitchStateResponse)(nil),                   // 58: esphome.SwitchStateResponse
-	(*TextCommandRequest)(nil),                    // 59: esphome.TextCommandRequest
-	(*TextSensorStateResponse)(nil),               // 60: esphome.TextSensorStateResponse
-	(*TextStateResponse)(nil),                     // 61: esphome.TextStateResponse
-	(*VoiceAssistantCapabilities)(nil),            // 62: esphome.VoiceAssistantCapabilities
-	(*WizardCapabilities)(nil),                    // 63: esphome.WizardCapabilities
-	(*ZWaveProxyCapabilities)(nil),                // 64: esphome.ZWaveProxyCapabilities
+	(MediaPlayerCommand)(0),                       // 3: esphome.MediaPlayerCommand
+	(MediaPlayerFormatPurpose)(0),                 // 4: esphome.MediaPlayerFormatPurpose
+	(MediaPlayerState)(0),                         // 5: esphome.MediaPlayerState
+	(NumberMode)(0),                               // 6: esphome.NumberMode
+	(SendspinPairingTokenStatus)(0),               // 7: esphome.SendspinPairingTokenStatus
+	(SensorLastResetType)(0),                      // 8: esphome.SensorLastResetType
+	(SensorStateClass)(0),                         // 9: esphome.SensorStateClass
+	(SerialProxyPortType)(0),                      // 10: esphome.SerialProxyPortType
+	(ServiceArgType)(0),                           // 11: esphome.ServiceArgType
+	(SupportsResponseType)(0),                     // 12: esphome.SupportsResponseType
+	(TextMode)(0),                                 // 13: esphome.TextMode
+	(VoiceAssistantEvent)(0),                      // 14: esphome.VoiceAssistantEvent
+	(VoiceAssistantTimerEvent)(0),                 // 15: esphome.VoiceAssistantTimerEvent
+	(*AreaInfo)(nil),                              // 16: esphome.AreaInfo
+	(*BinarySensorStateResponse)(nil),             // 17: esphome.BinarySensorStateResponse
+	(*BluetoothProxyCapabilities)(nil),            // 18: esphome.BluetoothProxyCapabilities
+	(*ButtonCommandRequest)(nil),                  // 19: esphome.ButtonCommandRequest
+	(*CameraImageRequest)(nil),                    // 20: esphome.CameraImageRequest
+	(*CameraImageResponse)(nil),                   // 21: esphome.CameraImageResponse
+	(*CrashReportCapabilities)(nil),               // 22: esphome.CrashReportCapabilities
+	(*DeviceCapabilitiesRequest)(nil),             // 23: esphome.DeviceCapabilitiesRequest
+	(*DeviceCapabilitiesResponse)(nil),            // 24: esphome.DeviceCapabilitiesResponse
+	(*DeviceInfo)(nil),                            // 25: esphome.DeviceInfo
+	(*DeviceInfoRequest)(nil),                     // 26: esphome.DeviceInfoRequest
+	(*DeviceInfoResponse)(nil),                    // 27: esphome.DeviceInfoResponse
+	(*DeviceWizardRequest)(nil),                   // 28: esphome.DeviceWizardRequest
+	(*DisconnectRequest)(nil),                     // 29: esphome.DisconnectRequest
+	(*DisconnectResponse)(nil),                    // 30: esphome.DisconnectResponse
+	(*ExecuteServiceArgument)(nil),                // 31: esphome.ExecuteServiceArgument
+	(*ExecuteServiceRequest)(nil),                 // 32: esphome.ExecuteServiceRequest
+	(*ExecuteServiceResponse)(nil),                // 33: esphome.ExecuteServiceResponse
+	(*HelloRequest)(nil),                          // 34: esphome.HelloRequest
+	(*HelloResponse)(nil),                         // 35: esphome.HelloResponse
+	(*HomeAssistantStateResponse)(nil),            // 36: esphome.HomeAssistantStateResponse
+	(*HomeassistantActionRequest)(nil),            // 37: esphome.HomeassistantActionRequest
+	(*HomeassistantServiceMap)(nil),               // 38: esphome.HomeassistantServiceMap
+	(*ListEntitiesBinarySensorResponse)(nil),      // 39: esphome.ListEntitiesBinarySensorResponse
+	(*ListEntitiesButtonResponse)(nil),            // 40: esphome.ListEntitiesButtonResponse
+	(*ListEntitiesCameraResponse)(nil),            // 41: esphome.ListEntitiesCameraResponse
+	(*ListEntitiesDoneResponse)(nil),              // 42: esphome.ListEntitiesDoneResponse
+	(*ListEntitiesEventResponse)(nil),             // 43: esphome.ListEntitiesEventResponse
+	(*ListEntitiesMediaPlayerResponse)(nil),       // 44: esphome.ListEntitiesMediaPlayerResponse
+	(*ListEntitiesNumberResponse)(nil),            // 45: esphome.ListEntitiesNumberResponse
+	(*ListEntitiesRequest)(nil),                   // 46: esphome.ListEntitiesRequest
+	(*ListEntitiesSelectResponse)(nil),            // 47: esphome.ListEntitiesSelectResponse
+	(*ListEntitiesSensorResponse)(nil),            // 48: esphome.ListEntitiesSensorResponse
+	(*ListEntitiesServicesArgument)(nil),          // 49: esphome.ListEntitiesServicesArgument
+	(*ListEntitiesServicesResponse)(nil),          // 50: esphome.ListEntitiesServicesResponse
+	(*ListEntitiesSwitchResponse)(nil),            // 51: esphome.ListEntitiesSwitchResponse
+	(*ListEntitiesTextResponse)(nil),              // 52: esphome.ListEntitiesTextResponse
+	(*ListEntitiesTextSensorResponse)(nil),        // 53: esphome.ListEntitiesTextSensorResponse
+	(*MediaPlayerCommandRequest)(nil),             // 54: esphome.MediaPlayerCommandRequest
+	(*MediaPlayerStateResponse)(nil),              // 55: esphome.MediaPlayerStateResponse
+	(*MediaPlayerSupportedFormat)(nil),            // 56: esphome.MediaPlayerSupportedFormat
+	(*NumberCommandRequest)(nil),                  // 57: esphome.NumberCommandRequest
+	(*NumberStateResponse)(nil),                   // 58: esphome.NumberStateResponse
+	(*PingRequest)(nil),                           // 59: esphome.PingRequest
+	(*PingResponse)(nil),                          // 60: esphome.PingResponse
+	(*SelectCommandRequest)(nil),                  // 61: esphome.SelectCommandRequest
+	(*SelectStateResponse)(nil),                   // 62: esphome.SelectStateResponse
+	(*SendspinCapabilities)(nil),                  // 63: esphome.SendspinCapabilities
+	(*SendspinPairingTokenRequest)(nil),           // 64: esphome.SendspinPairingTokenRequest
+	(*SendspinPairingTokenResponse)(nil),          // 65: esphome.SendspinPairingTokenResponse
+	(*SensorStateResponse)(nil),                   // 66: esphome.SensorStateResponse
+	(*SerialProxyInfo)(nil),                       // 67: esphome.SerialProxyInfo
+	(*StoreYamlCapabilities)(nil),                 // 68: esphome.StoreYamlCapabilities
+	(*SubscribeHomeAssistantStateResponse)(nil),   // 69: esphome.SubscribeHomeAssistantStateResponse
+	(*SubscribeHomeAssistantStatesRequest)(nil),   // 70: esphome.SubscribeHomeAssistantStatesRequest
+	(*SubscribeHomeassistantServicesRequest)(nil), // 71: esphome.SubscribeHomeassistantServicesRequest
+	(*SubscribeStatesRequest)(nil),                // 72: esphome.SubscribeStatesRequest
+	(*SubscribeVoiceAssistantRequest)(nil),        // 73: esphome.SubscribeVoiceAssistantRequest
+	(*SwitchCommandRequest)(nil),                  // 74: esphome.SwitchCommandRequest
+	(*SwitchStateResponse)(nil),                   // 75: esphome.SwitchStateResponse
+	(*TextCommandRequest)(nil),                    // 76: esphome.TextCommandRequest
+	(*TextSensorStateResponse)(nil),               // 77: esphome.TextSensorStateResponse
+	(*TextStateResponse)(nil),                     // 78: esphome.TextStateResponse
+	(*VoiceAssistantAnnounceFinished)(nil),        // 79: esphome.VoiceAssistantAnnounceFinished
+	(*VoiceAssistantAnnounceRequest)(nil),         // 80: esphome.VoiceAssistantAnnounceRequest
+	(*VoiceAssistantAudio)(nil),                   // 81: esphome.VoiceAssistantAudio
+	(*VoiceAssistantAudioSettings)(nil),           // 82: esphome.VoiceAssistantAudioSettings
+	(*VoiceAssistantCapabilities)(nil),            // 83: esphome.VoiceAssistantCapabilities
+	(*VoiceAssistantConfigurationRequest)(nil),    // 84: esphome.VoiceAssistantConfigurationRequest
+	(*VoiceAssistantConfigurationResponse)(nil),   // 85: esphome.VoiceAssistantConfigurationResponse
+	(*VoiceAssistantEventData)(nil),               // 86: esphome.VoiceAssistantEventData
+	(*VoiceAssistantEventResponse)(nil),           // 87: esphome.VoiceAssistantEventResponse
+	(*VoiceAssistantExternalWakeWord)(nil),        // 88: esphome.VoiceAssistantExternalWakeWord
+	(*VoiceAssistantRequest)(nil),                 // 89: esphome.VoiceAssistantRequest
+	(*VoiceAssistantResponse)(nil),                // 90: esphome.VoiceAssistantResponse
+	(*VoiceAssistantSetConfiguration)(nil),        // 91: esphome.VoiceAssistantSetConfiguration
+	(*VoiceAssistantTimerEventResponse)(nil),      // 92: esphome.VoiceAssistantTimerEventResponse
+	(*VoiceAssistantWakeWord)(nil),                // 93: esphome.VoiceAssistantWakeWord
+	(*WizardCapabilities)(nil),                    // 94: esphome.WizardCapabilities
+	(*ZWaveProxyCapabilities)(nil),                // 95: esphome.ZWaveProxyCapabilities
 }
 var file_esphome_api_proto_depIdxs = []int32{
-	12, // 0: esphome.DeviceCapabilitiesResponse.bluetooth_proxy:type_name -> esphome.BluetoothProxyCapabilities
-	62, // 1: esphome.DeviceCapabilitiesResponse.voice_assistant:type_name -> esphome.VoiceAssistantCapabilities
-	64, // 2: esphome.DeviceCapabilitiesResponse.zwave_proxy:type_name -> esphome.ZWaveProxyCapabilities
-	51, // 3: esphome.DeviceCapabilitiesResponse.serial_proxies:type_name -> esphome.SerialProxyInfo
-	63, // 4: esphome.DeviceCapabilitiesResponse.wizard:type_name -> esphome.WizardCapabilities
-	49, // 5: esphome.DeviceCapabilitiesResponse.sendspin:type_name -> esphome.SendspinCapabilities
-	52, // 6: esphome.DeviceCapabilitiesResponse.store_yaml:type_name -> esphome.StoreYamlCapabilities
-	14, // 7: esphome.DeviceCapabilitiesResponse.crash_report:type_name -> esphome.CrashReportCapabilities
+	18, // 0: esphome.DeviceCapabilitiesResponse.bluetooth_proxy:type_name -> esphome.BluetoothProxyCapabilities
+	83, // 1: esphome.DeviceCapabilitiesResponse.voice_assistant:type_name -> esphome.VoiceAssistantCapabilities
+	95, // 2: esphome.DeviceCapabilitiesResponse.zwave_proxy:type_name -> esphome.ZWaveProxyCapabilities
+	67, // 3: esphome.DeviceCapabilitiesResponse.serial_proxies:type_name -> esphome.SerialProxyInfo
+	94, // 4: esphome.DeviceCapabilitiesResponse.wizard:type_name -> esphome.WizardCapabilities
+	63, // 5: esphome.DeviceCapabilitiesResponse.sendspin:type_name -> esphome.SendspinCapabilities
+	68, // 6: esphome.DeviceCapabilitiesResponse.store_yaml:type_name -> esphome.StoreYamlCapabilities
+	22, // 7: esphome.DeviceCapabilitiesResponse.crash_report:type_name -> esphome.CrashReportCapabilities
 	0,  // 8: esphome.DeviceInfo.relation:type_name -> esphome.DeviceRelation
-	17, // 9: esphome.DeviceInfoResponse.devices:type_name -> esphome.DeviceInfo
-	10, // 10: esphome.DeviceInfoResponse.areas:type_name -> esphome.AreaInfo
-	10, // 11: esphome.DeviceInfoResponse.area:type_name -> esphome.AreaInfo
-	51, // 12: esphome.DeviceInfoResponse.serial_proxies:type_name -> esphome.SerialProxyInfo
+	25, // 9: esphome.DeviceInfoResponse.devices:type_name -> esphome.DeviceInfo
+	16, // 10: esphome.DeviceInfoResponse.areas:type_name -> esphome.AreaInfo
+	16, // 11: esphome.DeviceInfoResponse.area:type_name -> esphome.AreaInfo
+	67, // 12: esphome.DeviceInfoResponse.serial_proxies:type_name -> esphome.SerialProxyInfo
 	1,  // 13: esphome.DisconnectRequest.reason:type_name -> esphome.DisconnectReason
-	23, // 14: esphome.ExecuteServiceRequest.args:type_name -> esphome.ExecuteServiceArgument
-	30, // 15: esphome.HomeassistantActionRequest.data:type_name -> esphome.HomeassistantServiceMap
-	30, // 16: esphome.HomeassistantActionRequest.data_template:type_name -> esphome.HomeassistantServiceMap
-	30, // 17: esphome.HomeassistantActionRequest.variables:type_name -> esphome.HomeassistantServiceMap
+	31, // 14: esphome.ExecuteServiceRequest.args:type_name -> esphome.ExecuteServiceArgument
+	38, // 15: esphome.HomeassistantActionRequest.data:type_name -> esphome.HomeassistantServiceMap
+	38, // 16: esphome.HomeassistantActionRequest.data_template:type_name -> esphome.HomeassistantServiceMap
+	38, // 17: esphome.HomeassistantActionRequest.variables:type_name -> esphome.HomeassistantServiceMap
 	2,  // 18: esphome.ListEntitiesBinarySensorResponse.entity_category:type_name -> esphome.EntityCategory
 	2,  // 19: esphome.ListEntitiesButtonResponse.entity_category:type_name -> esphome.EntityCategory
-	2,  // 20: esphome.ListEntitiesNumberResponse.entity_category:type_name -> esphome.EntityCategory
-	3,  // 21: esphome.ListEntitiesNumberResponse.mode:type_name -> esphome.NumberMode
-	2,  // 22: esphome.ListEntitiesSelectResponse.entity_category:type_name -> esphome.EntityCategory
-	5,  // 23: esphome.ListEntitiesSensorResponse.state_class:type_name -> esphome.SensorStateClass
-	4,  // 24: esphome.ListEntitiesSensorResponse.legacy_last_reset_type:type_name -> esphome.SensorLastResetType
-	2,  // 25: esphome.ListEntitiesSensorResponse.entity_category:type_name -> esphome.EntityCategory
-	7,  // 26: esphome.ListEntitiesServicesArgument.type:type_name -> esphome.ServiceArgType
-	38, // 27: esphome.ListEntitiesServicesResponse.args:type_name -> esphome.ListEntitiesServicesArgument
-	8,  // 28: esphome.ListEntitiesServicesResponse.supports_response:type_name -> esphome.SupportsResponseType
-	2,  // 29: esphome.ListEntitiesSwitchResponse.entity_category:type_name -> esphome.EntityCategory
-	2,  // 30: esphome.ListEntitiesTextResponse.entity_category:type_name -> esphome.EntityCategory
-	9,  // 31: esphome.ListEntitiesTextResponse.mode:type_name -> esphome.TextMode
-	2,  // 32: esphome.ListEntitiesTextSensorResponse.entity_category:type_name -> esphome.EntityCategory
-	6,  // 33: esphome.SerialProxyInfo.port_type:type_name -> esphome.SerialProxyPortType
-	34, // [34:34] is the sub-list for method output_type
-	34, // [34:34] is the sub-list for method input_type
-	34, // [34:34] is the sub-list for extension type_name
-	34, // [34:34] is the sub-list for extension extendee
-	0,  // [0:34] is the sub-list for field type_name
+	2,  // 20: esphome.ListEntitiesCameraResponse.entity_category:type_name -> esphome.EntityCategory
+	2,  // 21: esphome.ListEntitiesEventResponse.entity_category:type_name -> esphome.EntityCategory
+	2,  // 22: esphome.ListEntitiesMediaPlayerResponse.entity_category:type_name -> esphome.EntityCategory
+	56, // 23: esphome.ListEntitiesMediaPlayerResponse.supported_formats:type_name -> esphome.MediaPlayerSupportedFormat
+	2,  // 24: esphome.ListEntitiesNumberResponse.entity_category:type_name -> esphome.EntityCategory
+	6,  // 25: esphome.ListEntitiesNumberResponse.mode:type_name -> esphome.NumberMode
+	2,  // 26: esphome.ListEntitiesSelectResponse.entity_category:type_name -> esphome.EntityCategory
+	9,  // 27: esphome.ListEntitiesSensorResponse.state_class:type_name -> esphome.SensorStateClass
+	8,  // 28: esphome.ListEntitiesSensorResponse.legacy_last_reset_type:type_name -> esphome.SensorLastResetType
+	2,  // 29: esphome.ListEntitiesSensorResponse.entity_category:type_name -> esphome.EntityCategory
+	11, // 30: esphome.ListEntitiesServicesArgument.type:type_name -> esphome.ServiceArgType
+	49, // 31: esphome.ListEntitiesServicesResponse.args:type_name -> esphome.ListEntitiesServicesArgument
+	12, // 32: esphome.ListEntitiesServicesResponse.supports_response:type_name -> esphome.SupportsResponseType
+	2,  // 33: esphome.ListEntitiesSwitchResponse.entity_category:type_name -> esphome.EntityCategory
+	2,  // 34: esphome.ListEntitiesTextResponse.entity_category:type_name -> esphome.EntityCategory
+	13, // 35: esphome.ListEntitiesTextResponse.mode:type_name -> esphome.TextMode
+	2,  // 36: esphome.ListEntitiesTextSensorResponse.entity_category:type_name -> esphome.EntityCategory
+	3,  // 37: esphome.MediaPlayerCommandRequest.command:type_name -> esphome.MediaPlayerCommand
+	5,  // 38: esphome.MediaPlayerStateResponse.state:type_name -> esphome.MediaPlayerState
+	4,  // 39: esphome.MediaPlayerSupportedFormat.purpose:type_name -> esphome.MediaPlayerFormatPurpose
+	7,  // 40: esphome.SendspinPairingTokenResponse.status:type_name -> esphome.SendspinPairingTokenStatus
+	10, // 41: esphome.SerialProxyInfo.port_type:type_name -> esphome.SerialProxyPortType
+	88, // 42: esphome.VoiceAssistantConfigurationRequest.external_wake_words:type_name -> esphome.VoiceAssistantExternalWakeWord
+	93, // 43: esphome.VoiceAssistantConfigurationResponse.available_wake_words:type_name -> esphome.VoiceAssistantWakeWord
+	14, // 44: esphome.VoiceAssistantEventResponse.event_type:type_name -> esphome.VoiceAssistantEvent
+	86, // 45: esphome.VoiceAssistantEventResponse.data:type_name -> esphome.VoiceAssistantEventData
+	82, // 46: esphome.VoiceAssistantRequest.audio_settings:type_name -> esphome.VoiceAssistantAudioSettings
+	15, // 47: esphome.VoiceAssistantTimerEventResponse.event_type:type_name -> esphome.VoiceAssistantTimerEvent
+	48, // [48:48] is the sub-list for method output_type
+	48, // [48:48] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_esphome_api_proto_init() }
@@ -4914,8 +7294,8 @@ func file_esphome_api_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_esphome_api_proto_rawDesc), len(file_esphome_api_proto_rawDesc)),
-			NumEnums:      10,
-			NumMessages:   55,
+			NumEnums:      16,
+			NumMessages:   80,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
