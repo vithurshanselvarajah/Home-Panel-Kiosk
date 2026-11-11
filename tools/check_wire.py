@@ -65,6 +65,72 @@ VECTORS = [
      dict(entity_id="sensor.x", state="1", attribute="a")),
     ("PingRequest", api_pb2.PingRequest, {}),
     ("DisconnectRequest", api_pb2.DisconnectRequest, {}),
+    # ── The voice assistant ──────────────────────────────────────────────
+    #
+    # The wake word phrase is the field that matters most here, and the
+    # one that is easy to get wrong. Home Assistant's setup dialog reads
+    # it and refuses the run when it is missing, so a device that sends
+    # an empty phrase cannot complete the one flow that asks it to prove
+    # it heard a wake word.
+    ("VoiceAssistantRequest", api_pb2.VoiceAssistantRequest,
+     dict(start=True, conversation_id="c1", flags=0,
+          wake_word_phrase="hey jarvis")),
+    ("VoiceAssistantResponse", api_pb2.VoiceAssistantResponse,
+     dict(port=0, error=False)),
+    ("VoiceAssistantEventResponse", api_pb2.VoiceAssistantEventResponse,
+     dict(event_type=api_pb2.VoiceAssistantEvent.VOICE_ASSISTANT_STT_END,
+          data=[api_pb2.VoiceAssistantEventData(name="text", value="hello")])),
+    ("VoiceAssistantAudio", api_pb2.VoiceAssistantAudio,
+     dict(data=b"\x01\x02\x03\x04", end=False)),
+    ("VoiceAssistantAnnounceRequest", api_pb2.VoiceAssistantAnnounceRequest,
+     dict(media_id="http://ha/media.mp3", text="hello")),
+    ("VoiceAssistantAnnounceFinished", api_pb2.VoiceAssistantAnnounceFinished, {}),
+    ("VoiceAssistantConfigurationResponse", api_pb2.VoiceAssistantConfigurationResponse,
+     dict(available_wake_words=[
+             api_pb2.VoiceAssistantWakeWord(id="hey_jarvis_v0.1",
+                                            wake_word="hey jarvis",
+                                            trained_languages=["en"])],
+          active_wake_words=["hey_jarvis_v0.1"], max_active_wake_words=1)),
+    ("VoiceAssistantSetConfiguration", api_pb2.VoiceAssistantSetConfiguration,
+     dict(active_wake_words=["hey_jarvis_v0.1"])),
+    ("VoiceAssistantTimerEventResponse", api_pb2.VoiceAssistantTimerEventResponse,
+     dict(event_type=api_pb2.VoiceAssistantTimerEvent.VOICE_ASSISTANT_TIMER_FINISHED)),
+    # ── The speaker ──────────────────────────────────────────────────────
+    #
+    # The name is empty on purpose. Home Assistant composes the device
+    # name and the entity name itself, so a name here is rendered twice.
+    ("ListEntitiesMediaPlayerResponse", api_pb2.ListEntitiesMediaPlayerResponse,
+     dict(key=50, name="", supports_pause=True,
+          feature_flags=(1 << 0) | (1 << 2) | (1 << 3) | (1 << 9) | (1 << 12) | (1 << 14) | (1 << 20),
+          supported_formats=[
+              api_pb2.MediaPlayerSupportedFormat(
+                  purpose=api_pb2.MediaPlayerFormatPurpose.MEDIA_PLAYER_FORMAT_PURPOSE_DEFAULT,
+                  format="wav", sample_rate=48000, num_channels=1, sample_bytes=2),
+              api_pb2.MediaPlayerSupportedFormat(
+                  purpose=api_pb2.MediaPlayerFormatPurpose.MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT,
+                  format="wav", sample_rate=48000, num_channels=1, sample_bytes=2),
+          ])),
+    ("MediaPlayerCommandRequest", api_pb2.MediaPlayerCommandRequest,
+     dict(key=50, has_command=True,
+          command=api_pb2.MediaPlayerCommand.MEDIA_PLAYER_COMMAND_PAUSE)),
+    ("MediaPlayerStateResponse", api_pb2.MediaPlayerStateResponse,
+     dict(key=50, state=api_pb2.MediaPlayerState.MEDIA_PLAYER_STATE_PLAYING,
+          volume=0.5, muted=False)),
+    # ── The camera ───────────────────────────────────────────────────────
+    ("ListEntitiesCameraResponse", api_pb2.ListEntitiesCameraResponse,
+     dict(key=51, name="Camera", object_id="camera")),
+    ("CameraImageRequest", api_pb2.CameraImageRequest,
+     dict(single=True, stream=False)),
+    ("CameraImageResponse", api_pb2.CameraImageResponse,
+     dict(key=51, data=b"\xff\xd8\xff", done=True)),
+    # ── Events ───────────────────────────────────────────────────────────
+    ("ListEntitiesEventResponse", api_pb2.ListEntitiesEventResponse,
+     dict(key=52, name="Action Button", object_id="action_button",
+          device_class="button", event_types=["single"])),
+    # ── The music player's pairing token ─────────────────────────────────
+    ("SendspinPairingTokenResponse", api_pb2.SendspinPairingTokenResponse,
+     dict(status=api_pb2.SendspinPairingTokenStatus.SENDSPIN_PAIRING_TOKEN_STATUS_OK,
+          token="tok")),
 ]
 
 

@@ -39,13 +39,49 @@ NEEDED = [
     "SensorStateResponse", "SwitchStateResponse", "TextStateResponse",
     "TextSensorStateResponse",
     # Commands from Home Assistant to the device.
-    "BinarySensorCommandRequest", "ButtonCommandRequest", "NumberCommandRequest",
+    #
+    # There is no binary sensor command: a binary sensor is read-only,
+    # and upstream dropped the message when that became true.
+    "ButtonCommandRequest", "NumberCommandRequest",
     "SelectCommandRequest", "SwitchCommandRequest", "TextCommandRequest",
     # Device to Home Assistant.
     "HomeassistantActionRequest", "HomeassistantServiceMap",
     "SubscribeHomeassistantServicesRequest",
     "SubscribeHomeAssistantStatesRequest", "SubscribeHomeAssistantStateResponse",
     "HomeAssistantStateResponse",
+    # The voice assistant.
+    #
+    # The panel is a voice satellite: it detects the wake word itself and
+    # starts the turn, then streams the microphone to Home Assistant and
+    # plays the reply. These are the messages that carry all of that.
+    "SubscribeVoiceAssistantRequest",
+    "VoiceAssistantRequest", "VoiceAssistantResponse",
+    "VoiceAssistantEventResponse", "VoiceAssistantEventData",
+    "VoiceAssistantAudio",
+    "VoiceAssistantAnnounceRequest", "VoiceAssistantAnnounceFinished",
+    "VoiceAssistantConfigurationRequest", "VoiceAssistantConfigurationResponse",
+    "VoiceAssistantWakeWord", "VoiceAssistantExternalWakeWord",
+    "VoiceAssistantSetConfiguration",
+    "VoiceAssistantTimerEventResponse",
+    "VoiceAssistantAudioSettings",
+    # The speaker, as a media player.
+    #
+    # A media player entity is not optional. Home Assistant does not
+    # surface a device at all if it reports no entities, and the reply to
+    # a voice turn comes back as audio on this entity.
+    "ListEntitiesMediaPlayerResponse", "MediaPlayerSupportedFormat",
+    "MediaPlayerCommandRequest", "MediaPlayerStateResponse",
+    # The camera.
+    "ListEntitiesCameraResponse",
+    "CameraImageRequest", "CameraImageResponse",
+    # Events, for things that are pressed rather than set.
+    "ListEntitiesEventResponse",
+    # The music player's pairing token.
+    #
+    # Home Assistant tracks the Sendspin client ids of the devices it
+    # knows about, and hands the token to a Sendspin server such as Music
+    # Assistant. That is what stops the same speaker appearing twice.
+    "SendspinPairingTokenRequest", "SendspinPairingTokenResponse",
 ]
 
 # Enums referenced by the messages above.
@@ -58,6 +94,11 @@ ENUMS = [
     "UnitOfMagneticField", "UnitOfAngle", "UnitOfRotation", "UnitOfSpeed",
     "UnitOfDistance", "UnitOfDataRate", "UnitOfApparentPower",
     "UnitOfReactivePower", "UnitOfSoundPressure", "IrTextSensorType",
+    # The voice assistant and the speaker.
+    "VoiceAssistantEvent", "VoiceAssistantTimerEvent",
+    "MediaPlayerCommand", "MediaPlayerState", "MediaPlayerFormatPurpose",
+    # The music player's pairing token.
+    "SendspinPairingTokenStatus",
 ]
 
 
