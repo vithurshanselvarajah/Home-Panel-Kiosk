@@ -14,9 +14,15 @@ install time.
 |---|---|
 | `home-panel-device-linux-arm64` | The device for arm64 |
 | `home-panel-device-linux-amd64` | The device for amd64 |
+| `arm64/libonnxruntime.so.1` | The ONNX Runtime for arm64 |
+| `amd64/libonnxruntime.so.1` | The ONNX Runtime for amd64 |
 
 They are dynamically linked against the ONNX Runtime, which is copied
 beside them in the package. Everything else is static.
+
+The runtime is in a directory of its own for each architecture because the
+loader finds a library by its soname — `libonnxruntime.so.1` — and the two
+cannot both have that name in one place.
 
 ## Rebuilding
 
