@@ -573,6 +573,13 @@ func (a *deviceAudio) setVolume(level int) {
 	}
 }
 
+// musicStatus returns the music player's own account of what it is doing.
+func (a *deviceAudio) musicStatus() sendspin.Status {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.sendspinStatus
+}
+
 // currentVolume returns the panel's volume level.
 func (a *deviceAudio) currentVolume() int {
 	a.mu.Lock()

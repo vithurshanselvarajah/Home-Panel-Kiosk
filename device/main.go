@@ -33,6 +33,7 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/config"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/sendspin"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/state"
 )
 
@@ -321,6 +322,12 @@ func main() {
 	// happened.
 	speaker_.onMediaState = func(state esphome.MediaPlayerState) {
 		control.SetMediaPlayerState(state)
+	}
+
+	// The music player's status is part of the state, so a change in it
+	// has to reach the panel.
+	speaker_.onSendspinStatus = func(status sendspin.Status) {
+		reporter.publish(reporter.state.Snapshot())
 	}
 
 	// The speaker's entity follows the panel's volume.
@@ -635,6 +642,10 @@ func (r *stateReporter) publish(s state.Snapshot) {
 		Thinking:  s.Thinking,
 		Muted:     s.Muted,
 		Volume:    s.Volume,
+		MusicState:     r.audio.musicStatus().State,
+		MusicPaired:    r.audio.musicStatus().PairedWith,
+		MusicBuffered:  r.audio.musicStatus().BufferedMs,
+		MusicSynced:    r.audio.musicStatus().Synced,
 		Level:     r.wakeLevel(),
 		LastError: s.LastError,
 		UpdatedAt: time.Now().UTC(),
@@ -747,6 +758,13 @@ func same(a, b State) bool {
 		return false
 	}
 	if a.Volume != b.Volume || a.Pattern != b.Pattern || a.LastError != b.LastError {
+		return false
+	}
+	// The music player's state is part of the state, so a change in it is
+	// a change in the state. Without this the state is not rewritten when
+	// the music connects, and the panel is never told.
+	if a.MusicState != b.MusicState || a.MusicPaired != b.MusicPaired ||
+		a.MusicBuffered != b.MusicBuffered || a.MusicSynced != b.MusicSynced {
 		return false
 	}
 	if a.SelectedAudioInput != b.SelectedAudioInput || a.SelectedAudioOutput != b.SelectedAudioOutput {
