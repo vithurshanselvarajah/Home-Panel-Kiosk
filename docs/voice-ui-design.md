@@ -1,88 +1,86 @@
-# EchoMuse UI design
+# Voice assistant UI design
 
-A proposal for showing EchoMuse state on the Home Panel kiosk. It was written
-before any of it was built — it is the shape of the interface, so the design
-could be argued about before any protocol code was written.
+A proposal for showing the voice assistant's state on the Home Panel kiosk.
+It was written before any of it was built — it is the shape of the interface,
+so the design could be argued about before any protocol code was written.
 
-It has been built since, and it has moved on. The panel talks to Home
-Assistant over the ESPHome native API rather than through a broker, so the
-drawer shows the ESPHome connection where it used to show the MQTT one. The
-rest of it still holds.
+It has been built since, and it has moved on. The panel is now a voice
+satellite to Home Assistant over the ESPHome native API: it hears the wake
+word itself, and the audio leaves the device only for the length of a turn.
+There is no controller and no broker in the middle any more, and the
+settings tab is the voice tab rather than the EchoMuse one.
 
-## What the SDK gives us
+## What the device program gives us
 
-The Go SDK already answers the questions this UI needs to ask. Nothing has to
+The device program answers the questions this UI needs to ask. Nothing has to
 be derived from raw protocol messages.
 
-### State (`echomuse/state`)
+### State (`device/state`)
 
-`Snapshot` is the whole observable state of the device at one instant:
+`Snapshot` is the whole observable state of the panel at one instant:
 
 | Field | Meaning | Why the UI wants it |
 |---|---|---|
-| `Phase` | `unknown`, `idle`, `listening`, `thinking`, `speaking`, `muted`, `pending`, `refused`, `disconnected`, `ready` | The headline state — one word in the drawer, one word on the wave |
-| `PhaseReason` | Why, in words a person can read | The difference between "not ready" and "refused by the controller" |
+| `Phase` | `unknown`, `idle`, `listening`, `thinking`, `speaking`, `muted`, `disconnected`, `ready` | The headline state — one word in the drawer, one word on the wave |
+| `PhaseReason` | Why, in words a person can read | The difference between "not ready" and "the link is down" |
 | `Listen` | `unknown`, `local`, `stream`, `degraded` | **The privacy question.** Is audio leaving the device? |
 | `ListenReason` | Why degraded or unknown | "No local wake word model" is actionable; "unknown" is not |
 | `Muted` | The device's own mute switch | A hard mute must never look like idle |
 | `Listening` | The microphone is open | Drives the wave animation |
-| `Thinking` | The controller is waiting for Home Assistant | Distinct from listening — the user has spoken, we are waiting |
+| `Thinking` | Home Assistant is working on the reply | Distinct from listening — the user has spoken, we are waiting |
 | `Speaking` | A response is playing | Distinct again |
 | `Volume` | Last reported volume | Display only |
-| `LinkUp` | Control plane connected | The "is it even talking to the controller" light |
-| `Approved` | The controller admitted the device | Distinguishes pending from refused |
-| `Features` | Capabilities the controller announced | Informational |
+| `LinkUp` | The link to Home Assistant is up | The "is it even talking to Home Assistant" light |
+| `WakeWord` | The model the panel is listening for | Which wake word the picker shows |
+| `WakeWordReady` | The model and the runtime are installed | "Not installed" is actionable |
+| `WakeWordEnabled` | The wake word is switched on | The picker and the panel agree |
 | `LastError` | Most recent error | The error line |
 
-Two rules from the SDK matter for the UI:
+Two rules from the device program matter for the UI:
 
 - **Every state that is not known is reported as unknown**, never as its
-  opposite. A device that has just connected is not muted. The UI must not
+  opposite. A panel that has just started is not muted. The UI must not
   paint "muted" for `unknown`.
 - **`ListenMode.Streams()` is the one question a privacy statement has to
   answer.** It is true only for `stream`. The UI must never imply streaming
-  when the device is scoring locally.
+  when the panel is scoring locally.
 
-### The ring (`echomuse/display`)
+### The ring
 
-`Tracker.View()` gives a `Pattern` (`off`, `solid`, `spin`, `rotate`, `pulse`,
-`meter`), a `Palette` of colours, and a `Listening` flag.
+There is no ring. The Echo's LED ring is an Echo's, and the panel has a
+screen, so the indicator is drawn on the screen instead: a row of dots along
+the bottom of the view, the way a voice assistant shows it is listening.
 
-The controller renders every animation frame and sends the result, so a
-device paints exactly what an Echo paints. The emulator's browser UI already
-does this — twelve LEDs on a circle, one every 30 degrees, painted from the
-palette.
+The dots move and scale with the microphone level, and a different animation
+plays while a reply is playing. They are only on screen while the panel is
+doing something.
 
 ### Audio
 
-The SDK does not capture or resample audio; the application supplies that.
-What it gives the UI is a **peak level**: the loudest sample in the last block
-as a percentage of full scale.
+The device program does not capture or resample audio; the application
+supplies that. What it gives the UI is a **peak level**: the loudest sample in
+the last block as a percentage of full scale.
 
 That is enough for the wave. The emulator's `peakLevel()` walks the signed
 16-bit little-endian samples and takes the maximum absolute value.
-
-> The kiosk will not have an Echo's LED ring, so the ring is not literally
-> reproducible here. What *is* worth copying is the vocabulary and the
-> vocabulary is in `display.Pattern` and `state.Phase`.
 
 ## What we show
 
 ### 1. Status in the drawer
 
 The drawer already has a service status block with three LED rows — ESPHome,
-Immich Kiosk, Dashboard. EchoMuse joins it as a fourth row, in exactly the same
+Immich Kiosk, Dashboard. The voice assistant joins it as a fourth row, in exactly the same
 layout: a coloured dot, a label, and the value on the right.
 
 ```
   ●  ESPHome           Online
   ●  Immich Kiosk      Online
   ●  Dashboard         Online
-  ●  EchoMuse          Connected
+  ●  Voice assistant   Connected
 ```
 
 The value is the **connection** to the controller, not the listening mode. The
-SDK's phases are about what the device is doing; what a person wants to know
+phases are about what the device is doing; what a person wants to know
 from the drawer is whether this thing is hooked up at all.
 
 | Connection | Value | LED |
@@ -111,15 +109,15 @@ appears only while the device is doing something, and disappears otherwise.
 | Thinking | Nothing — the device is waiting, the microphone is not the story |
 | Everything else | Nothing |
 
-The user asked for it to "match the audio being received from mic". The SDK
+The user asked for it to "match the audio being received from mic". The
 gives us a peak percentage, which is a level and not a waveform. That is the
-honest limit of what the SDK exposes today.
+honest limit of what the device program exposes today.
 
 **What we can do with a level:** size each dot by the level, with a short
 delay between dots so the row reads as a wave travelling rather than
 everything jumping at once.
 
-**What we cannot do** without more from the SDK: draw the actual waveform
+**What we cannot do** without more from the device program: draw the actual waveform
 shape, because only the peak is exposed. Getting a real waveform would need
 either a block of PCM samples over IPC, or a small spectrum (a few bands).
 
@@ -153,7 +151,7 @@ reporting a state that is not true.
 
 ### 3. Settings
 
-A separate **EchoMuse** tab in the settings panel, alongside the existing
+A separate **voice** tab in the settings panel, alongside the existing
 device setup form. The settings panel is already full screen and scrolls, so
 the tab becomes a second view within it.
 
@@ -211,25 +209,25 @@ a person should not have to configure it to use it.
   concerns, not something a person on a wall display should be editing.
 - **Base OS.** It is a constant.
 
-## What the SDK still needs to give us
+## What the device program still needs to give us
 
 | Need | Today | Required |
 |---|---|---|
-| Mic level for the indicator | `peakLevel()` exists in the emulator but is not exposed by the SDK | A level the app can read, e.g. `Device.OnMicLevel(func(int))` |
+| Mic level for the indicator | `peakLevel()` exists in the emulator but is not exposed by the device program | A level the app can read, e.g. `Device.OnMicLevel(func(int))` |
 | Actual waveform | not available | A block of samples or a small spectrum, if the dots are to become a real waveform |
 | Connection state | `state.Snapshot` has `LinkUp` and `Approved`; the phases carry the rest | The app needs to map those onto connected / unpaired / disabled |
 | Ring colours | `display.Tracker` has them | Needs to reach the UI, probably as part of the state snapshot |
 | Config push | `protocol.Config` decodes it | The app needs to read the pushed config and apply it, and to send config changes back |
 
 The level is the one that matters. The `display` package already exists for
-the ring, so the natural shape is for the SDK to publish a comparable
+the ring, so the natural shape is for the device program to publish a comparable
 `audio.Tracker` that derives a level from the capture path — the same job
 `display.Tracker` does for the ring.
 
 ## Design decisions to argue about
 
-1. **A level, not a waveform.** The SDK only exposes a peak. The indicator
-   sizes dots by that level. If a real waveform is wanted, the SDK needs to
+1. **A level, not a waveform.** The device program only exposes a peak. The
+   indicator sizes dots by that level. If a real waveform is wanted, it needs to
    expose samples.
 
 2. **Dots, not a ring.** The ring is the Echo's language and this device has
@@ -252,13 +250,13 @@ the ring, so the natural shape is for the SDK to publish a comparable
 
 This branch carries a working prototype:
 
-- The drawer shows an EchoMuse row in the same layout as the other services,
+- The drawer shows a voice assistant row in the same layout as the other services,
   with the controller connection as the value.
 - A canvas indicator draws over the view — dots sized by the microphone level
   while listening, pulsing along while speaking — driven by a **mock** level
-  source, so the motion can be judged without the SDK.
-- The settings panel has an EchoMuse tab with the connection status and the
+  source, so the motion can be judged without the device program.
+- The settings panel has a voice tab with the connection status and the
   short settings list.
 
 The mock data lives in one clearly marked place so it can be swapped for the
-real SDK when it lands.
+real device program when it lands.
