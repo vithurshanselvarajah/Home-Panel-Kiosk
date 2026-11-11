@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
+)
 
 // TestPanelEntitiesHaveNoDuplicates checks that no two entities say the
 // same thing.
@@ -41,6 +45,30 @@ func TestPanelEntitiesHaveNoDuplicates(t *testing.T) {
 	for _, unwanted := range []string{"wake", "screen_off", "slideshow", "notification", "open_url"} {
 		if seen[unwanted] {
 			t.Errorf("the entity %q says the same thing as another one", unwanted)
+		}
+	}
+}
+
+// TestTheBinarySensorsSayOpenAndClosed checks what the sensors that
+// say whether something is open say.
+//
+// A device class of "problem" makes Home Assistant show a closed
+// thing as "OK" and an open one as "Problem", which is wrong: a
+// keyboard that is up is not a fault. The class that says "open" and
+// "closed" is the one for it.
+func TestTheBinarySensorsSayOpenAndClosed(t *testing.T) {
+	registry := panelEntities(PanelCapabilities{
+		CanControlScreen: true,
+		HasBacklight:     true,
+		HasSlideshow:     true,
+	})
+	for _, entity := range registry.All() {
+		if entity.Kind != esphome.KindBinarySensor {
+			continue
+		}
+		if entity.DeviceClass != "opening" {
+			t.Errorf("the sensor %q has the device class %q, it should be \"opening\"",
+				entity.ObjectID, entity.DeviceClass)
 		}
 	}
 }

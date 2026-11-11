@@ -166,14 +166,6 @@ async function decodeSettings(data) {
   }
   delete data.esphomeEncryptionKeyEncrypted;
   delete data.cameras;
-  // The MQTT settings are gone. A panel that was set up before the
-  // change still has them in its file, so they are dropped here rather
-  // than being carried about for ever.
-  delete data.mqttUrl;
-  delete data.mqttUsername;
-  delete data.mqttPassword;
-  delete data.mqttPasswordEncrypted;
-  delete data.mqttPrefix;
   return { ...DEFAULTS, ...data };
 }
 
