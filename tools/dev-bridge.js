@@ -29,6 +29,9 @@ const port = Number(process.env.DEV_UI_PORT || 8769);
 
 const userData = path.join(process.env.XDG_CONFIG_HOME || path.join(process.env.HOME, ".config"), "homepanel-kiosk");
 const configFile = path.join(userData, "device-config.json");
+// The data directory is where the device program keeps what it has to
+// keep — the music player's identity and its pairing records.
+const dataDirectory = path.join(userData, "device");
 
 // The settings the interface reads and writes.
 const settingsPath = path.join(userData, "settings.json");
@@ -93,6 +96,7 @@ const client = new DeviceClient({
   stateFile: "",
   levelFile: "",
   configFile,
+  dataDirectory,
   deviceId: "",
   board: "",
   onState: (deviceState) => broadcast("app:device", deviceState),
@@ -115,7 +119,7 @@ async function startSidecar() {
   const runtimeDir = path.join("/dev/shm/homepanel", client.deviceId.replace(/[^a-zA-Z0-9_-]/g, "-") || "device");
   client.stateFile = path.join(runtimeDir, "state.json");
   client.levelFile = path.join(runtimeDir, "level");
-  fs.mkdirSync(credentialsDir, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
   if (!client.start()) {
     console.log("dev: the sidecar was not started");
     return;
