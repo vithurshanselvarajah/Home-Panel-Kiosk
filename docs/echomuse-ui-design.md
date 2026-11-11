@@ -4,10 +4,10 @@ A proposal for showing EchoMuse state on the Home Panel kiosk. It was written
 before any of it was built — it is the shape of the interface, so the design
 could be argued about before any protocol code was written.
 
-It has been built since, and it has moved on. The drawer shows the Home
-Assistant connection where it used to show the MQTT one, because the panel
-talks to Home Assistant over the ESPHome native API now rather than through a
-broker. The rest of it still holds.
+It has been built since, and it has moved on. The panel talks to Home
+Assistant over the ESPHome native API rather than through a broker, so the
+drawer shows the ESPHome connection where it used to show the MQTT one. The
+rest of it still holds.
 
 ## What the SDK gives us
 
@@ -70,12 +70,12 @@ That is enough for the wave. The emulator's `peakLevel()` walks the signed
 
 ### 1. Status in the drawer
 
-The drawer already has a service status block with three LED rows — Home
-Assistant, Immich Kiosk, Dashboard. EchoMuse joins it as a fourth row, in exactly
-the same layout: a coloured dot, a label, and the value on the right.
+The drawer already has a service status block with three LED rows — ESPHome,
+Immich Kiosk, Dashboard. EchoMuse joins it as a fourth row, in exactly the same
+layout: a coloured dot, a label, and the value on the right.
 
 ```
-  ●  Home Assistant    Online
+  ●  ESPHome           Online
   ●  Immich Kiosk      Online
   ●  Dashboard         Online
   ●  EchoMuse          Connected

@@ -123,7 +123,7 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 		Name:        "Keyboard visible",
 		ObjectID:    "keyboard_visible",
 		Icon:        "mdi:keyboard",
-		DeviceClass: "problem",
+		DeviceClass: "opening",
 		State:       esphome.EntityValue{Kind: esphome.KindBinarySensor, Bool: false},
 	})
 	// The last time somebody did something on the panel.

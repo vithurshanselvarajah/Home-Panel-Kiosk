@@ -12,7 +12,7 @@ An independent Electron kiosk for a Home Assistant touch display. Immich photos 
 - Idle transition from dashboard to slideshow, then optional display power-off.
 - The panel is an ESPHome device to Home Assistant, over the ESPHome native API. It announces itself on the network and appears in Home Assistant like any other device.
 - Entities for the supported view, screen, brightness, notification, and URL controls. Unsupported device controls are omitted.
-- Drawer indicators for the link to Home Assistant, Immich Kiosk page load, and Home Assistant dashboard page load.
+- Drawer indicators for the ESPHome link, Immich Kiosk page load, and Home Assistant dashboard page load.
 - Local notification overlay and settings UI.
 - Display power commands for `wlopm`, `kscreen-doctor`, and `xset`.
 
