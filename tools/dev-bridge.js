@@ -52,7 +52,7 @@ let state = {
   brightness: 60,
   volume: 60,
   version: "0.0.2",
-  serviceStatus: { mqtt: "unknown", immich: "unknown", dashboard: "unknown" },
+  serviceStatus: { control: "unknown", immich: "unknown", dashboard: "unknown" },
   lastActivity: new Date().toISOString(),
 };
 

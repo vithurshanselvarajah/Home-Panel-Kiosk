@@ -38,7 +38,7 @@
         </div>
       </section>
       <section class="service-status" aria-label="Service status">
-        <div class="service-row"><i class="service-led" data-service="mqtt"></i><span>MQTT</span><b id="mqtt-state">Checking</b></div>
+        <div class="service-row"><i class="service-led" data-service="control"></i><span>Home Assistant</span><b id="control-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="immich"></i><span>Immich Kiosk</span><b id="immich-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="dashboard"></i><span>Dashboard</span><b id="dashboard-state">Checking</b></div>
         <div class="service-row" id="echomuse-row" hidden><i class="service-led" data-service="echomuse"></i><span>EchoMuse</span><b id="echomuse-state">Unknown</b></div>
@@ -78,9 +78,7 @@
         <div class="section-label"><span>DISPLAY</span><span class="line"></span></div>
         <label>Display mode<select name="displayMode"><option value="fullscreen">Fullscreen — covers the screen</option><option value="window">Window — a movable window</option></select></label>
         <div class="section-label"><span>HOME ASSISTANT COMMANDS</span><span class="line"></span></div>
-        <label>MQTT broker URL <span class="optional">optional</span><input name="mqttUrl" type="url" placeholder="mqtt://192.168.1.10:1883" /></label>
-        <div class="two-col"><label>MQTT username<input name="mqttUsername" autocomplete="username" /></label><label>MQTT password<input name="mqttPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" /></label></div>
-        <div class="two-col"><label>Topic prefix<input name="mqttPrefix" placeholder="homepanel" /></label><label>Device name<input name="deviceName" placeholder="Kitchen Display" /></label></div>
+        <label>Device name<input name="deviceName" placeholder="Kitchen Display" /></label>
         <div id="form-error" class="form-error" role="alert"></div>
         <div class="form-footer"><span>Settings are stored on this device.</span><button class="save-button" type="submit">Save settings <span>→</span></button></div>
       </form>
