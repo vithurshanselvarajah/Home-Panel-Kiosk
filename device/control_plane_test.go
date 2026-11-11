@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -122,5 +123,33 @@ func TestPanelMACIsStableAndUnique(t *testing.T) {
 		if len(part) != 2 {
 			t.Fatalf("the address %q does not look like an address", first)
 		}
+	}
+}
+
+// TestPanelMACIsOnTheAnnouncedInterface checks that the address belongs to
+// the interface the panel announces itself on.
+//
+// The panel announces on the interface that carries the default route,
+// because that is the one Home Assistant can reach it on. The address has
+// to be that interface's: a panel that announced on one interface and
+// answered with another's address is a device whose identity changes
+// when the machine's interfaces are enumerated in a different order.
+//
+// The last three bytes are mixed from the name, so only the first three
+// are compared — those are the interface's.
+func TestPanelMACIsOnTheAnnouncedInterface(t *testing.T) {
+	name := defaultRouteInterface()
+	if name == "" {
+		t.Skip("no interface carries the default route")
+	}
+	raw, err := os.ReadFile(filepath.Join("/sys/class/net", name, "address"))
+	if err != nil {
+		t.Skipf("the address of %s could not be read: %v", name, err)
+	}
+	interfaceMAC := strings.TrimSpace(string(raw))
+
+	got := panelMAC("home-panel")
+	if !strings.HasPrefix(got, interfaceMAC[:8]) {
+		t.Errorf("the address %s is not on %s (%s)", got, name, interfaceMAC)
 	}
 }
