@@ -4,6 +4,7 @@ const { editFieldValue } = require("./utils");
 contextBridge.exposeInMainWorld("homePanel", {
   getSettings: () => ipcRenderer.invoke("app:get-settings"),
   saveSettings: (settings) => ipcRenderer.invoke("app:save-settings", settings),
+  newEncryptionKey: () => ipcRenderer.invoke("app:new-encryption-key"),
   command: (command) => ipcRenderer.invoke("app:command", command),
   setDisplayMode: (mode) => ipcRenderer.invoke("app:set-display-mode", mode),
   quit: () => ipcRenderer.invoke("app:quit"),

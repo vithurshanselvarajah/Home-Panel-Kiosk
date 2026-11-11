@@ -80,9 +80,10 @@
         <div class="section-label"><span>HOME ASSISTANT COMMANDS</span><span class="line"></span></div>
         <label>Device name<input name="deviceName" placeholder="Kitchen Display" /></label>
         <label>Name in Home Assistant<input name="esphomeDeviceName" placeholder="Kitchen Display" /></label>
-        <label>Encryption key <span class="optional">optional</span><input name="esphomeEncryptionKey" type="password" autocomplete="new-password" placeholder="Leave blank for no key" /></label>
-        <label class="setting-toggle"><input name="esphomeKeepEncryptionKey" type="checkbox" checked /> Keep the saved key</label>
-        <p class="field-note">A key encrypts the connection to Home Assistant. Without one the panel still connects and is still set up in one step, but the traffic is in plain text on the network. Give Home Assistant the same key when the panel is added.</p>
+        <label class="setting-toggle"><input name="esphomeEncryptionEnabled" type="checkbox" /> Encrypt the connection to Home Assistant</label>
+        <label>Encryption key<span class="field-unit">copy this into Home Assistant</span><input name="esphomeEncryptionKey" type="text" autocomplete="off" spellcheck="false" placeholder="Paste the key from Home Assistant" /></label>
+        <div class="key-actions"><button class="secondary-button" type="button" data-action="new-encryption-key">Make a new key</button></div>
+        <p class="field-note">Without a key the panel still connects and is still set up in one step, but the traffic is in plain text on the network. The key is the same one Home Assistant asks for when the panel is added.</p>
         <div id="form-error" class="form-error" role="alert"></div>
         <div class="form-footer"><span>Settings are stored on this device.</span><button class="save-button" type="submit">Save settings <span>→</span></button></div>
       </form>
