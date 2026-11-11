@@ -10,15 +10,16 @@
 //
 //   npm run dev:ui
 //
-// The bridge owns the sidecar itself, so the EchoMuse state it reports is
-// the real state of a real sidecar talking to a real controller.
+// The bridge owns the device program itself, so the voice state it reports
+// is the real state of a real device program talking to a real Home
+// Assistant.
 
 const http = require("node:http");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 const { WebSocketServer } = require("ws");
-const { EchoMuseClient, findSidecar } = require("../src/echomuse");
+const { DeviceClient, findSidecar } = require("../src/device");
 const { systemVolumePercent, setSystemVolume } = require("../src/volume");
 const { editFieldValue } = require("../src/utils");
 
@@ -27,8 +28,7 @@ const uiDir = path.join(root, "src", "ui");
 const port = Number(process.env.DEV_UI_PORT || 8769);
 
 const userData = path.join(process.env.XDG_CONFIG_HOME || path.join(process.env.HOME, ".config"), "homepanel-kiosk");
-const configFile = path.join(userData, "echomuse-config.json");
-const credentialsDir = path.join(userData, "echomuse");
+const configFile = path.join(userData, "device-config.json");
 
 // The settings the interface reads and writes.
 const settingsPath = path.join(userData, "settings.json");
@@ -82,41 +82,33 @@ function broadcast(channel, payload) {
   }
 }
 
-// The sidecar. The interface is shown what it reports, so what is on screen
-// is what the device is doing.
+// The device program. The interface is shown what it reports, so what is
+// on screen is what the device is doing.
 //
-// The identity comes from the settings, not from here. The controller
-// issues a link credential to one device, and a device that presents it
-// under a different name is a different device — so the controller creates
-// one, and the dashboard fills up with copies of the same panel.
+// The identity comes from the settings, not from here, so a development
+// run is the same device as the application is.
 const binary = findSidecar(root, root, process.execPath);
-const client = new EchoMuseClient({
+const client = new DeviceClient({
   binary,
   stateFile: "",
   levelFile: "",
   configFile,
-  credentialsDir,
   deviceId: "",
   board: "",
-  controllerUrl: process.env.ECHOMUSE_CONTROLLER_URL || "",
-  pair: true,
-  onState: (echomuseState) => broadcast("app:echomuse", echomuseState),
-  onLog: (message) => { if (message) console.log("echomuse:", message); },
+  onState: (deviceState) => broadcast("app:device", deviceState),
+  onLog: (message) => { if (message) console.log("device:", message); },
 });
 
 async function startSidecar() {
   const settings = await readSettings();
-  if (settings.echomuseEnabled === false) {
-    console.log("dev: the EchoMuse link is off in the settings");
+  if (settings.voiceEnabled === false) {
+    console.log("dev: the voice is off in the settings");
     return;
   }
   // The identity comes from the settings, so a development run is the same
-  // device as the application is. The controller issues a link credential
-  // to one device, and a device that presents it under a different name
-  // is a different device — so the controller creates one, and the
-  // dashboard fills up with copies of the same panel.
-  client.deviceId = settings.echomuseDeviceId || "home-panel";
-  client.board = settings.echomuseBoard || "home-panel";
+  // device as the application is.
+  client.deviceId = settings.voiceDeviceId || "home-panel";
+  client.board = settings.deviceName || "home-panel";
   // The live state lives in memory, not on the disk, and the device
   // program decides where: it is the one that writes it. The application
   // reads it from the same place.
@@ -132,10 +124,10 @@ async function startSidecar() {
   // settings are in force from the first frame.
   await client.sendConfig({
     board: client.board,
-    wakeThreshold: Number(settings.echomuseWakeThreshold) || undefined,
-    wakeWordEnabled: typeof settings.echomuseWakeWordEnabled === "boolean" ? settings.echomuseWakeWordEnabled : undefined,
-    audioInput: settings.echomuseAudioInput || "",
-    audioOutput: settings.echomuseAudioOutput || "",
+    wakeThreshold: Number(settings.voiceWakeThreshold) || undefined,
+    wakeWordEnabled: typeof settings.voiceWakeWordEnabled === "boolean" ? settings.voiceWakeWordEnabled : undefined,
+    audioInput: settings.voiceAudioInput || "",
+    audioOutput: settings.voiceAudioOutput || "",
   });
 }
 
@@ -166,7 +158,7 @@ wss.on("connection", (socket) => {
 
   // The interface asks for its settings as soon as it loads.
   socket.send(JSON.stringify({ channel: "app:state", payload: state }));
-  socket.send(JSON.stringify({ channel: "app:echomuse", payload: client.state }));
+  socket.send(JSON.stringify({ channel: "app:device", payload: client.state }));
 
   socket.on("message", async (raw) => {
     let message;
@@ -185,9 +177,9 @@ wss.on("connection", (socket) => {
       // it, so a saved change reaches the device rather than waiting for
       // it to be restarted.
       await client.sendConfig({
-        board: saved.echomuseBoard || "",
-        audioInput: saved.echomuseAudioInput || "",
-        audioOutput: saved.echomuseAudioOutput || "",
+        board: saved.deviceName || "",
+        audioInput: saved.voiceAudioInput || "",
+        audioOutput: saved.voiceAudioOutput || "",
       });
       reply(saved);
       return;
@@ -237,14 +229,14 @@ wss.on("connection", (socket) => {
     if (channel === "app:test-sound") {
       // The counter is what tells the device a new tone was asked for.
       const saved = await readSettings();
-      const counter = (saved.echomuseTestSound || 0) + 1;
-      await writeSettings({ echomuseTestSound: counter });
+      const counter = (saved.voiceTestSound || 0) + 1;
+      await writeSettings({ voiceTestSound: counter });
       await client.sendConfig({ testSound: counter });
       reply(counter);
       return;
     }
     if (channel === "app:monitor-mic") {
-      await writeSettings({ echomuseMonitorMic: Boolean(payload) });
+      await writeSettings({ voiceMonitorMic: Boolean(payload) });
       await client.sendConfig({ monitorMic: Boolean(payload) });
       reply(Boolean(payload));
       return;

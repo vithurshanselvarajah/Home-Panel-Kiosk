@@ -65,9 +65,9 @@ if (!fs.existsSync(binary)) fail(`there is no build at ${binary}`);
 // package keeps whatever was copied the first time, and a rebuild of the
 // device program would never reach the packaged build. The bug looks like
 // a fix that did not take.
-const device = path.join(packagedDir, "echomuse-device");
-const source = path.join(root, "vendor", `echomuse-device-linux-${arch === "x64" ? "amd64" : arch}`);
-if (!fs.existsSync(source)) fail(`there is no EchoMuse device at ${source}`);
+const device = path.join(packagedDir, "home-panel-device");
+const source = path.join(root, "vendor", `home-panel-device-linux-${arch === "x64" ? "amd64" : arch}`);
+if (!fs.existsSync(source)) fail(`there is no device program at ${source}`);
 
 const needsCopy =
   !fs.existsSync(device) || fs.statSync(source).mtimeMs > fs.statSync(device).mtimeMs;
@@ -85,10 +85,10 @@ const app = spawn(binary, process.argv.slice(2), {
   stdio: "inherit",
   env: {
     ...process.env,
-    // A packaged run is a device run, so the EchoMuse link stays as the
+    // A packaged run is a device run, so the voice stays as the
     // device's own settings say. The environment can still turn it on for
     // a run that has not been configured yet.
-    ECHOMUSE_ENABLED: process.env.ECHOMUSE_ENABLED || "",
+    HOME_PANEL_VOICE: process.env.HOME_PANEL_VOICE || "",
   },
 });
 app.on("exit", (code) => process.exit(code || 0));

@@ -1,7 +1,8 @@
-// The EchoMuse client.
+// The device program.
 //
-// The EchoMuse link lives in a sidecar: a separate process that owns the
-// controller connection, the microphone, the speaker and the wake word. The
+// The panel is a voice satellite to Home Assistant, and the work of being
+// one lives in a sidecar: a separate process that owns the connection to
+// Home Assistant, the microphone, the speaker and the wake word. The
 // application only renders what the sidecar reports.
 //
 // The two speak through a state file. The file is written atomically by the
@@ -21,7 +22,7 @@ const POLL_INTERVAL_MS = 250;
 
 // Where the sidecar lives. It is beside the Electron binary when the app is
 // packaged, and in the repository's vendor directory when it is not.
-const BINARY_NAME = "echomuse-device";
+const BINARY_NAME = "home-panel-device";
 
 // How long the sidecar is given to stop before it is killed.
 //
@@ -74,7 +75,7 @@ function findSidecar(appPath, resourcesPath, execPath) {
     path.join(resourcesPath, BINARY_NAME),
     path.join(path.dirname(appPath), BINARY_NAME),
     // The repository's own copy, for a development run.
-    path.join(appPath, "vendor", `echomuse-device-linux-${process.arch === "x64" ? "amd64" : process.arch}`),
+    path.join(appPath, "vendor", `home-panel-device-linux-${process.arch === "x64" ? "amd64" : process.arch}`),
   ];
   for (const candidate of candidates) {
     try {
@@ -86,22 +87,19 @@ function findSidecar(appPath, resourcesPath, execPath) {
 }
 
 /**
- * EchoMuseClient runs the sidecar and reads the state it reports.
+ * DeviceClient runs the sidecar and reads the state it reports.
  */
-class EchoMuseClient {
-  constructor({ binary, stateFile, levelFile, configFile, credentialsDir, deviceId, board, controllerUrl, pair, mic, speaker, runtimeDirectory, controlSocket, esphomeKey, esphomeName, onState, onLog }) {
+class DeviceClient {
+  constructor({ binary, stateFile, levelFile, configFile, deviceId, board, mic, speaker, runtimeDirectory, controlSocket, esphomeKey, esphomeName, onState, onLog }) {
     this.binary = binary;
     this.stateFile = stateFile;
     this.levelFile = levelFile || `${stateFile}.level`;
     this.configFile = configFile;
-    this.credentialsDir = credentialsDir;
     // The directory the live state is in. The device program is told
     // about it so that it writes the state where this reads it.
     this.runtimeDirectory = runtimeDirectory;
     this.deviceId = deviceId;
     this.board = board;
-    this.controllerUrl = controllerUrl;
-    this.pair = Boolean(pair);
     this.mic = mic || "";
     this.speaker = speaker || "";
     // The control socket is where the panel talks to this program.
@@ -122,13 +120,13 @@ class EchoMuseClient {
    * Starts the sidecar, if there is one.
    *
    * A missing sidecar is not a failure: the app still works as a dashboard,
-   * it just cannot be an EchoMuse device.
+   * it just cannot be a voice satellite.
    *
    * @returns {boolean} whether the sidecar was started
    */
   start() {
     if (!this.binary) {
-      this.onLog("the EchoMuse sidecar is not installed");
+      this.onLog("the device program is not installed");
       return false;
     }
     if (this.child) return true;
@@ -141,10 +139,6 @@ class EchoMuseClient {
       "--level-file", this.levelFile,
     ];
     if (this.configFile) args.push("--config-file", this.configFile);
-    if (this.controllerUrl) args.push("--controller", this.controllerUrl);
-    // Pairing asks the controller to admit the device, which puts the
-    // request in front of an administrator in the dashboard.
-    if (this.pair) args.push("--pair");
     // The audio devices are named here as well as in the configuration, so
     // the device opens the right ones before the configuration is read.
     if (this.mic) args.push("--mic", this.mic);
@@ -170,17 +164,17 @@ class EchoMuseClient {
       });
     } catch (error) {
       this.child = null;
-      this.onLog(`the EchoMuse sidecar could not be started: ${error.message}`);
+      this.onLog(`the device program could not be started: ${error.message}`);
       return false;
     }
     this.child.stderr.on("data", (chunk) => this.onLog(String(chunk).trim()));
     this.child.on("exit", (code) => {
       this.child = null;
-      this.onLog(`the EchoMuse sidecar stopped with code ${code}`);
+      this.onLog(`the device program stopped with code ${code}`);
     });
     this.child.on("error", (error) => {
       this.child = null;
-      this.onLog(`the EchoMuse sidecar could not be started: ${error.message}`);
+      this.onLog(`the device program could not be started: ${error.message}`);
     });
 
     this.timer = setInterval(() => this.read(), POLL_INTERVAL_MS);
@@ -239,7 +233,7 @@ class EchoMuseClient {
   /**
    * Sends the configuration to the sidecar.
    *
-   * The sidecar writes it to a file the controller reads, so a configuration
+   * The sidecar writes it to a file it reads itself, so a configuration
    * change survives a restart of either.
    *
    * @param {object} config the configuration
@@ -251,7 +245,7 @@ class EchoMuseClient {
       await fsp.writeFile(temporary, JSON.stringify(config, null, 2), { mode: 0o600 });
       await fsp.rename(temporary, this.configFile);
     } catch (error) {
-      this.onLog(`the EchoMuse configuration could not be written: ${error.message}`);
+      this.onLog(`the device configuration could not be written: ${error.message}`);
     }
   }
 
@@ -302,4 +296,4 @@ class EchoMuseClient {
   }
 }
 
-module.exports = { EchoMuseClient, findSidecar, DEFAULT_STATE, BINARY_NAME };
+module.exports = { DeviceClient, findSidecar, DEFAULT_STATE, BINARY_NAME };

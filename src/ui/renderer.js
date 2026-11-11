@@ -4,16 +4,16 @@ const drawer = $("#side-panel");
 const drawerBackdrop = $("#side-panel-backdrop");
 const keyboard = $("#keyboard");
 const form = $("#settings-form");
-const echomuseForm = $("#echomuse-form");
-const echomuseUI = window.EchoMuseUI ? window.EchoMuseUI.create({
+const voiceForm = $("#voice-form");
+const voiceUI = window.VoiceUI ? window.VoiceUI.create({
   container: $("#voice-indicator"),
   dim: $("#voice-dim"),
-  row: $("#echomuse-row"),
-  state: $("#echomuse-state"),
-  led: document.querySelector('[data-service="echomuse"]'),
-  statusLed: document.querySelector('[data-service="echomuse-settings"]'),
-  statusLabel: $("#echomuse-status-label"),
-  statusReason: $("#echomuse-status-reason"),
+  row: $("#voice-row"),
+  state: $("#voice-state"),
+  led: document.querySelector('[data-service="voice"]'),
+  statusLed: document.querySelector('[data-service="voice-settings"]'),
+  statusLabel: $("#voice-status-label"),
+  statusReason: $("#voice-status-reason"),
 }) : null;
 let loadedSettings;
 let touchStart;
@@ -50,8 +50,8 @@ function syncSettingsLayout() {
 
 // Keeps the voice indicator clear of the on-screen keyboard.
 function syncWaveLayout() {
-  if (!echomuseUI) return;
-  echomuseUI.indicator.lift(keyboardOffset());
+  if (!voiceUI) return;
+  voiceUI.indicator.lift(keyboardOffset());
 }
 
 // Keeps the slide-in drawer clear of the return home bar and the keyboard.
@@ -128,11 +128,11 @@ function populate(settings) {
       if (input.type === "checkbox") input.checked = Boolean(value);
       else input.value = value;
     }
-    // The EchoMuse settings live in their own form.
-    const echomuseInput = echomuseForm && echomuseForm.elements.namedItem(key);
-    if (echomuseInput) {
-      if (echomuseInput.type === "checkbox") echomuseInput.checked = Boolean(value);
-      else echomuseInput.value = value;
+    // The voice settings live in their own form.
+    const voiceInput = voiceForm && voiceForm.elements.namedItem(key);
+    if (voiceInput) {
+      if (voiceInput.type === "checkbox") voiceInput.checked = Boolean(value);
+      else voiceInput.value = value;
     }
   }
   // The encryption key is shown, because it is a setting that is read
@@ -241,11 +241,11 @@ function stopMicMonitor() {
 
 $("#close-settings").addEventListener("click", closeSettings);
 
-// Settings tabs. The EchoMuse tab is a separate view in the same panel so
+// Settings tabs. The voice tab is a separate view in the same panel so
 // the device setup form is not buried under it.
 const settingsTabs = [
   { tab: $("#tab-device"), view: $("#settings-view-device") },
-  { tab: $("#tab-echomuse"), view: $("#settings-view-echomuse") },
+  { tab: $("#tab-voice"), view: $("#settings-view-voice") },
 ];
 
 function selectSettingsTab(index) {
@@ -350,24 +350,24 @@ form.addEventListener("submit", async (event) => {
   } catch (error) { $("#form-error").textContent = error.message || "Could not save settings."; }
 });
 
-// The EchoMuse settings are saved with the rest of the device settings, so
+// The voice settings are saved with the rest of the device settings, so
 // there is one place the configuration lives.
-if (echomuseForm) {
-  echomuseForm.addEventListener("submit", async (event) => {
+if (voiceForm) {
+  voiceForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = Object.fromEntries(new FormData(echomuseForm));
+    const data = Object.fromEntries(new FormData(voiceForm));
     // A form only submits the checkboxes that are ticked, so unticking one
     // would leave the old value behind. The state of every checkbox is
     // sent instead, so a tick can be undone.
-    for (const element of echomuseForm.elements) {
+    for (const element of voiceForm.elements) {
       if (element.type === "checkbox") data[element.name] = element.checked;
     }
-    $("#echomuse-error").textContent = "";
+    $("#voice-error").textContent = "";
     try {
       const saved = await window.homePanel.saveSettings(data);
       populate(saved);
     } catch (error) {
-      $("#echomuse-error").textContent = error.message || "Could not save the EchoMuse settings.";
+      $("#voice-error").textContent = error.message || "Could not save the voice settings.";
     }
   });
 }
@@ -544,7 +544,7 @@ window.addEventListener("pointercancel", () => {
 window.addEventListener("keydown", () => window.homePanel.activity("keydown"));
 window.addEventListener("resize", () => {
   syncSettingsLayout();
-  if (echomuseUI) echomuseUI.indicator.resize();
+  if (voiceUI) voiceUI.indicator.resize();
 });
 window.visualViewport?.addEventListener("resize", syncSettingsLayout);
 window.visualViewport?.addEventListener("scroll", syncSettingsLayout);
@@ -562,16 +562,16 @@ window.homePanel.getSettings().then((settings) => {
 // is tested by a tone, because a person choosing a speaker needs to hear
 // it to know which one it is.
 //
-// They are found before the EchoMuse state handler is wired, because the
+// They are found before the voice state handler is wired, because the
 // handler paints the button and the meter.
 const micTestButton = $("#mic-test-button");
 const speakerTestButton = $("#speaker-test-button");
 
-// The EchoMuse state comes from the sidecar, which owns the link to the
+// The voice state comes from the device program, which owns the link to
 // controller and the audio. The main process pushes it whenever it changes.
-if (echomuseUI && window.homePanel.onEchoMuseState) {
-  window.homePanel.onEchoMuseState((state) => {
-    echomuseUI.apply(state);
+if (voiceUI && window.homePanel.onDeviceState) {
+  window.homePanel.onDeviceState((state) => {
+    voiceUI.apply(state);
     populateAudioDevices(state);
     paintAudioMeters(state);
   });
@@ -643,8 +643,8 @@ function setMeter(fill, value, level) {
 // audio. The pickers keep whatever was chosen, so a device that was
 // unplugged does not silently become the default.
 function populateAudioDevices(state) {
-  fillDeviceSelect($("#echomuse-audio-input"), state.audio_inputs, loadedSettings?.echomuseAudioInput, state.selected_audio_input);
-  fillDeviceSelect($("#echomuse-audio-output"), state.audio_outputs, loadedSettings?.echomuseAudioOutput, state.selected_audio_output);
+  fillDeviceSelect($("#voice-audio-input"), state.audio_inputs, loadedSettings?.voiceAudioInput, state.selected_audio_input);
+  fillDeviceSelect($("#voice-audio-output"), state.audio_outputs, loadedSettings?.voiceAudioOutput, state.selected_audio_output);
 }
 
 function fillDeviceSelect(select, devices, chosen, selected) {

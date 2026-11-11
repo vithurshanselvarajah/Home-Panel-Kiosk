@@ -7,7 +7,7 @@ const os = require("node:os");
 const { safeUrl, settingNumber, settingBoolean, displayMode: readDisplayMode, windowBounds, DISPLAY_MODES } = require("./utils");
 const { generateEncryptionKey } = require("./encryption");
 const { createHealthChecker, probeHttp } = require("./health");
-const { EchoMuseClient, findSidecar } = require("./echomuse");
+const { DeviceClient, findSidecar } = require("./device");
 const { ControlClient, findControlSocket } = require("./control");
 const { systemVolumePercent, setSystemVolume } = require("./volume");
 
@@ -20,16 +20,24 @@ const DEFAULTS = {
   displayMode: "fullscreen",
   touchKeyboardEnabled: true,
   deviceName: "Home Panel",
-  echomuseEnabled: false,
-  echomuseControllerUrl: "",
-  echomuseDeviceId: "",
-  echomuseBoard: "home-panel",
-  echomuseAudioInput: "",
-  echomuseAudioOutput: "",
-  echomusePair: true,
   esphomeEncryptionEnabled: false,
   esphomeEncryptionKey: "",
   esphomeDeviceName: "",
+  // The voice settings. They are the panel's own: the wake word runs on
+  // the panel and home assistant only hears the turn.
+  voiceEnabled: false,
+  voiceDeviceId: "home-panel",
+  voiceWakeWordEnabled: true,
+  voiceWakeThreshold: 0.5,
+  voiceAudioInput: "",
+  voiceAudioOutput: "",
+  voiceStartupVolume: 50,
+  voiceVolume: 50,
+  voiceDuckDb: -6,
+  voiceMuteButton: true,
+  musicEnabled: true,
+  musicName: "Home Panel",
+  musicUnpaired: false,
 };
 
 // The microphone monitor and the test sound are not settings.
@@ -40,8 +48,8 @@ const DEFAULTS = {
 // saved one plays the tone again every time the device starts.
 //
 // They live here rather than in the settings for that reason.
-let echomuseMonitorMic = false;
-let echomuseTestSound = 0;
+let voiceMonitorMic = false;
+let voiceTestSound = 0;
 
 let win;
 let overlayView;
@@ -81,7 +89,7 @@ let legacyCameraNames = [];
 let overlayRecycleTimer;
 let viewRetryTimer;
 let lastPointerMoveAt = 0;
-let echomuseClient;
+let deviceClient;
 // quitting is whether the application is on its way out.
 //
 // The quit waits for the sidecar to release the sound card, and the wait
@@ -223,14 +231,14 @@ function sendState(force = false) {
 // and copied into Home Assistant rather than a password that is typed
 // once and forgotten.
 
-// Sends the EchoMuse state to the overlay.
+// Sends the device state to the overlay.
 //
 // It is sent on its own channel because it changes on its own schedule, and
 // the overlay draws it differently from the rest of the state.
-function sendEchoMuseState() {
-  if (!echomuseClient) return;
-  const state = echomuseClient.state;
-  sendToOverlay("app:echomuse", state);
+function sendDeviceState() {
+  if (!deviceClient) return;
+  const state = deviceClient.state;
+  sendToOverlay("app:device", state);
   // The voice indicator is shown over whatever the panel is showing, so
   // the overlay has to be there for it. It is not only there when the
   // settings page is open: the point of the indicator is that somebody
@@ -663,7 +671,7 @@ function setServiceStatus(name, status) {
 function startControlPlane() {
   // The socket is where the sidecar was told to put it, so the two
   // cannot disagree about it.
-  const socket = findControlSocket(runtimeDirectory(settings.echomuseDeviceId || deviceId));
+  const socket = findControlSocket(runtimeDirectory(settings.voiceDeviceId || deviceId));
   controlClient = new ControlClient({
     socket,
     onCommand: (command) => handleCommand(command),
@@ -702,14 +710,23 @@ async function saveSettings(next) {
   clean.touchKeyboardEnabled = Boolean(clean.touchKeyboardEnabled);
   clean.dashboardUrl = safeUrl(clean.dashboardUrl) || DEFAULTS.dashboardUrl;
   clean.slideshowUrl = clean.slideshowUrl ? safeUrl(clean.slideshowUrl) || "" : "";
-  clean.echomuseEnabled = Boolean(clean.echomuseEnabled);
-  clean.echomuseControllerUrl = clean.echomuseControllerUrl ? safeUrl(clean.echomuseControllerUrl) || "" : "";
-  clean.echomuseDeviceId = String(clean.echomuseDeviceId || "").trim();
-  clean.echomuseBoard = String(clean.echomuseBoard || DEFAULTS.echomuseBoard).trim() || DEFAULTS.echomuseBoard;
+  // The voice settings. The panel is a voice satellite, and these are
+  // what make it one.
+  clean.voiceEnabled = Boolean(clean.voiceEnabled);
+  clean.voiceDeviceId = String(clean.voiceDeviceId || DEFAULTS.voiceDeviceId).trim() || DEFAULTS.voiceDeviceId;
+  clean.voiceWakeWordEnabled = Boolean(clean.voiceWakeWordEnabled);
+  clean.voiceWakeThreshold = settingNumber(clean.voiceWakeThreshold) ?? DEFAULTS.voiceWakeThreshold;
+  clean.voiceStartupVolume = settingNumber(clean.voiceStartupVolume) ?? DEFAULTS.voiceStartupVolume;
+  clean.voiceVolume = settingNumber(clean.voiceVolume) ?? DEFAULTS.voiceVolume;
+  clean.voiceDuckDb = settingNumber(clean.voiceDuckDb) ?? DEFAULTS.voiceDuckDb;
+  clean.voiceMuteButton = Boolean(clean.voiceMuteButton);
+  clean.musicEnabled = Boolean(clean.musicEnabled);
+  clean.musicName = String(clean.musicName || DEFAULTS.musicName).trim() || DEFAULTS.musicName;
+  clean.musicUnpaired = Boolean(clean.musicUnpaired);
   // The audio devices are named by the sidecar, so the names are kept as
   // they are. An empty name is the system default.
-  clean.echomuseAudioInput = String(clean.echomuseAudioInput || "").trim();
-  clean.echomuseAudioOutput = String(clean.echomuseAudioOutput || "").trim();
+  clean.voiceAudioInput = String(clean.voiceAudioInput || "").trim();
+  clean.voiceAudioOutput = String(clean.voiceAudioOutput || "").trim();
   // The encryption key is what the Home Assistant connection is made
   // with. It is a secret, so it is kept out of the file and put back
   // when the settings are read.
@@ -758,43 +775,34 @@ async function saveSettings(next) {
   // have changed — the microphone, the speaker, the controller. It is
   // awaited so the old one has released the sound card before the new
   // one asks for it.
-  await startEchoMuse();
-  // The EchoMuse settings are pushed to the controller as its configuration,
-  // so the controller and the device agree on how the device listens.
-  if (echomuseClient && settings.echomuseEnabled) sendEchoMuseConfig();
+  await startDeviceProgram();
+  // The settings are pushed to the device program, so the panel and the
+  // device agree on how the device listens.
+  if (deviceClient && settings.voiceEnabled) sendDeviceConfig();
   return publicSettings();
 }
 
-// Sends the EchoMuse configuration to the controller.
-//
-// The controller owns the wake word and the audio settings, so the device
-// tells it what it is and the controller pushes back what it wants.
+// Sends the configuration to the device program.
 //
 // Only the settings that were actually chosen are sent. A setting that was
-// never touched is left out, so the sidecar keeps what it had rather than
+// never touched is left out, so the device keeps what it had rather than
 // being handed a default that was not the user's.
-function sendEchoMuseConfig() {
-  if (!echomuseClient) return;
-  echomuseClient.sendConfig({
-    board: settings.echomuseBoard,
-    wakeThreshold: settingNumber(settings.echomuseWakeThreshold),
-    wakeWordEnabled: settingBoolean(settings.echomuseWakeWordEnabled),
-    bargeIn: settingBoolean(settings.echomuseBargeIn),
-    startupVolume: settingNumber(settings.echomuseStartupVolume),
-    micGainDb: settingNumber(settings.echomuseMicGainDb),
-    vadThreshold: settingNumber(settings.echomuseVadThreshold),
-    vadSpeechMs: settingNumber(settings.echomuseVadSpeechMs),
-    vadSilenceMs: settingNumber(settings.echomuseVadSilenceMs),
-    volume: settingNumber(settings.echomuseVolume),
-    duckDb: settingNumber(settings.echomuseDuckDb),
-    muteButton: settingBoolean(settings.echomuseMuteButton),
-    volumeButtonSound: settingBoolean(settings.echomuseVolumeButtonSound),
-    wakeMode: settings.echomuseWakeMode || "on",
-    wakeSound: settings.echomuseWakeSound !== "off",
-    audioInput: settings.echomuseAudioInput || "",
-    audioOutput: settings.echomuseAudioOutput || "",
-    monitorMic: echomuseMonitorMic,
-    testSound: echomuseTestSound,
+function sendDeviceConfig() {
+  if (!deviceClient) return;
+  deviceClient.sendConfig({
+    wakeThreshold: settingNumber(settings.voiceWakeThreshold),
+    wakeWordEnabled: settingBoolean(settings.voiceWakeWordEnabled),
+    startupVolume: settingNumber(settings.voiceStartupVolume),
+    volume: settingNumber(settings.voiceVolume),
+    duckDb: settingNumber(settings.voiceDuckDb),
+    muteButton: settingBoolean(settings.voiceMuteButton),
+    sendspinEnabled: settingBoolean(settings.musicEnabled),
+    sendspinName: settings.musicName || "",
+    sendspinUnpaired: settingBoolean(settings.musicUnpaired),
+    audioInput: settings.voiceAudioInput || "",
+    audioOutput: settings.voiceAudioOutput || "",
+    monitorMic: voiceMonitorMic,
+    testSound: voiceTestSound,
   });
 }
 
@@ -815,79 +823,25 @@ function publicSettings() {
   return { ...settings };
 }
 
-// Starts the EchoMuse sidecar, if the device is set up to use one.
+// Starts the device program, if the panel is set up to be a voice
+// satellite.
 //
-// The sidecar owns the controller link and the audio. It reports what the
-// device is doing, and the overlay draws it.
-// runtimeDirectory is where the live state of a device lives.
+// It is the same program that answers Home Assistant over the ESPHome
+// protocol. The panel is a renderer and the device program owns the
+// connection, the microphone, the speaker and the wake word.
 //
-// It is in memory, because the live state is a reading and not a record:
-// it changes as the device listens and speaks, and it is worth nothing
-// once the process is gone. Writing it to the flash would wear the flash
-// out for nothing.
-//
-// The service gives the application a directory in memory, and that is
-// where the state goes when there is one. Without it the shared memory
-// directory is used, and failing that the application’s own directory —
-// which is the disk, and is worse but works.
-function runtimeDirectory(identity) {
-  const name = identity.replace(/[^a-zA-Z0-9_-]/g, "-") || "device";
-  for (const base of [runtimeBase(), "/dev/shm/homepanel"]) {
-    const dir = path.join(base, name);
-    try {
-      fsSync.mkdirSync(dir, { recursive: true, mode: 0o700 });
-      // The directory has to be in memory, or the live state goes to the
-      // disk and the flash wears out for nothing. A directory that was
-      // made on the disk is not one.
-      if (!isMemory(dir)) continue;
-      return dir;
-    } catch { /* try the next one */ }
-  }
-  return path.join(app.getPath("userData"), "echomuse-runtime");
-}
-
-/**
- * The directory the live state is kept in.
- *
- * The service makes a directory in memory and names it through
- * RUNTIME_DIRECTORY. The device program looks in the same place, and it
- * is told which place that is when it is started, so the two cannot
- * disagree about where the state is.
- *
- * The shared memory directory is the fallback, because it is a memory
- * filesystem on every Linux and it needs nothing set up.
- */
-function runtimeBase() {
-  return process.env.RUNTIME_DIRECTORY || "/dev/shm/homepanel";
-}
-
-/**
- * Says whether a path is on a memory filesystem.
- *
- * The state is a few kilobytes, so the memory filesystem does not have to
- * be big. What matters is that it is not the disk.
- */
-function isMemory(directory) {
-  try {
-    const stats = fsSync.statfsSync(directory);
-    // TMPFS_MAGIC and RAMFS_MAGIC.
-    return stats.type === 0x01021994 || stats.type === 0x858458f6;
-  } catch {
-    return false;
-  }
-}
-
-async function startEchoMuse() {
-  if (echomuseClient) {
-    // The old sidecar has to be gone before the new one starts. It holds
+// It is started whether or not the voice is switched on, because the
+// connection to Home Assistant lives in it. A panel whose voice is off is
+// still an ESPHome device with entities and services.
+async function startDeviceProgram() {
+  if (deviceClient) {
+    // The old one has to be gone before the new one starts. It holds
     // the microphone and the speaker, and a new one that starts while the
-    // old one is still holding them finds the card busy — so the device
-    // never hears anything and the controller is told the microphone
-    // could not be opened, over and over.
-    await echomuseClient.stop();
-    echomuseClient = null;
+    // old one is still holding them finds the card busy — so the panel
+    // never hears anything.
+    await deviceClient.stop();
+    deviceClient = null;
   }
-  if (!settings.echomuseEnabled) return;
 
   const binary = findSidecar(app.getAppPath(), process.resourcesPath, process.execPath);
   // The live state and the live level are written into memory, not onto
@@ -898,38 +852,28 @@ async function startEchoMuse() {
   //
   // The path is derived from the device's identity, which is what the
   // device program derives it from too.
-  const identity = settings.echomuseDeviceId || deviceId;
+  const identity = settings.voiceDeviceId || deviceId;
   const runtimeDir = runtimeDirectory(identity);
   // The device program is told where the live state lives, so that it
   // writes it where this reads it.
   const runtimeBaseDir = path.dirname(runtimeDir);
   const stateFile = path.join(runtimeDir, "state.json");
   const levelFile = path.join(runtimeDir, "level");
-  const configFile = path.join(app.getPath("userData"), "echomuse-config.json");
-  const credentialsDir = path.join(app.getPath("userData"), "echomuse");
+  const configFile = path.join(app.getPath("userData"), "device-config.json");
 
-  echomuseClient = new EchoMuseClient({
+  deviceClient = new DeviceClient({
     binary,
     stateFile,
     levelFile,
     configFile,
-    credentialsDir,
     deviceId: identity,
-    board: settings.echomuseBoard || "home-panel",
+    board: settings.deviceName || "home-panel",
     runtimeDirectory: runtimeBaseDir,
-    // The environment wins over the setting, so a development run can be
-    // pointed at a controller on another machine without changing the
-    // device's own configuration.
-    controllerUrl: process.env.ECHOMUSE_CONTROLLER_URL || settings.echomuseControllerUrl || "",
-    // A device that has never been admitted asks to pair, so the request
-    // shows up in the controller's dashboard rather than sitting in a list
-    // of pending devices.
-    pair: settings.echomusePair !== false,
     // The audio devices are named on the command line as well as in the
     // configuration, so the device opens the right ones before the
     // configuration is read.
-    mic: settings.echomuseAudioInput || "",
-    speaker: settings.echomuseAudioOutput || "",
+    mic: settings.voiceAudioInput || "",
+    speaker: settings.voiceAudioOutput || "",
     // The control socket is where the panel and the device program meet.
     // It is in memory, because it carries what is happening now rather
     // than anything worth keeping.
@@ -940,23 +884,17 @@ async function startEchoMuse() {
     // needs the key and the name the panel is known by.
     esphomeKey: settings.esphomeEncryptionKey || "",
     esphomeName: settings.esphomeDeviceName || identity,
-    onState: () => sendEchoMuseState(),
-    onLog: (message) => { if (message) console.info("echomuse:", message); },
+    onState: () => sendDeviceState(),
+    onLog: (message) => { if (message) console.info("device:", message); },
   });
 
-  try {
-    fsSync.mkdirSync(credentialsDir, { recursive: true, mode: 0o700 });
-  } catch (error) {
-    console.warn("could not create the EchoMuse credential directory:", error.message);
-  }
-
-  echomuseClient.start();
+  deviceClient.start();
 
   // The configuration is written before the sidecar starts, so the sidecar
   // reads the settings on its first pass rather than waiting for the next
   // change. Otherwise a device that was configured yesterday would run
   // today with the defaults.
-  sendEchoMuseConfig();
+  sendDeviceConfig();
 }
 
 function createOverlayView() {
@@ -1141,15 +1079,15 @@ function registerIpc() {
   ipcMain.handle("app:test-sound", (event) => {
     assertOverlaySender(event);
     // The counter is what tells the device a new tone was asked for.
-    echomuseTestSound += 1;
-    sendEchoMuseConfig();
-    return echomuseTestSound;
+    voiceTestSound += 1;
+    sendDeviceConfig();
+    return voiceTestSound;
   });
   ipcMain.handle("app:monitor-mic", (event, on) => {
     assertOverlaySender(event);
-    echomuseMonitorMic = Boolean(on);
-    sendEchoMuseConfig();
-    return echomuseMonitorMic;
+    voiceMonitorMic = Boolean(on);
+    sendDeviceConfig();
+    return voiceMonitorMic;
   });
   ipcMain.on("app:activity", (event, source) => { assertOverlaySender(event); recordActivity(source === "keydown" ? "overlay-key" : "overlay"); });
   ipcMain.on("app:overlay-expanded", (event, expanded) => {
@@ -1346,11 +1284,11 @@ app.whenReady().then(async () => {
   // The flag wins over the saved setting, but only for this run.
   const flagMode = readDisplayModeFlag();
   if (flagMode) settings.displayMode = flagMode;
-  // The environment can turn the link on for a development run, and it can
-  // point it at a controller. Neither is written to the settings file, so a
-  // development run never changes how the device is set up.
-  if (process.env.ECHOMUSE_ENABLED === "1") settings.echomuseEnabled = true;
-  if (process.env.ECHOMUSE_ENABLED === "0") settings.echomuseEnabled = false;
+  // The environment can turn the voice on for a development run. It is
+  // not written to the settings file, so a development run never changes
+  // how the device is set up.
+  if (process.env.HOME_PANEL_VOICE === "1") settings.voiceEnabled = true;
+  if (process.env.HOME_PANEL_VOICE === "0") settings.voiceEnabled = false;
   registerHealthProbes();
   healthChecker.start();
   registerIpc();
@@ -1365,7 +1303,7 @@ app.whenReady().then(async () => {
   // for, and a quarter of a second of mixer work does not hold it up.
   refreshVolume();
   startControlPlane();
-  await startEchoMuse();
+  await startDeviceProgram();
   app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
   app.on("second-instance", () => {
     if (!win || win.isDestroyed()) return;
@@ -1385,9 +1323,9 @@ app.on("before-quit", (event) => {
   // The quit waits for it, because the sidecar releases the sound card
   // when it exits and the next thing to want it — a restart, another
   // program — finds it busy. The wait is bounded inside the sidecar.
-  if (echomuseClient) {
-    const client = echomuseClient;
-    echomuseClient = null;
+  if (deviceClient) {
+    const client = deviceClient;
+    deviceClient = null;
     event.preventDefault();
     client.stop().finally(() => {
       quitting = true;
