@@ -17,7 +17,7 @@ import (
 // The connection is either encrypted or it is not, and the two read and
 // write frames in different ways. The client holds whichever one it is
 // so the server does not have to ask.
-type client struct {
+type Client struct {
 	conn net.Conn
 	// plain is the connection when it is not encrypted. The first byte
 	// has been read already, so the reader has to be given it back.
@@ -58,7 +58,7 @@ type client struct {
 // before the server says anything. The server cannot send its hello
 // first: the hello is part of the encrypted conversation, and a client
 // that is not expecting it would read the wrong bytes.
-func (s *Server) accept(conn net.Conn) (*client, error) {
+func (s *Server) accept(conn net.Conn) (*Client, error) {
 	// The first byte says which conversation this is.
 	var indicator [1]byte
 	if _, err := io.ReadFull(conn, indicator[:]); err != nil {
@@ -80,7 +80,7 @@ func (s *Server) accept(conn net.Conn) (*client, error) {
 		}
 		// The indicator was read, so it has to be given back to the
 		// frame reader: the frame starts with it.
-		return &client{conn: conn, plain: io.MultiReader(bytes.NewReader(indicator[:]), conn), logger: s.log}, nil
+		return &Client{conn: conn, plain: io.MultiReader(bytes.NewReader(indicator[:]), conn), logger: s.log}, nil
 	case 0x01:
 		// Encrypted. The key is the one the device has, or the
 		// provisioning key when it has none.
@@ -107,7 +107,7 @@ func (s *Server) accept(conn net.Conn) (*client, error) {
 		if err := secure.readClientHandshake(); err != nil {
 			return nil, fmt.Errorf("esphome: the handshake failed: %w", err)
 		}
-		return &client{conn: conn, secure: secure, logger: s.log}, nil
+		return &Client{conn: conn, secure: secure, logger: s.log}, nil
 	}
 	return nil, fmt.Errorf("esphome: unexpected frame indicator %d", indicator[0])
 }
@@ -151,7 +151,7 @@ func refusePlaintext(conn net.Conn) error {
 const provisioningKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 // log writes a message about the connection.
-func (c *client) log(message string, args ...any) {
+func (c *Client) log(message string, args ...any) {
 	if c.logger == nil {
 		return
 	}
@@ -159,7 +159,7 @@ func (c *client) log(message string, args ...any) {
 }
 
 // read reads one frame.
-func (c *client) read() (Frame, error) {
+func (c *Client) read() (Frame, error) {
 	if c.secure != nil {
 		return c.secure.readEncrypted()
 	}
@@ -167,7 +167,7 @@ func (c *client) read() (Frame, error) {
 }
 
 // write writes one frame.
-func (c *client) write(messageType uint32, message proto.Message) error {
+func (c *Client) write(messageType uint32, message proto.Message) error {
 	payload, err := proto.Marshal(message)
 	if err != nil {
 		return err
@@ -187,7 +187,7 @@ func (c *client) write(messageType uint32, message proto.Message) error {
 // disconnect ends the connection politely.
 //
 // The client is told first, so it does not treat the close as a fault.
-func (c *client) disconnect() error {
+func (c *Client) disconnect() error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	if c.closed {
@@ -205,7 +205,7 @@ func (c *client) disconnect() error {
 }
 
 // close ends the connection.
-func (c *client) close() {
+func (c *Client) close() {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	c.closed = true

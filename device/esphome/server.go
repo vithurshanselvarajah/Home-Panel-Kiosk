@@ -20,7 +20,7 @@ type Server struct {
 	// services holds the services the device offers.
 	services *ServiceRegistry
 	// voice is the voice assistant, when the device has one.
-	voice *voiceAssistant
+	voice *Voice
 	// onReplyAudio is called with the reply audio as it arrives.
 	//
 	// The panel plays the reply, and the reply arrives on the same
@@ -163,7 +163,7 @@ func (s *Server) Services() *ServiceRegistry {
 //
 // It is set after the server is made, because whether the device is a
 // voice assistant is the device's business and not the protocol's.
-func (s *Server) SetVoice(voice *voiceAssistant) {
+func (s *Server) SetVoice(voice *Voice) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.voice = voice
@@ -172,7 +172,7 @@ func (s *Server) SetVoice(voice *voiceAssistant) {
 // Voice gives access to the voice assistant.
 //
 // It is nil when the device is not a voice assistant.
-func (s *Server) Voice() *voiceAssistant {
+func (s *Server) Voice() *Voice {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.voice
@@ -244,7 +244,7 @@ func (s *Server) serve(conn net.Conn) {
 }
 
 // handle answers one message from the client.
-func (s *Server) handle(client *client, frame Frame) error {
+func (s *Server) handle(client *Client, frame Frame) error {
 	switch frame.Type {
 	case TypeHelloRequest:
 		request := &HelloRequest{}
@@ -358,7 +358,7 @@ func (s *Server) handle(client *client, frame Frame) error {
 //
 // The arguments come over the wire as a list of typed values, and they
 // are put into a map by name so the service can ask for them by name.
-func (s *Server) callService(client *client, request *ExecuteServiceRequest) error {
+func (s *Server) callService(client *Client, request *ExecuteServiceRequest) error {
 	service := s.services.ByKey(request.Key)
 	if service == nil {
 		s.log.Warn("a service was asked for that the device does not have", "key", request.Key)
@@ -404,7 +404,7 @@ func serviceArguments(service *Service, given []*ExecuteServiceArgument) (map[st
 }
 
 // command applies a command from the client.
-func (s *Server) command(client *client, key uint32, value EntityValue) error {
+func (s *Server) command(client *Client, key uint32, value EntityValue) error {
 	s.log.Debug("a command arrived", "key", key, "value", value.String())
 	if err := s.registry.HandleCommand(key, value); err != nil {
 		s.log.Warn("a command was refused", "key", key, "error", err)
@@ -441,7 +441,7 @@ func (s *Server) deviceInfo() *DeviceInfoResponse {
 // The entities are listed one message at a time, each with the type
 // that matches its kind, and then a message that says the list is
 // finished.
-func (s *Server) listEntities(client *client) error {
+func (s *Server) listEntities(client *Client) error {
 	for _, entity := range s.registry.All() {
 		message, err := s.entityMessage(entity)
 		if err != nil {
@@ -484,7 +484,7 @@ func (s *Server) serviceMessage(service *Service) *ListEntitiesServicesResponse 
 }
 
 // pushAllStates sends the state of every entity.
-func (s *Server) pushAllStates(client *client) error {
+func (s *Server) pushAllStates(client *Client) error {
 	for _, entity := range s.registry.All() {
 		if err := s.sendState(client, entity); err != nil {
 			return err
@@ -496,7 +496,7 @@ func (s *Server) pushAllStates(client *client) error {
 // pushState sends the state of one entity to every client.
 func (s *Server) pushState(entity *Entity) {
 	s.connections.Range(func(key, _ any) bool {
-		connected, ok := key.(*client)
+		connected, ok := key.(*Client)
 		if !ok {
 			return true
 		}
@@ -508,7 +508,7 @@ func (s *Server) pushState(entity *Entity) {
 }
 
 // sendState sends the state of one entity to one client.
-func (s *Server) sendState(client *client, entity *Entity) error {
+func (s *Server) sendState(client *Client, entity *Entity) error {
 	value := entity.StateOf()
 	switch entity.Kind {
 	case KindSwitch:

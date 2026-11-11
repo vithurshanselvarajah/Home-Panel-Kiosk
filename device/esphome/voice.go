@@ -67,7 +67,12 @@ const (
 // does, with its own voice activity detection, and says so by ending the
 // turn. That is why there is no speech detector in this file: the
 // microphone is open for exactly as long as home assistant wants it.
-type voiceAssistant struct {
+// Voice is the panel's voice assistant.
+//
+// It is the part of the ESPHome protocol that makes the panel a voice
+// satellite: it starts turns, carries the microphone to Home Assistant
+// and plays the reply.
+type Voice struct {
 	log *slog.Logger
 
 	mu sync.Mutex
@@ -113,20 +118,25 @@ type voiceAssistant struct {
 	onThinking func(thinking bool)
 	// onSpeaking is called when the reply starts or stops.
 	onSpeaking func(speaking bool)
+	// hooks are the callbacks the device program wires.
+	hooks VoiceHooks
 }
 
 // voiceOptions is what a voice assistant is made with.
-type voiceOptions struct {
-	log *slog.Logger
+// VoiceOptions is what a voice assistant is made with.
+type VoiceOptions struct {
+	// Log is where the messages go.
+	Log *slog.Logger
 }
 
 // newVoiceAssistant makes a voice assistant.
-func newVoiceAssistant(options voiceOptions) *voiceAssistant {
-	log := options.log
+// NewVoice makes a voice assistant.
+func NewVoice(options VoiceOptions) *Voice {
+	log := options.Log
 	if log == nil {
 		log = slog.Default()
 	}
-	return &voiceAssistant{log: log}
+	return &Voice{log: log}
 }
 
 // voiceAssistantFlags are the flags this device advertises.
@@ -148,7 +158,7 @@ func (s *Server) voiceAssistantFlags() uint32 {
 // It needs a microphone and a local wake word. Without both, home
 // assistant has to do the detecting, and the panel is a speaker rather
 // than a satellite.
-func (v *voiceAssistant) canStartConversations() bool {
+func (v *Voice) canStartConversations() bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return v.wakeWordReady && v.wakeWordEnabled
@@ -159,7 +169,7 @@ func (v *voiceAssistant) canStartConversations() bool {
 // The events are what home assistant says while it works: that the turn
 // started, that it heard something, that the intent matched, that the
 // reply is coming.
-func (v *voiceAssistant) handleVoiceEvent(message *VoiceAssistantEventResponse) {
+func (v *Voice) handleVoiceEvent(message *VoiceAssistantEventResponse) {
 	data := map[string]string{}
 	for _, item := range message.GetData() {
 		data[item.GetName()] = item.GetValue()
@@ -217,8 +227,8 @@ func (v *voiceAssistant) handleVoiceEvent(message *VoiceAssistantEventResponse) 
 		v.log.Info("home assistant rejected the wake word")
 	}
 
-	if v.onEvent != nil {
-		v.onEvent(message.GetEventType())
+	if hooks := v.voiceHooks(); hooks.OnEvent != nil {
+		hooks.OnEvent(message.GetEventType())
 	}
 }
 
@@ -228,10 +238,10 @@ func (v *voiceAssistant) handleVoiceEvent(message *VoiceAssistantEventResponse) 
 // connection as audio, in the same way a spoken reply does. So the
 // announcement is a request to play something, and the audio that
 // follows is the something.
-func (v *voiceAssistant) handleAnnounce(message *VoiceAssistantAnnounceRequest) {
+func (v *Voice) handleAnnounce(message *VoiceAssistantAnnounceRequest) {
 	v.log.Info("home assistant asked the panel to speak", "text", message.GetText())
-	if v.onAnnounce != nil {
-		v.onAnnounce(message.GetMediaId(), message.GetText())
+	if hooks := v.voiceHooks(); hooks.OnAnnounce != nil {
+		hooks.OnAnnounce(message.GetMediaId(), message.GetText())
 	}
 }
 
@@ -240,7 +250,7 @@ func (v *voiceAssistant) handleAnnounce(message *VoiceAssistantAnnounceRequest) 
 //
 // The list it is given is what its picker shows, so an empty list is how
 // "no wake word" survives a reconnect.
-func (v *voiceAssistant) handleConfigurationRequest() *VoiceAssistantConfigurationResponse {
+func (v *Voice) handleConfigurationRequest() *VoiceAssistantConfigurationResponse {
 	v.mu.Lock()
 	model := v.wakeWord
 	ready := v.wakeWordReady
@@ -291,7 +301,7 @@ func activeWakeWords(model string, enabled bool) []string {
 // An empty list means "no wake word", which switches the local detection
 // off. It is applied straight away, because home assistant reads the
 // configuration back immediately after writing it.
-func (v *voiceAssistant) handleSetConfiguration(message *VoiceAssistantSetConfiguration) error {
+func (v *Voice) handleSetConfiguration(message *VoiceAssistantSetConfiguration) error {
 	requested := message.GetActiveWakeWords()
 
 	v.mu.Lock()
@@ -327,7 +337,7 @@ func (v *voiceAssistant) handleSetConfiguration(message *VoiceAssistantSetConfig
 // setup dialog reads it and refuses the run when it is missing, so a
 // panel that sends an empty phrase cannot complete the one flow that
 // asks it to prove it heard a wake word.
-func (v *voiceAssistant) startTurn(phrase string) {
+func (v *Voice) startTurn(phrase string) {
 	v.mu.Lock()
 	if v.turn {
 		v.mu.Unlock()
@@ -344,20 +354,29 @@ func (v *voiceAssistant) startTurn(phrase string) {
 
 	v.log.Info("a turn is starting", "phrase", phrase)
 
-	if v.onTurn != nil {
-		v.onTurn(phrase)
+	if hooks := v.voiceHooks(); hooks.OnTurn != nil {
+		hooks.OnTurn(phrase)
 	}
 }
 
+// conversation returns the identifier of the current turn.
+//
+// It is empty when no turn is running.
+func (v *Voice) conversation() string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.conversationID
+}
+
 // turnRunning reports whether a turn is running.
-func (v *voiceAssistant) turnRunning() bool {
+func (v *Voice) turnRunning() bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return v.turn
 }
 
 // endTurn finishes the turn.
-func (v *voiceAssistant) endTurn() {
+func (v *Voice) endTurn() {
 	v.mu.Lock()
 	if !v.turn {
 		v.mu.Unlock()
@@ -373,27 +392,30 @@ func (v *voiceAssistant) endTurn() {
 
 	v.log.Info("the turn is over", "transcript", transcript, "failed", failed)
 
-	if v.onEnd != nil {
-		v.onEnd(transcript, failed)
+	if hooks := v.voiceHooks(); hooks.OnEnd != nil {
+		hooks.OnEnd(transcript, failed)
 	}
 }
 
 // setThinking records whether home assistant is working on the turn.
-func (v *voiceAssistant) setThinking(thinking bool) {
-	if v.onThinking != nil {
-		v.onThinking(thinking)
+func (v *Voice) setThinking(thinking bool) {
+	if hooks := v.voiceHooks(); hooks.OnThinking != nil {
+		hooks.OnThinking(thinking)
 	}
 }
 
 // setSpeaking records whether the reply is playing.
-func (v *voiceAssistant) setSpeaking(speaking bool) {
-	if v.onSpeaking != nil {
-		v.onSpeaking(speaking)
+func (v *Voice) setSpeaking(speaking bool) {
+	if hooks := v.voiceHooks(); hooks.OnSpeaking != nil {
+		hooks.OnSpeaking(speaking)
 	}
 }
 
-// setWakeWord records the local wake word's state.
-func (v *voiceAssistant) setWakeWord(model string, ready, enabled bool) {
+// SetWakeWord records the local wake word's state.
+//
+// It is what Home Assistant's picker shows, and it decides whether the
+// panel can start a conversation by itself.
+func (v *Voice) SetWakeWord(model string, ready, enabled bool) {
 	v.mu.Lock()
 	v.wakeWord = model
 	v.wakeWordReady = ready

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wilbowes/EchoMuse-SDK/clients/go/echomuse"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
 )
 
 // fakeBackend is a sound card that is not there.
@@ -41,7 +41,7 @@ func (b *fakeBackend) Playback(ctx context.Context, rate int) (io.WriteCloser, e
 	return &fakeWriter{}, nil
 }
 
-func (b *fakeBackend) OpenClockedOutput(ctx context.Context, rate, channels int) (echomuse.ClockedAudioOutput, error) {
+func (b *fakeBackend) OpenClockedOutput(ctx context.Context, rate, channels int) (audio.ClockedOutput, error) {
 	return nil, errors.New("no clocked output")
 }
 
@@ -111,7 +111,7 @@ func testLogger() *slog.Logger {
 //
 // The handover has to be a handover and not a race: a capture that starts
 // while the meter still holds the card is told the card is busy, and the
-// device goes deaf until the controller asks again.
+// panel goes deaf until the turn asks again.
 func TestTheMonitorGivesUpTheMicrophone(t *testing.T) {
 	backend := &fakeBackend{}
 	a := &deviceAudio{backend: backend, log: testLogger()}
@@ -120,8 +120,8 @@ func TestTheMonitorGivesUpTheMicrophone(t *testing.T) {
 	a.setMonitoring(true)
 	waitFor(t, func() bool { return backend.isOpen() }, "the meter did not open the microphone")
 
-	// The controller asks for it. This must not fail with the card busy.
-	a.startCapture(false)
+	// A turn starts and asks for it. This must not fail with the card busy.
+	a.startCapture()
 	defer a.stopCapture()
 
 	// The capture opens the microphone on its own goroutine, so the wait
@@ -154,7 +154,7 @@ func TestTheMeterTakesTheMicrophoneBack(t *testing.T) {
 	waitFor(t, func() bool { return backend.isOpen() }, "the meter did not open the microphone")
 
 	// The controller takes the microphone.
-	a.startCapture(false)
+	a.startCapture()
 	defer a.stopCapture()
 
 	// The controller gives it back.

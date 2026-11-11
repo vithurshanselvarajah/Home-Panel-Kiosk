@@ -122,9 +122,18 @@ type Scorer struct {
 	// closer releases the inference engine, when one owns resources (the ORT
 	// sessions). Nil for an injected Inferer, e.g. in tests.
 	closer io.Closer
-	// info describes the loaded engine for logging: runtime version, model,
-	// whether XNNPACK attached. Set once at construction, never mutated.
+// Info describes the loaded engine for logging: runtime version, model,
+// whether XNNPACK attached. Set once at construction, never mutated.
 	info string
+	// phrase is the name of the wake word, as a person says it.
+	//
+	// It is what the panel announces to Home Assistant when the wake word
+	// fires, and it has to be the same string Home Assistant shows in its
+	// picker. Home Assistant compares the phrase on a pipeline start
+	// against the state of its wake-word select entity, whose options are
+	// the names that were advertised, so a panel that announces a
+	// different string is one Home Assistant matches neither.
+	phrase string
 
 	// Maxima are atomics rather than mutex-guarded state because they are
 	// written on the two hot paths: the mic goroutine (gap) and the scorer
@@ -426,7 +435,18 @@ func (s *Scorer) TakeBargeWindow() (peak, bar float32, frames uint64) {
 }
 
 // Info describes the loaded inference engine, for a log line at startup.
+// Info returns a description of the loaded engine, for the log.
 func (s *Scorer) Info() string { return s.info }
+
+// Phrase returns the name of the wake word, as a person says it.
+//
+// It is the phrase the panel announces to Home Assistant when the wake
+// word fires, and the name Home Assistant shows in its picker.
+func (s *Scorer) Phrase() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.phrase
+}
 
 // Close stops the scorer goroutine and releases the inference engine. Safe to
 // call more than once: it runs both on a config change and at shutdown, and

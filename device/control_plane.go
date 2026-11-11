@@ -35,6 +35,18 @@ type ControlPlane struct {
 	listener net.Listener
 	// api is the Home Assistant server.
 	api *esphome.Server
+	// voice is the voice assistant.
+	//
+	// The panel is a voice satellite: the wake word fires here, the
+	// microphone streams to Home Assistant, and the reply comes back as
+	// audio on the same connection.
+	voice *esphome.Voice
+	// client is the Home Assistant connection the voice assistant uses.
+	//
+	// It is the connection that is open now. A voice turn needs somewhere
+	// to send the audio, and there is nowhere to send it when Home
+	// Assistant is not listening.
+	client *esphome.Client
 	// log is where the messages go.
 	log *slog.Logger
 	// closeOnce makes the closing happen once.
@@ -78,6 +90,15 @@ func startControlPlane(
 		Log:           log,
 	})
 	plane.api = api
+
+	// The voice assistant makes the panel a voice satellite.
+	//
+	// It is the panel that starts the turn, not Home Assistant: the wake
+	// word fires here, and the microphone is streamed to Home Assistant
+	// for the length of the turn and no longer.
+	voice := esphome.NewVoice(esphome.VoiceOptions{Log: log})
+	api.SetVoice(voice)
+	plane.voice = voice
 
 	// The port has to be free before the announcement says which port
 	// it is on, so the listener is made first.
@@ -384,6 +405,55 @@ func panelMAC(name string) string {
 	parts[4] = fmt.Sprintf("%02x", (sum>>8)&0xFF)
 	parts[5] = fmt.Sprintf("%02x", sum&0xFF)
 	return strings.Join(parts, ":")
+}
+
+// OnVoice wires the voice assistant's callbacks.
+//
+// The device program owns the microphone and the speaker, so it is the
+// one that plays the reply and the one that sends the microphone's
+// audio. The protocol only carries it.
+func (p *ControlPlane) OnVoice(hooks esphome.VoiceHooks) {
+	if p.voice == nil {
+		return
+	}
+	p.voice.SetVoiceHooks(hooks)
+}
+
+// StartTurn begins a voice turn.
+//
+// The phrase is the wake word that fired, or is empty when the turn did
+// not start with one.
+//
+// It fails when Home Assistant is not connected, because there is nowhere
+// to send the microphone. The caller logs it and carries on: a panel that
+// is not connected is still a panel with a screen.
+func (p *ControlPlane) StartTurn(phrase string) error {
+	if p.api == nil {
+		return esphome.ErrNoClient
+	}
+	return p.api.StartTurn(phrase)
+}
+
+// SendVoiceAudio sends a block of microphone audio.
+//
+// It is called for every block while a turn is running, and the last one
+// carries the end flag.
+func (p *ControlPlane) SendVoiceAudio(pcm []byte, end bool) error {
+	if p.api == nil {
+		return esphome.ErrNoClient
+	}
+	return p.api.SendVoiceAudio(pcm, end)
+}
+
+// SetWakeWord tells the voice assistant what the local wake word is.
+//
+// It is what Home Assistant's picker shows, and it decides whether the
+// panel can start a conversation by itself.
+func (p *ControlPlane) SetWakeWord(model string, ready, enabled bool) {
+	if p.voice == nil {
+		return
+	}
+	p.voice.SetWakeWord(model, ready, enabled)
 }
 
 // Close stops the control plane.

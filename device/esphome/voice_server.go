@@ -43,7 +43,7 @@ const (
 //
 // It reports whether the message was handled, so the caller knows whether
 // to pass it on to anything else.
-func (s *Server) handleVoiceMessage(client *client, messageType uint32, payload []byte) (bool, error) {
+func (s *Server) handleVoiceMessage(client *Client, messageType uint32, payload []byte) (bool, error) {
 	switch messageType {
 	case TypeSubscribeVoiceAssistantRequest:
 		// Home assistant says it wants the voice events. There is no
@@ -149,7 +149,7 @@ func (s *Server) pushReplyAudio(audio *VoiceAssistantAudio) {
 // The flags are zero because the wake word has already fired. Home
 // assistant would otherwise run its own wake word detection and wait for
 // a second one.
-func (s *Server) sendVoiceRequest(client *client, conversationID, phrase string) error {
+func (s *Server) sendVoiceRequest(client *Client, conversationID, phrase string) error {
 	return client.write(TypeVoiceAssistantRequest, &VoiceAssistantRequest{
 		Start:          true,
 		ConversationId: conversationID,
@@ -162,7 +162,7 @@ func (s *Server) sendVoiceRequest(client *client, conversationID, phrase string)
 //
 // The audio is signed 16-bit little-endian mono at 16 kHz, which is what
 // home assistant expects.
-func (s *Server) sendVoiceAudio(client *client, pcm []byte, end bool) error {
+func (s *Server) sendVoiceAudio(client *Client, pcm []byte, end bool) error {
 	return client.write(TypeVoiceAssistantAudio, &VoiceAssistantAudio{
 		Data: pcm,
 		End:  end,
@@ -173,6 +173,6 @@ func (s *Server) sendVoiceAudio(client *client, pcm []byte, end bool) error {
 //
 // It tells home assistant that the device is free again, which is what
 // lets the next thing happen without waiting for a timeout.
-func (s *Server) sendAnnounceFinished(client *client) error {
+func (s *Server) sendAnnounceFinished(client *Client) error {
 	return client.write(TypeVoiceAssistantAnnounceFinished, &VoiceAssistantAnnounceFinished{})
 }
