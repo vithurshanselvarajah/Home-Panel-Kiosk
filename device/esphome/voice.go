@@ -120,6 +120,14 @@ type Voice struct {
 	onSpeaking func(speaking bool)
 	// hooks are the callbacks the device program wires.
 	hooks VoiceHooks
+	// onWakeWord is called when home assistant's picker switches the wake
+	// word on or off.
+	//
+	// It is the same switch the panel's own settings make, so both have
+	// to reach the same place: a panel that is listening when home
+	// assistant says it is not, and not listening when it says it is, is
+	// a panel that lies about itself twice.
+	onWakeWord func(enabled bool)
 }
 
 // voiceOptions is what a voice assistant is made with.
@@ -324,7 +332,22 @@ func (v *Voice) handleSetConfiguration(message *VoiceAssistantSetConfiguration) 
 	v.mu.Unlock()
 
 	v.log.Info("the wake word was switched", "enabled", enabled)
+
+	if v.onWakeWord != nil {
+		v.onWakeWord(enabled)
+	}
 	return nil
+}
+
+// SetWakeWordCallback sets the callback for the wake word being switched.
+//
+// It is separate from the hooks because it is the device program's own
+// business: the wake word is a thing the panel runs, and the panel has to
+// be told when home assistant switches it off.
+func (v *Voice) SetWakeWordCallback(fn func(enabled bool)) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.onWakeWord = fn
 }
 
 // startTurn begins a turn.

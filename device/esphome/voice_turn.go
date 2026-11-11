@@ -53,6 +53,13 @@ type VoiceHooks struct {
 	OnAnnounce func(mediaID, text string)
 	// OnAudio is called with the reply audio as it arrives.
 	OnAudio func(pcm []byte, final bool)
+	// OnMicAudio is called with the microphone's frames while a turn is
+	// running.
+	//
+	// It is called from the capture goroutine, so it must not block: the
+	// capture goroutine is the one that reads the sound card, and a
+	// blocked read is a stalled microphone.
+	OnMicAudio func(pcm []byte)
 }
 
 // SetVoiceHooks wires the callbacks.
@@ -119,6 +126,11 @@ func (s *Server) startTurnOn(client *Client, phrase string) error {
 //
 // The audio is signed 16-bit little-endian mono at 16 kHz, which is what
 // Home Assistant expects.
+//
+// It is called from the capture goroutine, so it must not block: the
+// capture goroutine is the one that reads the sound card, and a blocked
+// read is a stalled microphone. A write to a socket that has gone away
+// returns rather than waits, so this is safe to call on that goroutine.
 func (s *Server) SendVoiceAudio(pcm []byte, end bool) error {
 	client := s.currentClient()
 	if client == nil {
@@ -126,6 +138,15 @@ func (s *Server) SendVoiceAudio(pcm []byte, end bool) error {
 	}
 	return s.sendVoiceAudio(client, pcm, end)
 }
+
+// StartStreaming says the microphone is open for a turn.
+//
+// The frames go to home assistant only between this and StopStreaming, so
+// a panel that is not in a turn is not uploading the room.
+func (s *Server) StartStreaming() {}
+
+// StopStreaming says the turn is over and the microphone can be closed.
+func (s *Server) StopStreaming() {}
 
 // currentClient returns the connection to Home Assistant, if there is one.
 //
