@@ -84,12 +84,75 @@ func Advertise(options AdvertiseOptions) (*Advertiser, error) {
 		records = append(records, "api_encryption=1")
 	}
 
-	server, err := zeroconf.Register(instance, mdnsServiceType, mdnsDomain, options.Port, records, nil)
+	// The interface the device is announced on is chosen rather than
+	// left to the library.
+	//
+	// The library announces on every interface the machine has, and a
+	// machine has more than one: a laptop with Docker has a bridge for
+	// each container network, and a Raspberry Pi with a second network
+	// has that too. Home Assistant takes the first address it is given
+	// and keeps the device there, so an address on a bridge that the
+	// assistant cannot reach is an address it will keep failing on.
+	//
+	// So the interface is chosen: the one that carries the address the
+	// device is on the network with.
+	interfaces, err := announceInterfaces(options.Addresses)
+	if err != nil {
+		return nil, err
+	}
+
+	server, err := zeroconf.Register(instance, mdnsServiceType, mdnsDomain, options.Port, records, interfaces)
 	if err != nil {
 		return nil, fmt.Errorf("esphome: the device could not be announced: %w", err)
 	}
 	options.Log.Info("the device was announced", "name", options.Name, "port", options.Port)
 	return &Advertiser{server: server, log: options.Log}, nil
+}
+
+// announceInterfaces picks the interfaces the announcement is made on.
+//
+// The address the device is reached at is the one that matters, and it
+// is on one interface. The loopback and the bridges are left out: the
+// assistant is on the network and not on them.
+func announceInterfaces(addresses []net.IP) ([]net.Interface, error) {
+	if len(addresses) == 0 {
+		// No address was given, so the library chooses. It announces on
+		// everything, which is what it did before.
+		return nil, nil
+	}
+	found, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("esphome: the network interfaces could not be read: %w", err)
+	}
+	var chosen []net.Interface
+	for _, address := range addresses {
+		if address.IsLoopback() || address.IsLinkLocalUnicast() {
+			continue
+		}
+		for _, candidate := range found {
+			addrs, err := candidate.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				ip, _, err := net.ParseCIDR(addr.String())
+				if err != nil {
+					continue
+				}
+				if ip.Equal(address) {
+					chosen = append(chosen, candidate)
+				}
+			}
+		}
+	}
+	if len(chosen) == 0 {
+		// The address is on an interface that could not be found. The
+		// announcement is made on everything rather than not at all,
+		// because an announcement on the wrong interface is better than
+		// no announcement.
+		return nil, nil
+	}
+	return chosen, nil
 }
 
 // Close stops the announcement.

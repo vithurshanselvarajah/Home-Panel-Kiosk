@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
@@ -104,6 +105,7 @@ func startControlPlane(
 		Version:      "0.0.2",
 		ProjectName:  name,
 		Encrypted:    key != "",
+		Addresses:    panelAddresses(),
 		Log:          log,
 	})
 	if err != nil {
@@ -162,6 +164,7 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, log *slog.L
 	for _, entity := range registry.All() {
 		entity := entity
 		entity.OnCommand(func(value esphome.EntityValue) {
+			log.Debug("an entity was changed", "entity", entity.ObjectID, "value", value.String())
 			switch entity.ObjectID {
 			case "screen":
 				// The switch is the screen being on or off.
@@ -219,6 +222,101 @@ func listenForAPI(port int) (net.Listener, error) {
 		lastErr = err
 	}
 	return nil, fmt.Errorf("home-panel: no port was free: %w", lastErr)
+}
+
+// panelAddresses are the addresses the panel can be reached at.
+//
+// Only the ones that are on the network the assistant is on are wanted.
+// A machine has more: a loopback, and a bridge for each container
+// network it runs. Home Assistant keeps the device under the address it
+// was given, so an address on a bridge it cannot reach is an address
+// it will keep failing on.
+//
+// The address is the one on the interface that carries the default
+// route: that is the interface that reaches the outside world, and so
+// the one the assistant reaches the panel through.
+//
+// A tunnel is not that interface. A tunnel carries the addresses of
+// the machines it connects to, so it answers for the assistant as well
+// as for the panel, and an address found on one is not the panel's
+// own.
+func panelAddresses() []net.IP {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	// The interface that carries the default route is the one the
+	// panel is on the network with.
+	outward := defaultRouteInterface()
+	var addresses []net.IP
+	for _, candidate := range interfaces {
+		if candidate.Flags&net.FlagUp == 0 || candidate.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		// A point to point interface is a tunnel.
+		if candidate.Flags&net.FlagPointToPoint != 0 {
+			continue
+		}
+		// A bridge carries the addresses of the containers on it.
+		if candidate.Flags&net.FlagUp != 0 && isBridge(candidate) {
+			continue
+		}
+		if outward != "" && candidate.Name != outward {
+			continue
+		}
+		addrs, err := candidate.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			ip, _, err := net.ParseCIDR(addr.String())
+			if err != nil {
+				continue
+			}
+			if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+				continue
+			}
+			addresses = append(addresses, ip)
+		}
+	}
+	return addresses
+}
+
+// defaultRouteInterface is the interface that carries the default route.
+//
+// It is read from the routing table, which is the route that goes
+// nowhere in particular and so the one that leaves the machine. The
+// address on that interface is the one other machines use to reach
+// this one.
+func defaultRouteInterface() string {
+	routes, err := os.ReadFile("/proc/net/route")
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(routes), "\n")
+	for _, line := range lines[1:] {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		// The destination is zero when it is the default route.
+		if fields[1] != "00000000" {
+			continue
+		}
+		return fields[0]
+	}
+	return ""
+}
+
+// isBridge says whether an interface is a bridge.
+//
+// The kernel does not say through a flag, so the name is used. A bridge
+// carries the addresses of the containers on it, and those addresses
+// mean nothing outside the machine.
+func isBridge(candidate net.Interface) bool {
+	name := candidate.Name
+	return strings.HasPrefix(name, "docker") || strings.HasPrefix(name, "br-") ||
+		strings.HasPrefix(name, "virbr") || strings.HasPrefix(name, "veth")
 }
 
 // panelMAC is the address that identifies the panel.
