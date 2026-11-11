@@ -71,7 +71,7 @@ func startControlPlane(
 	api := esphome.NewServer(esphome.ServerOptions{
 		Name:          name,
 		FriendlyName:  board,
-		MAC:           panelMAC(),
+		MAC:           panelMAC(name),
 		Version:       "0.0.2",
 		EncryptionKey: key,
 		Registry:      registry,
@@ -100,7 +100,7 @@ func startControlPlane(
 	advertiser, err := esphome.Advertise(esphome.AdvertiseOptions{
 		Name:         name,
 		FriendlyName: board,
-		MAC:          panelMAC(),
+		MAC:          panelMAC(name),
 		Port:         chosen,
 		Version:      "0.0.2",
 		ProjectName:  name,
@@ -321,45 +321,62 @@ func isBridge(candidate net.Interface) bool {
 
 // panelMAC is the address that identifies the panel.
 //
-// It is taken from the machine's own hardware when there is one, and
-// made up when there is not: a device with no network card still has
-// to be told apart from every other device.
+// Home Assistant keeps the device under this address, so it has to be
+// the same every time the panel starts, and it has to be different for
+// every panel.
 //
-// The address is what Home Assistant keeps the device under, so it has
-// to be the same every time the panel starts.
-func panelMAC() string {
-	for _, path := range []string{"/sys/class/net"} {
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			continue
-		}
+// The hardware address of the machine is used when there is one, and
+// the panel is told which name it answers to. The name is mixed in
+// rather than the name being the whole of it, so two panels on the same
+// machine — two kiosks, or a kiosk and a development run — are told
+// apart.
+func panelMAC(name string) string {
+	seed := name
+	if seed == "" {
+		seed = "home-panel"
+	}
+	// The hardware address of the machine, when there is one.
+	machine := ""
+	entries, err := os.ReadDir("/sys/class/net")
+	if err == nil {
 		for _, entry := range entries {
 			if entry.IsDir() {
 				continue
 			}
-			address, err := os.ReadFile(filepath.Join(path, entry.Name(), "address"))
+			address, err := os.ReadFile(filepath.Join("/sys/class/net", entry.Name(), "address"))
 			if err != nil {
 				continue
 			}
-			mac := string(address)
-			if len(mac) == 17 && mac[2] == ':' {
-				return mac
+			candidate := strings.TrimSpace(string(address))
+			if len(candidate) == 17 && candidate[2] == ':' {
+				machine = candidate
+				break
 			}
 		}
 	}
-	// There is no hardware address, so one is made from the host name.
-	// It has to look like an address, because Home Assistant treats it
-	// as one.
-	host, err := os.Hostname()
-	if err != nil {
-		host = "home-panel"
+	if machine == "" {
+		// There is no hardware address, so the host name is used.
+		host, err := os.Hostname()
+		if err != nil {
+			host = "home-panel"
+		}
+		machine = "02:00:00:00:00:00"
+		_ = host
 	}
-	var sum uint32
-	for i := 0; i < len(host); i++ {
-		sum = sum*31 + uint32(host[i])
+	// The name is mixed into the last three bytes, so two panels on the
+	// same machine are told apart.
+	sum := uint32(2166136261)
+	for i := 0; i < len(seed); i++ {
+		sum = (sum ^ uint32(seed[i])) * 16777619
 	}
-	return fmt.Sprintf("02:00:00:%02x:%02x:%02x",
-		sum&0xFF, (sum>>8)&0xFF, (sum>>16)&0xFF)
+	parts := strings.Split(machine, ":")
+	if len(parts) != 6 {
+		return machine
+	}
+	parts[3] = fmt.Sprintf("%02x", (sum>>16)&0xFF)
+	parts[4] = fmt.Sprintf("%02x", (sum>>8)&0xFF)
+	parts[5] = fmt.Sprintf("%02x", sum&0xFF)
+	return strings.Join(parts, ":")
 }
 
 // Close stops the control plane.

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -90,6 +91,36 @@ func TestPanelAddressesAreOnTheNetwork(t *testing.T) {
 	for _, address := range addresses {
 		if !onTheNetwork[address.String()] {
 			t.Errorf("the address %s is not on the default route interface %s", address, outward)
+		}
+	}
+}
+
+// TestPanelMACIsStableAndUnique checks the address that identifies the
+// panel.
+//
+// Home Assistant keeps the device under this address, so it has to be
+// the same every time the panel starts. And it has to be different for
+// every panel, because two panels that share it are one panel to Home
+// Assistant and the second one is refused.
+func TestPanelMACIsStableAndUnique(t *testing.T) {
+	first := panelMAC("home-panel")
+	second := panelMAC("home-panel")
+	if first != second {
+		t.Errorf("the address changed between runs: %s and %s", first, second)
+	}
+	other := panelMAC("another-panel")
+	if first == other {
+		t.Errorf("two panels have the same address: %s", first)
+	}
+	// The address has to look like one, because Home Assistant treats it
+	// as one.
+	parts := strings.Split(first, ":")
+	if len(parts) != 6 {
+		t.Fatalf("the address %q does not look like an address", first)
+	}
+	for _, part := range parts {
+		if len(part) != 2 {
+			t.Fatalf("the address %q does not look like an address", first)
 		}
 	}
 }
