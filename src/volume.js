@@ -1,7 +1,7 @@
 // The system volume.
 //
 // The panel used to change the volume of the device program, which is the
-// volume of the EchoMuse voice and the music on that one device. A person
+// volume of the voice and the music on that one device. A person
 // reaching for the volume on a panel expects the volume of the room, which
 // is the system mixer.
 //

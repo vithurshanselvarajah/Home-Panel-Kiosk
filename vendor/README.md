@@ -1,8 +1,8 @@
-# EchoMuse device
+# The device program
 
-The EchoMuse device is a sidecar: a separate process that owns the
-connection to the EchoMuse controller, the microphone and the speaker. This
-application only renders what it reports.
+The device program is a sidecar: a separate process that owns the
+connection to Home Assistant, the microphone, the speaker and the wake
+word. This application only renders what it reports.
 
 The binaries are built ahead of time and kept here, one per architecture,
 so the package is self-contained and needs nothing from the network at
@@ -12,49 +12,57 @@ install time.
 
 | File | What it is |
 |---|---|
-| `echomuse-device-linux-arm64` | The device for arm64 |
-| `echomuse-device-linux-amd64` | The device for amd64 |
-| `ECHOMUSE-NOTICE.md` | The third-party notices for the libraries it contains |
+| `home-panel-device-linux-arm64` | The device for arm64 |
+| `home-panel-device-linux-amd64` | The device for amd64 |
 
-They are statically linked, so they run on a device with nothing else
-installed.
+They are dynamically linked against the ONNX Runtime, which is copied
+beside them in the package. Everything else is static.
 
 ## Rebuilding
 
-The device is built from this repository, from the `device/` directory, and
-it needs the EchoMuse SDK, which is developed in a checkout rather than
-published.
+The device is built from this repository, from the `device/` directory.
+Everything it needs is in this repository; there is no external checkout
+to point at.
 
 ```sh
 npm run build:device
 ```
 
-Set `ECHOMUSE_SDK` if the SDK is not at
-`~/Documents/GitHub/EchoMuse-SDK-upstream`.
+The build fetches the ONNX Runtime for each architecture and links it in,
+so a device that has the binary has the wake word: there is nothing to
+install on the device and nothing that can be missing. The runtime is
+cached in `~/.cache/home-panel/onnxruntime`, so it is fetched once.
 
-The build is pure Go: `CGO_ENABLED=0` is deliberate. The audio reaches
-ALSA through [purego](https://github.com/ebitengine/purego), which loads
+CGO is on, because the ONNX Runtime is a C library. The arm64 build uses
+the `aarch64-linux-gnu-gcc` cross-compiler, so it needs one:
+
+```sh
+sudo apt-get install gcc-aarch64-linux-gnu
+```
+
+The audio reaches ALSA through
+[purego](https://github.com/ebitengine/purego), which loads
 `libasound.so.2` at run time rather than linking against it. That means
-the binaries cross compile for arm64 without a C toolchain, and they still
-start on a machine with no sound card.
+the sound system needs no cross-compiled library — only the runtime does —
+and the panel still starts on a machine with no sound card.
 
-The ONNX Runtime, which the wake word backend needs, is loaded at run time
-rather than linked as well, so the binary builds and boots without it.
-Installing it later needs no rebuild.
+## The wake word models
 
-## How the two talk
+The models are not here. They are a few megabytes, they change far less
+often than the application, and a model is chosen by the person who
+installs it rather than by the build.
 
-The device writes its state to a JSON file and reads its configuration from
-another. Both are in the application's data directory.
+They go in `/usr/share/home-panel/wakeword`:
 
-- `echomuse-state.json` — what the device is doing. Written atomically, so a
-  reader never sees half of it.
-- `echomuse-config.json` — what the device asks the controller for.
+| File | Where it comes from |
+|---|---|
+| `melspectrogram.onnx` | [openWakeWord](https://github.com/dscripka/openWakeWord) |
+| `embedding_model.onnx` | [openWakeWord](https://github.com/dscripka/openWakeWord) |
+| `hey_jarvis_v0.1.onnx` | [openWakeWord](https://github.com/dscripka/openWakeWord) — or any other wake word |
 
-The application's `src/echomuse.js` reads the state file and pushes it to
-the interface.
+The directory can be changed with `HOME_PANEL_WAKEWORD_DIR`.
 
-## The licence
-
-The device contains BSD-licensed Go libraries. `ECHOMUSE-NOTICE.md` lists
-them and is shipped in the package beside the binary.
+Without the models the panel still works: it is a screen with some
+switches, and Home Assistant can ask it to speak. With them it is a voice
+satellite that hears the wake word itself, and nothing is sent until it
+fires.

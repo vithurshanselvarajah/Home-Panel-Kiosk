@@ -12,36 +12,68 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/wakeword/ort"
 )
 
-// These tests need the ONNX Runtime library and the three model files, none of
-// which live in this repository — the library is 12MB and is distributed to
-// devices separately, and the models come from openwakeword. So they SKIP
-// unless pointed at them:
+// These tests need the ONNX Runtime and the three model files, none of which
+// live in this repository — the runtime is linked into the binary and the
+// models come from openwakeword. So they SKIP unless pointed at them:
 //
-//	EM_ORT_LIB=/usr/local/lib/python3.10/dist-packages/onnxruntime/capi/libonnxruntime.so.1.23.2 \
-//	EM_OWW_MODELS=/usr/local/lib/python3.10/dist-packages/openwakeword/resources/models \
-//	EM_OWW_CLASSIFIER=/path/to/hey_mycroft_v0.1.onnx \
-//	go test ./internal/wakeword/ort/
+//	EM_OWW_MODELS=$HOME/.local/lib/python3.14/site-packages/openwakeword/resources/models \
+//	EM_OWW_CLASSIFIER=$HOME/.local/lib/python3.14/site-packages/openwakeword/resources/models/hey_jarvis_v0.1.onnx \
+//	go test ./wakeword/ort/
 //
-// Skipping rather than failing is deliberate: CI would otherwise need a 12MB
-// download to test a package whose whole design point is that it degrades
-// gracefully when the library is absent. TestOpenMissingLibraryFails covers
-// that path, and it needs nothing.
+// Skipping rather than failing is deliberate: CI would otherwise need the
+// models to test a package whose whole design point is that it works
+// without them.
+//
+// The models must be the ones the fixture was made with, or the embeddings
+// will not match it: the fixture records what openwakeword produced, and a
+// different embedding model produces different embeddings. The
+// MELSpectrogram stage does not depend on the model set and must match
+// exactly either way — see TestMelspectrogramMatchesTheFixture.
+//
+// The fixture was made with openwakeword 0.6.0. A newer openwakeword ships
+// a different embedding model, and the embedding tests fail against it
+// while the melspectrogram and the structure tests still pass. The
+// generator is in testdata/gen_ort_fixture.py and needs that version to
+// run.
 func models(t *testing.T) (lib string, m ort.Models) {
 	t.Helper()
-	lib = os.Getenv("EM_ORT_LIB")
 	dir := os.Getenv("EM_OWW_MODELS")
 	cls := os.Getenv("EM_OWW_CLASSIFIER")
-	if lib == "" || dir == "" || cls == "" {
-		t.Skip("set EM_ORT_LIB, EM_OWW_MODELS and EM_OWW_CLASSIFIER to run the ONNX Runtime tests")
+	if dir == "" || cls == "" {
+		t.Skip("set EM_OWW_MODELS and EM_OWW_CLASSIFIER to run the ONNX Runtime tests")
 	}
 	// EM_OWW_STREAM is the streaming embedding model, made from the stock
-	// one by controller/tools/oww_stream.py. Without it the streaming tests
+	// one by the controller's own tool. Without it the streaming tests
 	// skip and the rest run on the stock model.
-	return lib, ort.Models{
+	return "onnxruntime", ort.Models{
 		Melspec:         filepath.Join(dir, "melspectrogram.onnx"),
 		Embedding:       filepath.Join(dir, "embedding_model.onnx"),
 		Classifier:      cls,
 		EmbeddingStream: os.Getenv("EM_OWW_STREAM"),
+	}
+}
+
+// TestMelspectrogramMatchesTheFixture is the part of the end-to-end claim
+// that does not depend on which openwakeword version is installed.
+//
+// The melspectrogram is the first stage: it turns audio into mel frames.
+// It has no learned weights of its own to differ — the model is the same —
+// so its output must match the fixture exactly whatever else is true.
+//
+// It is also the stage most sensitive to a wrong input length, so a
+// mismatch here would mean the audio path is wrong rather than that the
+// models differ.
+func TestMelspectrogramMatchesTheFixture(t *testing.T) {
+	fx := loadFixture(t)
+	rep := fixture.Verify(fixture.StockOnly(newInferer(t)), fx)
+	if rep.Err != nil {
+		t.Fatalf("verify: %v", rep.Err)
+	}
+	for i, d := range rep.Melspec {
+		if !d.Ok() {
+			t.Errorf("melspec chunk %d: %d values differ, worst %.3g: %v",
+				i, d.N, d.Worst, d.Examples)
+		}
 	}
 }
 
@@ -211,17 +243,22 @@ func TestUseAfterCloseFails(t *testing.T) {
 	}
 }
 
-// TestOpenMissingLibraryFails is the one test here that needs no ONNX Runtime,
-// and it covers the property the whole dlopen design exists for: a device with
-// no libonnxruntime.so must get a clean error, not a link failure at exec and
-// not a crash. The firmware keeps running with controller-side wake word.
-func TestOpenMissingLibraryFails(t *testing.T) {
-	_, err := ort.Open(filepath.Join(t.TempDir(), "libonnxruntime.so"))
-	if err == nil {
-		t.Fatal("Open succeeded for a nonexistent library")
+// TestOpenTwiceReturnsTheSameRuntime covers the property that keeps the
+// thread pools from being duplicated: opening the same runtime twice gives
+// the same one back rather than a second environment with a second set of
+// thread pools, which on a device with one core typically online is pure
+// cost.
+func TestOpenTwiceReturnsTheSameRuntime(t *testing.T) {
+	first, err := ort.Open("onnxruntime")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
 	}
-	if !strings.Contains(err.Error(), "ort: open") {
-		t.Errorf("error %q does not identify itself as an ort open failure", err)
+	second, err := ort.Open("onnxruntime")
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if first != second {
+		t.Error("opening the same runtime twice gave two runtimes")
 	}
 }
 
