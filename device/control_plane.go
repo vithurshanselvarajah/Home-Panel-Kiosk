@@ -139,8 +139,14 @@ func startControlPlane(
 		}
 	}
 
-	// The entities are what Home Assistant acts on. Each one turns into
-	// a command for the panel.
+	// The services and the entities are what Home Assistant acts on.
+	// Each one turns into a command for the panel.
+	services := panelServices(func(command ControlCommand) {
+		if server != nil {
+			server.SendCommand(command)
+		}
+	})
+	api.SetServices(services)
 	wireEntities(registry, server, log)
 
 	return plane
@@ -173,10 +179,6 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, log *slog.L
 				} else {
 					send(ControlCommand{Action: "screen_off"})
 				}
-			case "wake":
-				send(ControlCommand{Action: "wake"})
-			case "screen_off":
-				send(ControlCommand{Action: "screen_off"})
 			case "brightness":
 				send(ControlCommand{Action: "brightness", Value: int(value.Number)})
 			case "view":
@@ -185,16 +187,10 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, log *slog.L
 				} else {
 					send(ControlCommand{Action: "dashboard"})
 				}
-			case "slideshow":
-				send(ControlCommand{Action: "slideshow"})
 			case "dashboard":
 				send(ControlCommand{Action: "dashboard"})
 			case "display_mode":
 				send(ControlCommand{Action: "display_mode", Mode: value.Text})
-			case "notification":
-				send(ControlCommand{Action: "notification", Message: value.Text})
-			case "open_url":
-				send(ControlCommand{Action: "open_url", URL: value.Text})
 			case "exit":
 				send(ControlCommand{Action: "exit"})
 			default:

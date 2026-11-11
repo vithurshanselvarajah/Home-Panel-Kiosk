@@ -17,6 +17,10 @@ import (
 type Server struct {
 	// registry holds the entities the device offers.
 	registry *Registry
+	// services holds the services the device offers.
+	services *ServiceRegistry
+	// mu guards the services.
+	mu sync.Mutex
 	// name is the name Home Assistant shows.
 	name string
 	// friendlyName is the name a person reads.
@@ -55,6 +59,8 @@ type ServerOptions struct {
 	EncryptionKey string
 	// Registry holds the entities.
 	Registry *Registry
+	// Services holds the services. It is made when it is not given.
+	Services *ServiceRegistry
 	// Log is where the messages go.
 	Log *slog.Logger
 }
@@ -70,12 +76,16 @@ func NewServer(options ServerOptions) *Server {
 	if options.Registry == nil {
 		options.Registry = NewRegistry()
 	}
+	if options.Services == nil {
+		options.Services = NewServiceRegistry()
+	}
 	manufacturer := options.Manufacturer
 	if manufacturer == "" {
 		manufacturer = defaultManufacturer
 	}
 	server := &Server{
 		registry:      options.Registry,
+		services:      options.Services,
 		name:          options.Name,
 		friendlyName:  options.FriendlyName,
 		manufacturer:  manufacturer,
@@ -93,6 +103,24 @@ func NewServer(options ServerOptions) *Server {
 
 // Registry gives access to the entities.
 func (s *Server) Registry() *Registry { return s.registry }
+
+// SetServices replaces the services the device offers.
+//
+// They are set after the server is made, because the services belong to
+// the device rather than to the protocol, and the device decides what
+// it can do.
+func (s *Server) SetServices(services *ServiceRegistry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.services = services
+}
+
+// Services gives access to the services.
+func (s *Server) Services() *ServiceRegistry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.services
+}
 
 // Listen serves the API on the given listener.
 //
@@ -242,14 +270,62 @@ func (s *Server) handle(client *client, frame Frame) error {
 		if err := proto.Unmarshal(frame.Payload, request); err != nil {
 			return err
 		}
-		s.log.Debug("the client asked for a service", "key", request.Key)
-		return nil
+		return s.callService(client, request)
 	}
 	// A message the device does not know is ignored, as the protocol
 	// says: a device that answers a message it does not understand is
 	// worse than one that says nothing.
 	s.log.Debug("a message was ignored", "type", frame.Type)
 	return nil
+}
+
+// callService runs a service the client asked for.
+//
+// The arguments come over the wire as a list of typed values, and they
+// are put into a map by name so the service can ask for them by name.
+func (s *Server) callService(client *client, request *ExecuteServiceRequest) error {
+	service := s.services.ByKey(request.Key)
+	if service == nil {
+		s.log.Warn("a service was asked for that the device does not have", "key", request.Key)
+		return nil
+	}
+	args, err := serviceArguments(service, request.Args)
+	if err != nil {
+		s.log.Warn("a service was called wrongly", "service", service.Name, "error", err)
+		return nil
+	}
+	s.log.Debug("a service was called", "service", service.Name)
+	if err := service.Call(args); err != nil {
+		s.log.Warn("a service failed", "service", service.Name, "error", err)
+	}
+	return nil
+}
+
+// serviceArguments turns the arguments on the wire into a map by name.
+//
+// The wire carries them in order with their kind, and the service knows
+// what it asked for, so the two are put together here.
+func serviceArguments(service *Service, given []*ExecuteServiceArgument) (map[string]any, error) {
+	args := make(map[string]any, len(service.Args))
+	for index, arg := range service.Args {
+		if index >= len(given) {
+			continue
+		}
+		value := given[index]
+		switch arg.Kind {
+		case ServiceArgType_SERVICE_ARG_TYPE_STRING:
+			args[arg.Name] = value.String_
+		case ServiceArgType_SERVICE_ARG_TYPE_INT:
+			// The signed field is the one the protocol uses from
+			// version 1.3 of the API, and the device speaks that.
+			args[arg.Name] = int(value.Int_)
+		case ServiceArgType_SERVICE_ARG_TYPE_FLOAT:
+			args[arg.Name] = float64(value.Float_)
+		case ServiceArgType_SERVICE_ARG_TYPE_BOOL:
+			args[arg.Name] = value.Bool_
+		}
+	}
+	return args, nil
 }
 
 // command applies a command from the client.
@@ -296,7 +372,36 @@ func (s *Server) listEntities(client *client) error {
 			return err
 		}
 	}
+	for _, service := range s.services.All() {
+		if err := client.write(TypeListEntitiesServicesResponse, s.serviceMessage(service)); err != nil {
+			return err
+		}
+	}
 	return client.write(TypeListEntitiesDoneResponse, &ListEntitiesDoneResponse{})
+}
+
+// serviceMessage builds the message that describes one service.
+//
+// The arguments are described with their kind, so Home Assistant knows
+// what to ask for: a box for a piece of text, a number for a number,
+// and a toggle for true or false.
+func (s *Server) serviceMessage(service *Service) *ListEntitiesServicesResponse {
+	args := make([]*ListEntitiesServicesArgument, 0, len(service.Args))
+	for _, arg := range service.Args {
+		args = append(args, &ListEntitiesServicesArgument{
+			Name:         arg.Name,
+			Type:         arg.Kind,
+			Description:  arg.Description,
+			Optional:     arg.Optional,
+			DefaultValue: arg.Default,
+		})
+	}
+	return &ListEntitiesServicesResponse{
+		Name:        service.Name,
+		Key:         service.Key,
+		Description: service.Description,
+		Args:        args,
+	}
 }
 
 // pushAllStates sends the state of every entity.

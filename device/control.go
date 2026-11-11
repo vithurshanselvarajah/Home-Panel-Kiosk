@@ -241,26 +241,48 @@ func (s *ControlServer) State() ControlState {
 
 // applyEntities changes the entities to match the state of the panel.
 //
-// The entity that carries the state is a sensor whose state is the
-// state as a whole, because the protocol has no entity for "the state
-// of a panel" and a sensor is the only thing that can hold a value
-// that is read rather than written.
+// Two of them carry what the panel is doing. The display mode is a
+// select, so it shows the mode the panel is in rather than the one it
+// was told to be in. The state as a whole goes into a sensor, because
+// the protocol has no entity for "the state of a panel" and a sensor is
+// the only thing that can hold a value that is read rather than
+// written.
 func (s *ControlServer) applyEntities(state ControlState) {
 	if s.registry == nil {
 		return
 	}
 	for _, entity := range s.registry.All() {
-		if entity.ObjectID != controlStateObjectID {
-			continue
+		switch entity.ObjectID {
+		case controlStateObjectID:
+			encoded, err := json.Marshal(state)
+			if err != nil {
+				continue
+			}
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindTextSensor,
+				Text: string(encoded),
+			})
+		case "display_mode":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSelect,
+				Text: state.DisplayMode,
+			})
+		case "screen":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch,
+				Bool: !state.DisplayIsOff,
+			})
+		case "view":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSelect,
+				Text: state.Mode,
+			})
+		case "brightness":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind:   esphome.KindNumber,
+				Number: float64(state.Brightness),
+			})
 		}
-		encoded, err := json.Marshal(state)
-		if err != nil {
-			continue
-		}
-		s.registry.SetState(entity.Key, esphome.EntityValue{
-			Kind: esphome.KindTextSensor,
-			Text: string(encoded),
-		})
 	}
 }
 
