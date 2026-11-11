@@ -204,17 +204,21 @@ func readConfig(path string) (Config, error) {
 
 func main() {
 	var (
-		controller = flag.String("controller", "", "controller URL; empty discovers by mDNS")
-		deviceID   = flag.String("device-id", "home-panel", "stable device identity")
-		board      = flag.String("board", "home-panel", "board name, shown in Home Assistant")
-		creds      = flag.String("credentials-dir", "", "where the link credential lives")
-		stateFile  = flag.String("state-file", "", "write the state here as JSON")
-		levelFile  = flag.String("level-file", "", "write the live microphone level here; empty derives it from the state file")
-		configFile = flag.String("config-file", "", "read the device configuration from here")
-		pair       = flag.Bool("pair", false, "ask the controller to admit this device")
-		mic        = flag.String("mic", "", "the microphone to use; empty is the system default")
-		speaker    = flag.String("speaker", "", "the speaker to use; empty is the system default")
-		verbose    = flag.Bool("verbose", false, "log at debug level")
+		controller    = flag.String("controller", "", "controller URL; empty discovers by mDNS")
+		deviceID      = flag.String("device-id", "home-panel", "stable device identity")
+		board         = flag.String("board", "home-panel", "board name, shown in Home Assistant")
+		creds         = flag.String("credentials-dir", "", "where the link credential lives")
+		stateFile     = flag.String("state-file", "", "write the state here as JSON")
+		levelFile     = flag.String("level-file", "", "write the live microphone level here; empty derives it from the state file")
+		configFile    = flag.String("config-file", "", "read the device configuration from here")
+		pair          = flag.Bool("pair", false, "ask the controller to admit this device")
+		mic           = flag.String("mic", "", "the microphone to use; empty is the system default")
+		speaker       = flag.String("speaker", "", "the speaker to use; empty is the system default")
+		verbose       = flag.Bool("verbose", false, "log at debug level")
+		esphomePort   = flag.Int("esphome-port", 0, "the port the Home Assistant API is on; zero picks one")
+		esphomeKey    = flag.String("esphome-key", "", "the base64 encryption key for the Home Assistant API")
+		esphomeName   = flag.String("esphome-name", "home-panel", "the name Home Assistant knows the panel by")
+		controlSocket = flag.String("control-socket", "", "the socket the panel talks to this program over")
 	)
 	flag.Parse()
 
@@ -414,6 +418,11 @@ func main() {
 	// The audio devices are found before anything is published, so the
 	// first state the application reads already carries them.
 	reporter.discoverAudio()
+
+	// The control plane: the Home Assistant connection and the socket
+	// the panel talks over.
+	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket)
+	defer control.Close()
 
 	// A device that has never been seen arrives as pending, and the
 	// dashboard offers an approval for it. Asking to pair puts the request
