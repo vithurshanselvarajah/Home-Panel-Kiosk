@@ -19,8 +19,8 @@ test("editFieldValue inserts characters at the caret", () => {
 });
 
 test("editFieldValue replaces the selected range", () => {
-  const field = { value: "mqtt://old", type: "url", selectionStart: 7, selectionEnd: 10 };
-  assert.deepEqual(editFieldValue(field, "new"), { value: "mqtt://new", caret: 10 });
+  const field = { value: "http://old", type: "url", selectionStart: 7, selectionEnd: 10 };
+  assert.deepEqual(editFieldValue(field, "new"), { value: "http://new", caret: 10 });
 });
 
 test("editFieldValue backspace removes the preceding character", () => {

@@ -11,7 +11,7 @@ import (
 // way to describe anything else: a switch for the screen, a number for
 // the brightness, a select for the view, and so on.
 //
-// The MQTT version of this published twelve controls. Some of them
+// The panel used to publish twelve controls to a broker. Some of them
 // said the same thing twice, and some of them were a text box where a
 // command belongs, so the set is smaller now.
 //
@@ -68,6 +68,21 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 			State:    esphome.EntityValue{Kind: esphome.KindSelect, Text: "dashboard"},
 		})
 	}
+	// The volume of the room.
+	//
+	// It is a number because it is a measurement that is set, and the
+	// panel's own drawer sets it too.
+	registry.Add(&esphome.Entity{
+		Kind:        esphome.KindNumber,
+		Name:        "Volume",
+		ObjectID:    "volume",
+		Icon:        "mdi:volume-high",
+		Min:         0,
+		Max:         100,
+		Step:        1,
+		DeviceClass: "volume",
+		State:       esphome.EntityValue{Kind: esphome.KindNumber, Number: 60},
+	})
 	registry.Add(&esphome.Entity{
 		Kind:     esphome.KindButton,
 		Name:     "Return to Home",
@@ -88,21 +103,48 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 		ObjectID: "exit",
 		Icon:     "mdi:power",
 	})
-	// The state of the panel itself.
+	// What the panel is doing, as sensors.
 	//
-	// It is a text sensor because it is read and not written: the panel
-	// reports what it is doing and Home Assistant cannot tell it to do
-	// something else through it.
+	// The controls already carry the mode, the display mode, the
+	// brightness and the volume, so there is no sensor for those. What
+	// is left is what can be seen but not set from Home Assistant: the
+	// drawer being open, the keyboard being up, and the screen being
+	// off.
+	registry.Add(&esphome.Entity{
+		Kind:        esphome.KindBinarySensor,
+		Name:        "Drawer open",
+		ObjectID:    "drawer_open",
+		Icon:        "mdi:dock-left",
+		DeviceClass: "opening",
+		State:       esphome.EntityValue{Kind: esphome.KindBinarySensor, Bool: false},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:        esphome.KindBinarySensor,
+		Name:        "Keyboard visible",
+		ObjectID:    "keyboard_visible",
+		Icon:        "mdi:keyboard",
+		DeviceClass: "problem",
+		State:       esphome.EntityValue{Kind: esphome.KindBinarySensor, Bool: false},
+	})
+	// The last time somebody did something on the panel.
 	//
-	// It is a text sensor rather than a number because the state is a
-	// set of values rather than one measurement, and the protocol's
-	// sensor carries a number and nothing else.
+	// It is a text sensor because a moment in time is not a number,
+	// and the protocol's sensor carries a number and nothing else.
+	registry.Add(&esphome.Entity{
+		Kind:        esphome.KindTextSensor,
+		Name:        "Last activity",
+		ObjectID:    "last_activity",
+		Icon:        "mdi:gesture-tap",
+		DeviceClass: "timestamp",
+		State:       esphome.EntityValue{Kind: esphome.KindTextSensor, Text: ""},
+	})
+	// The version of the application.
 	registry.Add(&esphome.Entity{
 		Kind:     esphome.KindTextSensor,
-		Name:     "Panel state",
-		ObjectID: controlStateObjectID,
-		Icon:     "mdi:tablet-dashboard",
-		State:    esphome.EntityValue{Kind: esphome.KindTextSensor, Text: "{}"},
+		Name:     "Version",
+		ObjectID: "version",
+		Icon:     "mdi:information-outline",
+		State:    esphome.EntityValue{Kind: esphome.KindTextSensor, Text: ""},
 	})
 	return registry
 }

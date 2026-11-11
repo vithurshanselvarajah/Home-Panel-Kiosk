@@ -117,9 +117,9 @@ func startControlPlane(
 	// The socket the panel talks over.
 	//
 	// The commands Home Assistant sends are turned into the commands
-	// the panel already understands. The names are the ones the MQTT
-	// contract used, so the panel's own code does not change when the
-	// transport does.
+	// the panel already understands. The names are the ones the panel has
+	// always used, so an automation that was written against the old
+	// broker still works.
 	//
 	// The socket is made before the commands are wired, because the
 	// wiring needs it and the socket needs the commands.
@@ -181,6 +181,8 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, log *slog.L
 				}
 			case "brightness":
 				send(ControlCommand{Action: "brightness", Value: int(value.Number)})
+			case "volume":
+				send(ControlCommand{Action: "volume", Value: int(value.Number)})
 			case "view":
 				if value.Text == "slideshow" {
 					send(ControlCommand{Action: "slideshow"})

@@ -30,8 +30,8 @@ import (
 
 // ControlCommand is what the device program asks the panel to do.
 //
-// The names are the ones the MQTT command contract used, so the panel's
-// own code does not change when the transport does.
+// The names are the ones the panel has always used, so an automation
+// that was written against the old broker still works.
 type ControlCommand struct {
 	// Action is what to do.
 	Action string `json:"action"`
@@ -83,6 +83,10 @@ type ControlState struct {
 	Brightness int `json:"brightness"`
 	// Volume is the volume of the room.
 	Volume int `json:"volume"`
+	// LastActivity is when somebody last did something on the panel.
+	LastActivity string `json:"lastActivity"`
+	// Version is the version of the application.
+	Version string `json:"version"`
 }
 
 // ControlServer is the socket the panel and the device program share.
@@ -253,14 +257,27 @@ func (s *ControlServer) applyEntities(state ControlState) {
 	}
 	for _, entity := range s.registry.All() {
 		switch entity.ObjectID {
-		case controlStateObjectID:
-			encoded, err := json.Marshal(state)
-			if err != nil {
-				continue
-			}
+		case "drawer_open":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindBinarySensor,
+				Bool: state.SidePanelOpen,
+			})
+		case "keyboard_visible":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindBinarySensor,
+				Bool: state.KeyboardVisible,
+			})
+		case "last_activity":
+			// The time is a piece of text, because the protocol's
+			// sensor carries a number and a moment in time is not one.
 			s.registry.SetState(entity.Key, esphome.EntityValue{
 				Kind: esphome.KindTextSensor,
-				Text: string(encoded),
+				Text: state.LastActivity,
+			})
+		case "version":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindTextSensor,
+				Text: state.Version,
 			})
 		case "display_mode":
 			s.registry.SetState(entity.Key, esphome.EntityValue{
@@ -273,14 +290,25 @@ func (s *ControlServer) applyEntities(state ControlState) {
 				Bool: !state.DisplayIsOff,
 			})
 		case "view":
-			s.registry.SetState(entity.Key, esphome.EntityValue{
-				Kind: esphome.KindSelect,
-				Text: state.Mode,
-			})
+			// The panel can be showing an address, which is not one of
+			// the options the select has. The select cannot say a value
+			// that is not one of its options, so it keeps the last one
+			// it had rather than saying something that is not true.
+			if state.Mode == "dashboard" || state.Mode == "slideshow" {
+				s.registry.SetState(entity.Key, esphome.EntityValue{
+					Kind: esphome.KindSelect,
+					Text: state.Mode,
+				})
+			}
 		case "brightness":
 			s.registry.SetState(entity.Key, esphome.EntityValue{
 				Kind:   esphome.KindNumber,
 				Number: float64(state.Brightness),
+			})
+		case "volume":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind:   esphome.KindNumber,
+				Number: float64(state.Volume),
 			})
 		}
 	}
@@ -330,13 +358,6 @@ func (s *ControlServer) Close() {
 		os.Remove(s.socket)
 	}
 }
-
-// controlStateObjectID is the entity that carries the state of the
-// panel.
-//
-// It is a sensor rather than something that can be written, because
-// the state is the panel's to report and not the panel's to be told.
-const controlStateObjectID = "panel_state"
 
 // readMessage reads one message from the panel.
 //

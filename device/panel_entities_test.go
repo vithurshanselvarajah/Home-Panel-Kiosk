@@ -28,7 +28,10 @@ func TestPanelEntitiesHaveNoDuplicates(t *testing.T) {
 	}
 
 	// The controls that are wanted are there.
-	for _, want := range []string{"screen", "brightness", "view", "dashboard", "display_mode", "exit", controlStateObjectID} {
+	for _, want := range []string{
+		"screen", "brightness", "volume", "view", "dashboard", "display_mode", "exit",
+		"drawer_open", "keyboard_visible", "last_activity", "version",
+	} {
 		if !seen[want] {
 			t.Errorf("the entity %q is missing", want)
 		}
