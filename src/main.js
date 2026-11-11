@@ -685,14 +685,24 @@ async function saveSettings(next) {
   // when the settings are read.
   clean.esphomeEncryptionKey = String(clean.esphomeEncryptionKey || "").trim();
   clean.esphomeDeviceName = String(clean.esphomeDeviceName || "").trim();
+  // The toggle is about the key and not about anything else, so it is
+  // not carried about.
+  delete clean.esphomeKeepEncryptionKey;
   // The display mode is a setting, so a device that was set up before it
   // existed has none, and one with a nonsense value falls back to the
   // mode it was running in.
   clean.displayMode = DISPLAY_MODES.includes(clean.displayMode) ? clean.displayMode : displayMode();
   const persisted = { ...clean };
+  // The encryption key is a secret, so it is kept out of the file and put
+  // back when the settings are read.
+  //
+  // The old copy is always removed first. A key that has been cleared
+  // has to stay cleared, and leaving the old copy in the file would
+  // bring it back the next time the settings were read.
+  delete persisted.esphomeEncryptionKeyEncrypted;
+  delete persisted.esphomeEncryptionKey;
   if (clean.esphomeEncryptionKey && await safeStorage.isAsyncEncryptionAvailable()) {
     persisted.esphomeEncryptionKeyEncrypted = (await safeStorage.encryptStringAsync(clean.esphomeEncryptionKey)).toString("base64");
-    delete persisted.esphomeEncryptionKey;
   }
   await fs.mkdir(path.dirname(configPath()), { recursive: true });
   await writeSettingsFile(persisted);

@@ -97,14 +97,21 @@ function sendKey(value) {
   applyToSettingsField(value);
 }
 
+// syncEncryptionKeyField enables or disables the encryption key field.
+//
+// The key is only changed when the person says it is. While the saved
+// key is kept the field is off, so it cannot be typed into by mistake
+// and the saved one is not overwritten by a blank field.
+function syncEncryptionKeyField() {
+  const key = form.elements.namedItem("esphomeEncryptionKey");
+  const keep = form.elements.namedItem("esphomeKeepEncryptionKey");
+  if (!key || !keep) return;
+  key.disabled = keep.checked;
+  key.placeholder = keep.checked ? "The saved key is kept" : "Leave blank for no key";
+}
+
 function populate(settings) {
   loadedSettings = settings;
-  // The encryption key is shown as dots, so the field is told it is
-  // already saved rather than empty.
-  const key = form.elements.namedItem("esphomeEncryptionKey");
-  if (key && settings.esphomeEncryptionKey === "••••••••") {
-    key.placeholder = "Saved securely · blank keeps current";
-  }
   for (const [key, value] of Object.entries(settings)) {
     const input = form.elements.namedItem(key);
     if (input) {
@@ -118,6 +125,14 @@ function populate(settings) {
       else echomuseInput.value = value;
     }
   }
+  // The encryption key is shown as dots, because it is a secret. The
+  // field is emptied and the toggle says the saved one is kept, so the
+  // key is never on the screen and is not overwritten by a blank field.
+  const keyField = form.elements.namedItem("esphomeEncryptionKey");
+  const keepToggle = form.elements.namedItem("esphomeKeepEncryptionKey");
+  if (keyField) keyField.value = "";
+  if (keepToggle) keepToggle.checked = Boolean(settings.esphomeEncryptionKey);
+  syncEncryptionKeyField();
 }
 
 function setDrawer(open) {
@@ -282,15 +297,23 @@ form.addEventListener("focusout", (event) => {
   setKeyboard(false);
 });
 
+// The toggle decides whether the key is changed.
+const keepKeyToggle = form.elements.namedItem("esphomeKeepEncryptionKey");
+if (keepKeyToggle) keepKeyToggle.addEventListener("change", syncEncryptionKeyField);
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form));
   data.idleToSlideshowMinutes = Number(data.idleToSlideshowMinutes);
   data.slideshowToOffMinutes = Number(data.slideshowToOffMinutes);
   data.touchKeyboardEnabled = form.elements.namedItem("touchKeyboardEnabled").checked;
-  // A blank encryption key means the one that is saved is kept.
-  if (!data.esphomeEncryptionKey && loadedSettings?.esphomeEncryptionKey === "••••••••") {
-    data.esphomeEncryptionKey = loadedSettings.esphomeEncryptionKey;
+  // The key is only changed when the toggle says it is, and a blank
+  // field with the toggle off clears it.
+  const keepKey = form.elements.namedItem("esphomeKeepEncryptionKey").checked;
+  if (keepKey) {
+    delete data.esphomeEncryptionKey;
+  } else if (!data.esphomeEncryptionKey) {
+    data.esphomeEncryptionKey = "";
   }
   $("#form-error").textContent = "";
   try {
