@@ -34,10 +34,16 @@ const ARCHITECTURES = ["x64", "arm64"];
 // shared library beside it. It is copied into the same directory as the
 // binary, and the binary is told to look there, so the panel finds its
 // wake word without anything being installed on the system.
+//
+// The name in the package is the plain one: it is beside the binary, and
+// the binary looks for that name.
 const RUNTIME_LIBRARIES = {
-  x64: "libonnxruntime.so.1",
-  arm64: "libonnxruntime.so.1",
+  x64: "libonnxruntime-linux-amd64.so.1",
+  arm64: "libonnxruntime-linux-arm64.so.1",
 };
+
+// The name the runtime is given in the package.
+const RUNTIME_PACKAGE_NAME = "libonnxruntime.so.1";
 
 // Where the runtimes are kept between builds.
 const RUNTIME_CACHE = path.join(
@@ -73,7 +79,7 @@ function copySidecar(outputPath) {
   // The runtime the device program was linked against.
   const runtime = findRuntime(architecture);
   if (runtime) {
-    const library = path.join(outputPath, RUNTIME_LIBRARIES[architecture]);
+    const library = path.join(outputPath, RUNTIME_PACKAGE_NAME);
     fs.copyFileSync(runtime, library);
     fs.chmodSync(library, 0o755);
     console.log(`the onnx runtime for ${architecture} is at ${library}`);
@@ -98,11 +104,19 @@ function copySidecar(outputPath) {
  * @returns {string|null} the path to the library, or null when it is not there
  */
 function findRuntime(architecture) {
+  // The build puts the runtime beside the binaries it built, under a name
+  // that says which architecture it is.
+  const built = path.join(
+    __dirname, "..", "vendor", RUNTIME_LIBRARIES[architecture]
+  );
+  if (fs.existsSync(built)) return built;
+
+  // Otherwise it is looked for in the build cache.
   const release = architecture === "x64" ? "onnxruntime-linux-x64" : "onnxruntime-linux-aarch64";
   if (!fs.existsSync(RUNTIME_CACHE)) return null;
   for (const entry of fs.readdirSync(RUNTIME_CACHE)) {
     if (!entry.startsWith(release)) continue;
-    const library = path.join(RUNTIME_CACHE, entry, "lib", RUNTIME_LIBRARIES[architecture]);
+    const library = path.join(RUNTIME_CACHE, entry, "lib", "libonnxruntime.so.1.23.2");
     if (fs.existsSync(library)) return library;
   }
   return null;

@@ -823,6 +823,61 @@ function publicSettings() {
   return { ...settings };
 }
 
+// runtimeDirectory is where the live state of a device lives.
+//
+// It is in memory, because the live state is a reading and not a record:
+// it changes as the device listens and speaks, and it is worth nothing
+// once the process is gone. Writing it to the flash would wear the flash
+// out for nothing.
+//
+// The service gives the application a directory in memory, and that is
+// where the state goes when there is one. Without it the shared memory
+// directory is used, and failing that the application's own directory —
+// which is the disk, and is worse but works.
+function runtimeDirectory(identity) {
+  const name = identity.replace(/[^a-zA-Z0-9_-]/g, "-") || "device";
+  for (const base of [runtimeBase(), "/dev/shm/homepanel"]) {
+    const dir = path.join(base, name);
+    try {
+      fsSync.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      // The directory has to be in memory, or the live state goes to the
+      // disk and the flash wears out for nothing. A directory that was
+      // made on the disk is not one.
+      if (!isMemory(dir)) continue;
+      return dir;
+    } catch { /* try the next one */ }
+  }
+  return path.join(app.getPath("userData"), "device-runtime");
+}
+
+/**
+ * The directory the live state is kept in.
+ *
+ * The service makes a directory in memory and names it through
+ * RUNTIME_DIRECTORY. The device program looks in the same place, and it
+ * is told which place that is when it is started, so the two cannot
+ * disagree about where the state is.
+ */
+function runtimeBase() {
+  return process.env.RUNTIME_DIRECTORY || "/dev/shm/homepanel";
+}
+
+/**
+ * Says whether a path is on a memory filesystem.
+ *
+ * The state is a few kilobytes, so the memory filesystem does not have to
+ * be big. What matters is that it is not the disk.
+ */
+function isMemory(directory) {
+  try {
+    const stats = fsSync.statfsSync(directory);
+    // TMPFS_MAGIC and RAMFS_MAGIC.
+    return stats.type === 0x01021994 || stats.type === 0x858458f6;
+  } catch {
+    return false;
+  }
+}
+
 // Starts the device program, if the panel is set up to be a voice
 // satellite.
 //
@@ -860,12 +915,19 @@ async function startDeviceProgram() {
   const stateFile = path.join(runtimeDir, "state.json");
   const levelFile = path.join(runtimeDir, "level");
   const configFile = path.join(app.getPath("userData"), "device-config.json");
+  // The data directory is where the device program keeps what it has to
+  // keep — the music player's identity and its pairing records. It is on
+  // the disk, because the music player's identity has to survive a
+  // restart: a player that forgets its identity is a new player, and the
+  // server has to pair with it again.
+  const dataDirectory = path.join(app.getPath("userData"), "device");
 
   deviceClient = new DeviceClient({
     binary,
     stateFile,
     levelFile,
     configFile,
+    dataDirectory,
     deviceId: identity,
     board: settings.deviceName || "home-panel",
     runtimeDirectory: runtimeBaseDir,
