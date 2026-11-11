@@ -5,6 +5,10 @@ dist/
 npm-debug.log*
 pnpm-debug.log*
 
+# Chromium downloads a spellcheck dictionary into the working directory
+# when it starts, and it is not ours to keep.
+*.bdic
+
 # The Go modules build their own output.
 audio/echomuse-device
 device/echomuse-device
