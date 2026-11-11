@@ -61,8 +61,25 @@ async def main():
     mode = sys.argv[1]
     address = sys.argv[2]
     key = sys.argv[3]
-    host, port = address.rsplit(":", 1)
 
+    # The mDNS mode does not talk to the device: it looks for it.
+    if mode == "mdns":
+        # The zeroconf library wants the async form inside a loop.
+        from zeroconf import Zeroconf
+        from zeroconf.asyncio import AsyncZeroconf
+        aiozc = AsyncZeroconf()
+        info = await aiozc.async_get_service_info("_esphomelib._tcp.local.", address, timeout=8000)
+        if info is None:
+            print("not-found")
+        else:
+            print("port:" + str(info.port))
+            for k, v in (info.properties or {}).items():
+                if k:
+                    print(k.decode() + ":" + v.decode())
+        await aiozc.async_close()
+        return
+
+    host, port = address.rsplit(":", 1)
     client = APIClient(host, int(port), noise_psk=key or None)
     await client.connect(login=True)
 
@@ -94,4 +111,5 @@ async def main():
     await client.disconnect()
 
 asyncio.run(main())
+
 `
