@@ -8,8 +8,6 @@ import (
 	"io"
 	"sync"
 	"time"
-
-	"github.com/wilbowes/EchoMuse-SDK/clients/go/echomuse"
 )
 
 // describeAudio names the sound system.
