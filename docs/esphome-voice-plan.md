@@ -5,6 +5,11 @@ The panel is already an ESPHome device to Home Assistant. This plan makes it a
 to over the native API, with the wake word, the speaker and Sendspin all
 running on the device. It also adds a camera.
 
+> **What has been done.** The voice satellite, the wake word, the music
+> player and the SDK removal are built. The camera and the media player
+> entity are not. The sections below are the plan as it was written; the
+> "as built" notes say what changed and why.
+
 The template is the EchoMuse Controller's own ESPHome implementation
 (`EchoMuse/controller/em_esphome.py`, 3655 lines, working against real HA
 Core). That code has already solved the hard parts — the wake-word handshake,
@@ -15,10 +20,10 @@ ports those answers into Go, against the panel's existing ESPHome server.
 
 ## 1. Why this is worth doing
 
-The panel currently has two separate links to Home Assistant: the ESPHome
-native API for control, and the EchoMuse SDK for voice. The SDK link goes to
-the EchoMuse Controller (192.168.1.132:8767), which is *itself* an ESPHome
-voice satellite for HA. So a voice turn today is:
+The panel had two separate links to Home Assistant: the ESPHome native API
+for control, and the EchoMuse SDK for voice. The SDK link went to the
+EchoMuse Controller (192.168.1.132:8767), which is *itself* an ESPHome
+voice satellite for HA. So a voice turn was:
 
 ```
 panel → EchoMuse SDK → EchoMuse Controller → ESPHome API → Home Assistant
@@ -44,9 +49,13 @@ What that buys:
 | Music | EchoMuse's sendspin | ESPHome's sendspin, same identity |
 | Camera | none | ESPHome camera entity |
 
-The SDK also has a `replace` directive pointing at an unpublished local
-checkout (`../../EchoMuse-SDK-upstream/clients/go`). That alone blocks a
+The SDK also had a `replace` directive pointing at an unpublished local
+checkout (`../../EchoMuse-SDK-upstream/clients/go`). That alone blocked a
 release. Removing it removes the blocker.
+
+**As built.** The SDK is gone. The panel builds from its own tree alone,
+which is checked by cloning the repository and building it: that is the
+acceptance test, and it passes.
 
 ---
 
@@ -496,7 +505,14 @@ camera writes nothing: frames go to the socket and are dropped.
 Each phase is a commit. The proto is extended in phase 1, and every phase
 after that is Go work against it.
 
+Phases 1, 2, 4 and 7 are done, along with the wake word's gate and the
+music player's move into this tree. Phases 3 (the media player) and 6 (the
+camera) are not started.
+
 ### Phase 1 — Extend the protocol
+
+**Done.** 80 messages, 41 of them checked byte-for-byte against
+`aioesphomeapi`.
 
 `device/esphome/esphome_api.proto` gains the voice, media player, camera,
 event and sendspin messages. `trim_proto.py`'s `NEEDED` list grows
@@ -510,6 +526,8 @@ trustworthy.**
 New messages: ~40. The proto goes from 55 to roughly 95 messages.
 
 ### Phase 2 — The voice satellite
+
+**Done.** `device/esphome/voice.go`, `voice_server.go` and `voice_turn.go`.
 
 New file `device/esphome/voice.go`:
 
@@ -566,6 +584,8 @@ right state.
 
 ### Phase 4 — Wake word
 
+**Done**, with the gate as well.
+
 New package `device/wakeword/`, ported from `EchoMuse/device/internal/wakeword/`:
 
 - `stream.go` — the buffering (pure Go, no cgo).
@@ -586,6 +606,9 @@ word fires; HA's transcript shows the right phrase; HA's wake-word picker
 turns it off and the panel stops listening.
 
 ### Phase 5 — Sendspin
+
+**Partly done.** The player is vendored and running; the mDNS
+advertisement and the pairing token over the native API are not.
 
 Vendor `EchoMuse-SDK-upstream/clients/go/echomuse/sendspin/` into
 `device/sendspin/`, with its MIT licence file.
@@ -629,6 +652,9 @@ Add to `device/esphome/entity.go`: `KindCamera`.
 stream works.
 
 ### Phase 7 — Remove the SDK
+
+**Done.** A clean clone builds and passes every test with nothing outside
+this repository.
 
 This is the phase that unblocks the release.
 
@@ -700,16 +726,63 @@ reached HA from hanging.
 
 ---
 
-## 8. The immediate next step
+## 8. What changed while building it
 
-Phase 1 and phase 2's protocol work first, because everything else depends on
-the proto being right.
+Three things turned out differently from the plan, and each one was worth
+finding out.
 
-The first concrete deliverable is the extended proto passing the wire check
-against `aioesphomeapi`, followed by a `DeviceInfoResponse` carrying the voice
-flags and a `ListEntities` carrying a media player — enough for HA to create
-the `assist_satellite` entity and the `media_player` entity. That is the
-"it is a voice device" milestone, and it is verifiable on the dev HA.
+### The device needs no speech detector
 
-Then the turn itself: a `VoiceAssistantRequest`, mic audio, and a transcript
-in HA's log. That is the "it talks" milestone.
+The plan had the panel running its own voice activity detection, ending a
+turn when the person stopped talking. It does not need to.
+
+Home Assistant runs its own: the assist pipeline uses microVAD and a
+`VoiceCommandSegmenter`, and ESPHome stops the microphone when it sees
+`STT_VAD_END`. The device streams audio until Home Assistant says the
+utterance is over. So the panel has no VAD at all, and the microphone is
+open for exactly as long as Home Assistant wants it.
+
+That is better than the plan on every count: one less detector to run, one
+less set of thresholds to tune, and the endpointing is done by the thing
+that is actually transcribing the words.
+
+### The wake word needed a gate, not just a duty cycle
+
+Scoring every frame of every second costs about a third of a core for
+ever, and the panel shares four cores with a browser. So the frame is
+measured before it is scored — a sum of squares, which is cheap — and only
+the frames loud enough to be somebody talking reach the scorer.
+
+The threshold is learned from the room: it comes down quickly and goes up
+slowly, so it follows a room that gets louder without a single loud frame
+raising it past the speech.
+
+### The ONNX Runtime is linked, not loaded
+
+The runtime was originally loaded at run time, so the binary was small and
+the runtime was optional. It is now linked in, which means a device that
+has the binary has the wake word: there is nothing to install and nothing
+that can be missing.
+
+The cost is a cross-compiler on the machine that builds the arm64 binary,
+and the runtime travels beside the binary in the package.
+
+---
+
+## 9. The immediate next step
+
+**Done:** the protocol extension, the voice satellite, the wake word with its
+gate, the music player and the SDK removal. The wire check covers 41
+messages, all byte-identical to `aioesphomeapi`.
+
+**Next:** the media player entity, so the reply to a voice turn has
+somewhere to go, and the camera.
+
+The media player is the smaller of the two. It is one entity, the
+supported formats, and the handling of `MediaPlayerCommandRequest` — and
+the plan has the details in section 3.5.
+
+The camera is the larger one, because the panel has no camera today:
+`cdd595d` removed the old Home Assistant camera feature and there is no
+V4L2 or `getUserMedia` code in the tree. It needs a capture source, a
+JPEG encoder and the chunked image responses.

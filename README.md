@@ -141,85 +141,26 @@ npm start
 
 Settings live in Electron's per-user application data directory. Use `npm run make -- --arch=arm64` or `--arch=x64` to create a Linux package.
 
-### Running against a mock controller
+### Running against a Home Assistant server
 
-The EchoMuse device needs a controller to talk to. For development there is
-one: a mock controller in the SDK that speaks enough of the protocol to
-register a device, approve it and hold a link.
-
-```sh
-npm run dev
-```
-
-That builds the mock controller from the SDK, starts it, and starts the app
-pointed at it. The EchoMuse row in the drawer goes green and the settings tab
-shows the device as connected.
-
-The SDK checkout is expected at `~/Documents/GitHub/EchoMuse-SDK-upstream`.
-Set `ECHOMUSE_SDK` to point somewhere else:
-
-```sh
-ECHOMUSE_SDK=/path/to/EchoMuse-SDK npm run dev
-```
-
-`npm run dev -- --pending` starts the controller in pending mode, so the
-device registers but is not admitted — which is what an unapproved device
-looks like.
-
-### Running against a real controller
+The panel is a voice satellite to Home Assistant, and it finds Home
+Assistant the same way any ESPHome device does: by announcing itself on
+the network. There is nothing to point it at.
 
 ```sh
 npm run dev
 ```
 
-The device finds the controller by mDNS, which is what a device on the
-network does. It asks to be admitted, and the request appears in the
-controller's dashboard where an administrator approves it.
+That starts the app with the voice switched on. The panel appears in
+Home Assistant as an ordinary ESPHome device, with its entities and its
+services, and — once the wake word models are installed — as a voice
+satellite.
 
-To name the controller instead:
-
-```sh
-npm run dev -- --controller ws://192.168.1.132:8767
-```
-
-A device that has never been seen arrives as **pending** and waits in a
-list. Asking to pair puts the request in front of an administrator
-instead, which is what a person setting the device up wants. The **Ask the
-controller to admit this device** setting turns that off, and the device
-then waits as an ordinary pending device.
-
-### Running the packaged build
-
-```sh
-npm run packaged
-```
-
-This builds the app the way the .deb does and runs that build, so the
-device program is found beside the executable the way it is on a device, rather
-than in the repository's vendor directory. The build is made if it is not
-there, or if the source is newer than it.
-
-The packaged build keeps its settings in the same place a device does, so
-a packaged run and a development run see the same configuration.
-
-To point it at a controller without the dev script:
-
-```sh
-ECHOMUSE_CONTROLLER_URL=ws://192.168.1.132:8767 ECHOMUSE_ENABLED=1 npm start
-```
-
-Both environment variables are read at start-up and neither is written to
-the settings file, so a development run never changes how the device is set
-up. `ECHOMUSE_ENABLED=0` turns the link off for the run.
-
-The EchoMuse link is **off by default**. A device that has just been
-installed has never been admitted, and asking the controller to admit a
-device nobody has configured yet is not helpful — so the settings page is
-where it is turned on.
+`npm run dev -- --no-voice` starts it without the voice.
 
 ### The audio devices
 
-The **Microphone** and **Speaker** pickers in the EchoMuse settings list the
+The **Microphone** and **Speaker** pickers in the voice settings list the
 audio endpoints the machine has, the way the mixer names them. The list
 comes from the device program, because the device program is what opens the
 audio.
@@ -247,11 +188,11 @@ server's view of it. A device that is already in use, by the sound server
 or by another program, is reported as busy rather than opened, because
 ALSA answers a busy device by taking the process down.
 
-### The EchoMuse device program
+### The device program
 
-The EchoMuse link lives in a separate program: it owns the connection to the
-controller, the microphone and the speaker, and it reports what the device
-is doing. The application renders that.
+The voice link lives in a separate program: it owns the connection to Home
+Assistant, the microphone, the speaker and the wake word. The application
+renders what it reports.
 
 It is written in Go, in two modules:
 
@@ -262,18 +203,48 @@ It is written in Go, in two modules:
 
 The audio reaches ALSA through [purego](https://github.com/ebitengine/purego),
 which loads `libasound.so.2` at run time rather than linking against it.
-That means the binaries cross compile for arm64 without a C toolchain, and
-they still start on a machine with no sound card.
+That means the sound system needs no cross-compiled library, and the panel
+still starts on a machine with no sound card.
 
-The device needs the EchoMuse SDK, which is developed in a checkout rather
-than published. Set `ECHOMUSE_SDK` to point somewhere else:
+The wake word's ONNX Runtime *is* linked, because it is a C library and
+the panel is better with the wake word than without it. The build fetches
+the runtime for each architecture and links it in, so a device that has the
+binary has the wake word: there is nothing to install on the device and
+nothing that can be missing. The runtime travels beside the binary in the
+package, and the binary looks for it there.
+
+The arm64 build needs a cross-compiler:
 
 ```sh
-ECHOMUSE_SDK=/path/to/EchoMuse-SDK npm run build:device
+sudo apt-get install gcc-aarch64-linux-gnu
 ```
 
-`npm run build:device` writes the binaries into `vendor/`, one per
-architecture, and the packaging step copies them into the package.
+```sh
+npm run build:device
+```
+
+That writes the binaries into `vendor/`, one per architecture, and the
+packaging step copies them into the package.
+
+### The wake word models
+
+The models are not in the package. They are a few megabytes, they change
+far less often than the application, and a model is chosen by the person
+who installs the panel rather than by the build.
+
+They go in `/usr/share/home-panel/wakeword`:
+
+| File | Where it comes from |
+|---|---|
+| `melspectrogram.onnx` | [openWakeWord](https://github.com/dscripka/openWakeWord) |
+| `embedding_model.onnx` | [openWakeWord](https://github.com/dscripka/openWakeWord) |
+| `hey_jarvis_v0.1.onnx` | [openWakeWord](https://github.com/dscripka/openWakeWord) — or any other wake word |
+
+The directory can be changed with `HOME_PANEL_WAKEWORD_DIR`.
+
+Without the models the panel still works: it is a screen with some
+switches, and Home Assistant can ask it to speak. With them it hears the
+wake word itself, and nothing is sent to Home Assistant until it fires.
 
 ### The ESPHome protocol
 
