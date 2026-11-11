@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio v0.0.0
 	github.com/wilbowes/EchoMuse-SDK/clients/go v0.0.0
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
