@@ -85,7 +85,7 @@ func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 	}()
 
 	// The peer connects and sends one frame.
-	peer := exec.Command(python, "-c", peerSource, key, listener.Addr().String())
+	peer := exec.Command(python, "-c", handshakePeerSource, key, listener.Addr().String())
 	peer.Stdout = os.Stderr
 	peer.Stderr = os.Stderr
 	if err := peer.Start(); err != nil {
@@ -111,7 +111,7 @@ func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 //
 // It uses aioesphomeapi's own Noise implementation, so the handshake is
 // checked against the same code Home Assistant runs.
-const peerSource = `
+const handshakePeerSource = `
 import asyncio, base64, struct, sys
 
 from noise.connection import NoiseConnection
