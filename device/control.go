@@ -28,7 +28,7 @@ import (
 // The socket is in memory, because it is a live reading and not a
 // record, and the device is on eMMC.
 
-// ControlCommand is what the panel asks the device program to do.
+// ControlCommand is what the device program asks the panel to do.
 //
 // The names are the ones the MQTT command contract used, so the panel's
 // own code does not change when the transport does.
@@ -49,6 +49,19 @@ type ControlCommand struct {
 	Duration int `json:"duration,omitempty"`
 	// Priority is how a notification matters.
 	Priority string `json:"priority,omitempty"`
+}
+
+// ControlStateUpdate is what the panel tells the device program.
+//
+// The panel is the one that knows what it is doing: it is the thing
+// being displayed. The device program turns this into the entities
+// Home Assistant sees.
+type ControlStateUpdate struct {
+	// Action is "state". It is there so the two directions can be told
+	// apart on the same socket.
+	Action string `json:"action"`
+	// State is the state of the panel.
+	State ControlState `json:"value"`
 }
 
 // ControlState is what the device program tells the panel.
@@ -167,31 +180,43 @@ func (s *ControlServer) serve(conn net.Conn) {
 	s.connections.Store(conn, struct{}{})
 	defer s.connections.Delete(conn)
 
-	// The panel is told the state as soon as it arrives, so it does not
-	// have to wait for something to change.
-	s.sendState(conn)
-
-	// The reader is made once and kept: a reader made per command
+	// The reader is made once and kept: a reader made per message
 	// would throw away whatever it had read ahead.
 	reader := bufio.NewReader(conn)
 	for {
-		command, err := readCommand(reader)
+		message, err := readMessage(reader)
 		if err != nil {
 			return
 		}
-		s.handle(command)
+		s.handle(message)
 	}
 }
 
-// handle applies a command from the panel.
-func (s *ControlServer) handle(command ControlCommand) {
-	s.log.Debug("the panel asked for something", "action", command.Action)
-	if s.onCommand != nil {
-		s.onCommand(command)
+// handle acts on a message from the panel.
+//
+// The panel sends its state, and the device program turns it into the
+// entities Home Assistant sees. A command from the panel is not
+// expected: the panel does what it is told.
+func (s *ControlServer) handle(message ControlMessage) {
+	if message.Action == "state" {
+		s.SetState(message.State)
+		return
 	}
+	s.log.Debug("the panel sent something unexpected", "action", message.Action)
 }
 
-// SetState records the state of the panel and tells every panel.
+// ControlMessage is what the panel sends.
+//
+// It is one shape for both directions, so the socket is one stream
+// rather than two.
+type ControlMessage struct {
+	// Action is what the message is about.
+	Action string `json:"action"`
+	// State is the state of the panel, for the state message.
+	State ControlState `json:"value"`
+}
+
+// SetState records the state of the panel.
 //
 // This is how the panel's own state reaches Home Assistant: the
 // entities are changed here, and the change is pushed.
@@ -204,16 +229,6 @@ func (s *ControlServer) SetState(state ControlState) {
 		return
 	}
 	s.applyEntities(state)
-	s.connections.Range(func(key, _ any) bool {
-		conn, ok := key.(net.Conn)
-		if !ok {
-			return true
-		}
-		if err := s.writeState(conn); err != nil {
-			s.log.Debug("the state could not be sent", "error", err)
-		}
-		return true
-	})
 }
 
 // State returns the state of the panel.
@@ -248,15 +263,27 @@ func (s *ControlServer) applyEntities(state ControlState) {
 	}
 }
 
-// sendState tells one panel what the state is.
-func (s *ControlServer) sendState(conn net.Conn) error {
-	return s.writeState(conn)
+// SendCommand asks the panel to do something.
+//
+// The panel is what does it: the device program cannot turn the
+// screen off or open a dashboard, and the panel knows how. The command
+// goes to every panel that is connected, and there is one.
+func (s *ControlServer) SendCommand(command ControlCommand) {
+	s.connections.Range(func(key, _ any) bool {
+		conn, ok := key.(net.Conn)
+		if !ok {
+			return true
+		}
+		if err := s.writeCommand(conn, command); err != nil {
+			s.log.Debug("the command could not be sent", "error", err)
+		}
+		return true
+	})
 }
 
-// writeState tells one panel what the state is.
-func (s *ControlServer) writeState(conn net.Conn) error {
-	state := s.State()
-	payload, err := json.Marshal(state)
+// writeCommand asks one panel to do something.
+func (s *ControlServer) writeCommand(conn net.Conn, command ControlCommand) error {
+	payload, err := json.Marshal(command)
 	if err != nil {
 		return err
 	}
@@ -287,24 +314,24 @@ func (s *ControlServer) Close() {
 // the state is the panel's to report and not the panel's to be told.
 const controlStateObjectID = "panel_state"
 
-// readCommand reads one command from the panel.
+// readMessage reads one message from the panel.
 //
-// The commands are newline separated JSON. A line that is not JSON is
-// skipped rather than ending the connection: a panel that is out of step
-// should not take the link down.
-func readCommand(reader *bufio.Reader) (ControlCommand, error) {
+// The messages are newline separated JSON. A line that is not JSON is
+// skipped rather than ending the connection: a panel that is out of
+// step should not take the link down.
+func readMessage(reader *bufio.Reader) (ControlMessage, error) {
 	for {
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
-			return ControlCommand{}, err
+			return ControlMessage{}, err
 		}
 		if len(line) == 0 {
 			continue
 		}
-		var command ControlCommand
-		if err := json.Unmarshal(line, &command); err != nil {
+		var message ControlMessage
+		if err := json.Unmarshal(line, &message); err != nil {
 			continue
 		}
-		return command, nil
+		return message, nil
 	}
 }

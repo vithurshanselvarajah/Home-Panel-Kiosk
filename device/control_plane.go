@@ -113,23 +113,92 @@ func startControlPlane(
 	}
 
 	// The socket the panel talks over.
+	//
+	// The commands Home Assistant sends are turned into the commands
+	// the panel already understands. The names are the ones the MQTT
+	// contract used, so the panel's own code does not change when the
+	// transport does.
+	//
+	// The socket is made before the commands are wired, because the
+	// wiring needs it and the socket needs the commands.
+	var server *ControlServer
 	if socket != "" {
-		server := NewControlServer(ControlOptions{
+		server = NewControlServer(ControlOptions{
 			Socket:   socket,
 			Registry: registry,
 			Log:      log,
-			OnCommand: func(command ControlCommand) {
-				log.Info("the panel asked for something", "action", command.Action)
-			},
 		})
 		if err := server.Listen(); err != nil {
 			log.Error("the control socket could not be opened", "error", err)
+			server = nil
 		} else {
 			plane.server = server
 			log.Info("the control socket is open", "path", socket)
 		}
 	}
+
+	// The entities are what Home Assistant acts on. Each one turns into
+	// a command for the panel.
+	wireEntities(registry, server, log)
+
 	return plane
+}
+
+// wireEntities turns what Home Assistant asks for into what the panel
+// is told to do.
+//
+// The entity is the thing Home Assistant knows: a switch for the
+// screen, a number for the brightness, a select for the view. The
+// command is the thing the panel understands. This is where the two
+// meet.
+func wireEntities(registry *esphome.Registry, server *ControlServer, log *slog.Logger) {
+	send := func(command ControlCommand) {
+		if server == nil {
+			return
+		}
+		server.SendCommand(command)
+	}
+
+	for _, entity := range registry.All() {
+		entity := entity
+		entity.OnCommand(func(value esphome.EntityValue) {
+			switch entity.ObjectID {
+			case "screen":
+				// The switch is the screen being on or off.
+				if value.Bool {
+					send(ControlCommand{Action: "wake"})
+				} else {
+					send(ControlCommand{Action: "screen_off"})
+				}
+			case "wake":
+				send(ControlCommand{Action: "wake"})
+			case "screen_off":
+				send(ControlCommand{Action: "screen_off"})
+			case "brightness":
+				send(ControlCommand{Action: "brightness", Value: int(value.Number)})
+			case "view":
+				if value.Text == "slideshow" {
+					send(ControlCommand{Action: "slideshow"})
+				} else {
+					send(ControlCommand{Action: "dashboard"})
+				}
+			case "slideshow":
+				send(ControlCommand{Action: "slideshow"})
+			case "dashboard":
+				send(ControlCommand{Action: "dashboard"})
+			case "display_mode":
+				send(ControlCommand{Action: "display_mode", Mode: value.Text})
+			case "notification":
+				send(ControlCommand{Action: "notification", Message: value.Text})
+			case "open_url":
+				send(ControlCommand{Action: "open_url", URL: value.Text})
+			case "exit":
+				send(ControlCommand{Action: "exit"})
+			default:
+				log.Debug("an entity was changed and nothing knows what to do", "entity", entity.ObjectID)
+			}
+		})
+	}
 }
 
 // listenForAPI opens the API socket.

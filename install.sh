@@ -65,7 +65,7 @@ APP_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk
 configure_pi_touch() {
   local settings_file="${APP_CONFIG_DIR}/settings.json"
   local interactive=true
-  if [[ -n "${PITOUCH_DASHBOARD_URL:-}${PITOUCH_SLIDESHOW_URL:-}${PITOUCH_MQTT_URL:-}${PITOUCH_MQTT_USERNAME:-}${PITOUCH_MQTT_PASSWORD:-}${PITOUCH_MQTT_PREFIX:-}${PITOUCH_DEVICE_NAME:-}${PITOUCH_IDLE_SLIDESHOW_MINUTES:-}${PITOUCH_SLIDESHOW_OFF_MINUTES:-}${PITOUCH_TOUCH_KEYBOARD:-}${PITOUCH_DISPLAY_MODE:-}" ]]; then
+  if [[ -n "${PITOUCH_DASHBOARD_URL:-}${PITOUCH_SLIDESHOW_URL:-}${PITOUCH_DEVICE_NAME:-}${PITOUCH_IDLE_SLIDESHOW_MINUTES:-}${PITOUCH_SLIDESHOW_OFF_MINUTES:-}${PITOUCH_TOUCH_KEYBOARD:-}${PITOUCH_DISPLAY_MODE:-}" ]]; then
     interactive=false
   fi
 
@@ -74,7 +74,7 @@ configure_pi_touch() {
     return 0
   fi
 
-  # Validate a URL; accept http(s) for dashboard/slideshow and mqtt(s) for the broker.
+  # Validate a URL; accept http(s) for the dashboard and the slideshow.
   validate_url() {
     local value=$1 label=$2 scheme=$3
     if [[ -z "$value" ]]; then return 0; fi
@@ -85,8 +85,7 @@ configure_pi_touch() {
 
   # Pull defaults from any existing settings.json so re-running the installer
   # pre-fills the prompts with the user's previous values.
-  local existing_dashboard_url="" existing_slideshow_url="" existing_mqtt_url=""
-  local existing_mqtt_user="" existing_mqtt_prefix="" existing_device_name=""
+  local existing_dashboard_url="" existing_slideshow_url="" existing_device_name=""
   local existing_idle_slideshow_min="" existing_slideshow_off_min="" existing_touch_keyboard=""
   local existing_display_mode=""
   if [[ -f "$settings_file" ]] && command -v python3 >/dev/null 2>&1; then
@@ -108,9 +107,6 @@ PY
     }
     existing_dashboard_url=$(read_existing dashboardUrl)
     existing_slideshow_url=$(read_existing slideshowUrl)
-    existing_mqtt_url=$(read_existing mqttUrl)
-    existing_mqtt_user=$(read_existing mqttUsername)
-    existing_mqtt_prefix=$(read_existing mqttPrefix)
     existing_device_name=$(read_existing deviceName)
     existing_idle_slideshow_min=$(read_existing idleToSlideshowMinutes)
     existing_slideshow_off_min=$(read_existing slideshowToOffMinutes)
@@ -118,15 +114,12 @@ PY
     existing_display_mode=$(read_existing displayMode)
   fi
 
-  local dashboard_url slideshow_url mqtt_url mqtt_user mqtt_pass mqtt_prefix device_name
+  local dashboard_url slideshow_url device_name
   local idle_slideshow_min slideshow_off_min touch_keyboard display_mode
 
   # Fall back to the documented defaults if no prior value is recorded.
   local def_dashboard=${existing_dashboard_url:-http://homeassistant.local:8123}
   local def_slideshow=${existing_slideshow_url:-}
-  local def_mqtt=${existing_mqtt_url:-}
-  local def_mqtt_user=${existing_mqtt_user:-}
-  local def_mqtt_prefix=${existing_mqtt_prefix:-homepanel}
   local def_device_name=${existing_device_name:-Home Panel}
   local def_idle_slideshow_min=${existing_idle_slideshow_min:-5}
   local def_slideshow_off_min=${existing_slideshow_off_min:-15}
@@ -170,58 +163,32 @@ PY
     if [[ -z "$display_mode_input" ]]; then
       display_mode=$def_display_mode
     elif [[ "$display_mode_input" =~ ^[Ww]$ ]]; then display_mode="window"; else display_mode="fullscreen"; fi
-    if [[ -n "$def_mqtt" ]]; then
-      read -r -p "MQTT broker URL (optional) [$def_mqtt]: " mqtt_url
-    else
-      read -r -p "MQTT broker URL (optional, e.g. mqtt://192.168.1.10:1883): " mqtt_url
-    fi
-    mqtt_url=${mqtt_url:-$def_mqtt}
-    if [[ -n "$mqtt_url" ]] && ! validate_url "$mqtt_url" "MQTT" "mqtts?"; then mqtt_url=""; fi
-    if [[ -n "$mqtt_url" ]]; then
-      local user_prompt="MQTT username (optional)"
-      [[ -n "$def_mqtt_user" ]] && user_prompt="MQTT username [$def_mqtt_user]"
-      read -r -p "$user_prompt: " mqtt_user
-      mqtt_user=${mqtt_user:-$def_mqtt_user}
-      read -r -s -p "MQTT password (optional, input hidden — leave blank to keep existing): " mqtt_pass; echo ""
-      read -r -p "MQTT topic prefix [$def_mqtt_prefix]: " mqtt_prefix
-      mqtt_prefix=${mqtt_prefix:-$def_mqtt_prefix}
-      local name_prompt="Device name shown in Home Assistant"
-      [[ -n "$def_device_name" && "$def_device_name" != "Home Panel" ]] && name_prompt="Device name shown in Home Assistant [$def_device_name]"
-      read -r -p "$name_prompt: " device_name
-      device_name=${device_name:-$def_device_name}
-    fi
+    local name_prompt="Device name shown in Home Assistant"
+    [[ -n "$def_device_name" && "$def_device_name" != "Home Panel" ]] && name_prompt="Device name shown in Home Assistant [$def_device_name]"
+    read -r -p "$name_prompt: " device_name
+    device_name=${device_name:-$def_device_name}
   else
     dashboard_url=${PITOUCH_DASHBOARD_URL:-http://homeassistant.local:8123}
     slideshow_url=${PITOUCH_SLIDESHOW_URL:-}
     idle_slideshow_min=${PITOUCH_IDLE_SLIDESHOW_MINUTES:-5}
     slideshow_off_min=${PITOUCH_SLIDESHOW_OFF_MINUTES:-15}
     touch_keyboard=${PITOUCH_TOUCH_KEYBOARD:-true}
-    mqtt_url=${PITOUCH_MQTT_URL:-}
-    mqtt_user=${PITOUCH_MQTT_USERNAME:-}
-    mqtt_pass=${PITOUCH_MQTT_PASSWORD:-}
-    mqtt_prefix=${PITOUCH_MQTT_PREFIX:-homepanel}
     device_name=${PITOUCH_DEVICE_NAME:-Home Panel}
     display_mode=${PITOUCH_DISPLAY_MODE:-fullscreen}
     validate_url "$dashboard_url" "dashboard" "https?" || { echo "PITOUCH_DASHBOARD_URL is invalid." >&2; exit 1; }
     [[ -z "$slideshow_url" ]] || validate_url "$slideshow_url" "slideshow" "https?" || { echo "PITOUCH_SLIDESHOW_URL is invalid." >&2; exit 1; }
-    [[ -z "$mqtt_url" ]] || validate_url "$mqtt_url" "MQTT" "mqtts?" || { echo "PITOUCH_MQTT_URL is invalid." >&2; exit 1; }
     [[ "$display_mode" == "fullscreen" || "$display_mode" == "window" ]] || { echo "PITOUCH_DISPLAY_MODE must be fullscreen or window." >&2; exit 1; }
   fi
 
   mkdir -p "$APP_CONFIG_DIR"
 
   # Build the JSON file using python3 (already a hard dependency for this script)
-  # so values are escaped properly. The MQTT password is written in plaintext;
-  # the app will encrypt it on next save via Electron safeStorage.
+  # so values are escaped properly.
   PITOUCH_DASHBOARD_URL="$dashboard_url" \
   PITOUCH_SLIDESHOW_URL="$slideshow_url" \
   PITOUCH_IDLE_SLIDESHOW_MINUTES="$idle_slideshow_min" \
   PITOUCH_SLIDESHOW_OFF_MINUTES="$slideshow_off_min" \
   PITOUCH_TOUCH_KEYBOARD="$touch_keyboard" \
-  PITOUCH_MQTT_URL="$mqtt_url" \
-  PITOUCH_MQTT_USERNAME="$mqtt_user" \
-  PITOUCH_MQTT_PASSWORD="$mqtt_pass" \
-  PITOUCH_MQTT_PREFIX="$mqtt_prefix" \
   PITOUCH_DEVICE_NAME="$device_name" \
   PITOUCH_DISPLAY_MODE="$display_mode" \
   python3 - "$settings_file" <<'PY'
@@ -245,10 +212,6 @@ settings = {
     "slideshowToOffMinutes": int_env("PITOUCH_SLIDESHOW_OFF_MINUTES", 15),
     "displayMode": os.environ.get("PITOUCH_DISPLAY_MODE", "fullscreen") or "fullscreen",
     "touchKeyboardEnabled": os.environ.get("PITOUCH_TOUCH_KEYBOARD", "true").lower() not in ("0", "false", "no"),
-    "mqttUrl": os.environ.get("PITOUCH_MQTT_URL", ""),
-    "mqttUsername": os.environ.get("PITOUCH_MQTT_USERNAME", ""),
-    "mqttPassword": os.environ.get("PITOUCH_MQTT_PASSWORD", ""),
-    "mqttPrefix": os.environ.get("PITOUCH_MQTT_PREFIX", "homepanel") or "homepanel",
     "deviceName": os.environ.get("PITOUCH_DEVICE_NAME", "Home Panel") or "Home Panel",
 }
 
@@ -340,5 +303,5 @@ fi
 if [[ "${PITOUCH_SKIP_SETUP:-0}" == "1" ]]; then
   echo "Initial setup was skipped; open Settings from the side panel to configure the dashboard."
 else
-  echo "If you skipped setup, open Settings from the side panel to update the dashboard URL or MQTT settings."
+  echo "If you skipped setup, open Settings from the side panel to update the dashboard URL."
 fi

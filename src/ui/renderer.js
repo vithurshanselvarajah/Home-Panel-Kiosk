@@ -112,7 +112,6 @@ function populate(settings) {
       else echomuseInput.value = value;
     }
   }
-  if (settings.mqttPassword === "••••••••") form.elements.namedItem("mqttPassword").placeholder = "Saved securely · blank keeps current";
 }
 
 function setDrawer(open) {
@@ -283,7 +282,6 @@ form.addEventListener("submit", async (event) => {
   data.idleToSlideshowMinutes = Number(data.idleToSlideshowMinutes);
   data.slideshowToOffMinutes = Number(data.slideshowToOffMinutes);
   data.touchKeyboardEnabled = form.elements.namedItem("touchKeyboardEnabled").checked;
-  if (!data.mqttPassword && loadedSettings.mqttPassword === "••••••••") data.mqttPassword = loadedSettings.mqttPassword;
   $("#form-error").textContent = "";
   try {
     const saved = await window.homePanel.saveSettings(data);
@@ -392,7 +390,7 @@ window.homePanel.onState((state) => {
     displayMode = state.displayMode;
     $("#display-mode-label").textContent = displayMode === "fullscreen" ? "Window mode" : "Fullscreen";
   }
-  for (const service of ["mqtt", "immich", "dashboard"]) {
+  for (const service of ["control", "immich", "dashboard"]) {
     const value = state.serviceStatus?.[service] || "unknown";
     const led = document.querySelector(`[data-service="${service}"]`);
     led.dataset.status = value;
