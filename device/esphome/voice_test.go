@@ -414,6 +414,9 @@ func TestTheVoiceMessageNumbersMatchTheProtocol(t *testing.T) {
 		{"VoiceAssistantConfigurationResponse", TypeVoiceAssistantConfigurationResponse},
 		{"VoiceAssistantSetConfiguration", TypeVoiceAssistantSetConfiguration},
 		{"VoiceAssistantTimerEventResponse", TypeVoiceAssistantTimerEventResponse},
+		{"ListEntitiesMediaPlayerResponse", TypeListEntitiesMediaPlayerResponse},
+		{"MediaPlayerCommandRequest", TypeMediaPlayerCommandRequest},
+		{"MediaPlayerStateResponse", TypeMediaPlayerStateResponse},
 	} {
 		block := messageBlock(t, text, want.name)
 		id, ok := block["id"]

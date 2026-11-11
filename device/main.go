@@ -285,6 +285,27 @@ func main() {
 		OnMicAudio: speaker_.sendMicAudio,
 	})
 
+	// The speaker. It is the entity the reply to a voice turn comes back
+	// on, and the one Music Assistant plays music through.
+	control.OnMediaPlayer(MediaPlayerHooks{
+		OnPlay: func(url string, announcement bool) {
+			go speaker_.playMediaURL(ctx, url, announcement)
+		},
+		OnVolume: func(volume float32) {
+			speaker_.setVolume(int(volume * 100))
+		},
+		OnMute: func(muted bool) {
+			speaker_.setMuted(muted)
+		},
+	})
+	// The reply is played on the speaker, so the speaker's state follows
+	// it. Home Assistant's player card shows what the speaker is doing,
+	// and a reply that does not show is a reply that looks like nothing
+	// happened.
+	speaker_.onMediaState = func(state esphome.MediaPlayerState) {
+		control.SetMediaPlayerState(state)
+	}
+
 	// The wake word hears every block the microphone captures.
 	//
 	// The microphone is open for as long as the wake word is listening,
