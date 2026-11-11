@@ -27,10 +27,54 @@ enum EntityCategory {
   ENTITY_CATEGORY_DIAGNOSTIC = 2;
 }
 
+enum MediaPlayerCommand {
+  MEDIA_PLAYER_COMMAND_PLAY = 0;
+  MEDIA_PLAYER_COMMAND_PAUSE = 1;
+  MEDIA_PLAYER_COMMAND_STOP = 2;
+  MEDIA_PLAYER_COMMAND_MUTE = 3;
+  MEDIA_PLAYER_COMMAND_UNMUTE = 4;
+  MEDIA_PLAYER_COMMAND_TOGGLE = 5;
+  MEDIA_PLAYER_COMMAND_VOLUME_UP = 6;
+  MEDIA_PLAYER_COMMAND_VOLUME_DOWN = 7;
+  MEDIA_PLAYER_COMMAND_ENQUEUE = 8;
+  MEDIA_PLAYER_COMMAND_REPEAT_ONE = 9;
+  MEDIA_PLAYER_COMMAND_REPEAT_OFF = 10;
+  MEDIA_PLAYER_COMMAND_CLEAR_PLAYLIST = 11;
+  MEDIA_PLAYER_COMMAND_TURN_ON = 12;
+  MEDIA_PLAYER_COMMAND_TURN_OFF = 13;
+}
+
+enum MediaPlayerFormatPurpose {
+  MEDIA_PLAYER_FORMAT_PURPOSE_DEFAULT = 0;
+  MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT = 1;
+}
+
+enum MediaPlayerState {
+  MEDIA_PLAYER_STATE_NONE = 0;
+  MEDIA_PLAYER_STATE_IDLE = 1;
+  MEDIA_PLAYER_STATE_PLAYING = 2;
+  MEDIA_PLAYER_STATE_PAUSED = 3;
+  MEDIA_PLAYER_STATE_ANNOUNCING = 4;
+  MEDIA_PLAYER_STATE_OFF = 5;
+  MEDIA_PLAYER_STATE_ON = 6;
+}
+
 enum NumberMode {
   NUMBER_MODE_AUTO = 0;
   NUMBER_MODE_BOX = 1;
   NUMBER_MODE_SLIDER = 2;
+}
+
+enum SendspinPairingTokenStatus {
+  // The Sendspin client has not started yet, so the token does not exist yet. Ask again later.
+  SENDSPIN_PAIRING_TOKEN_STATUS_NOT_READY = 0;
+  SENDSPIN_PAIRING_TOKEN_STATUS_OK = 1;
+  // The device has no API encryption key, so it will not send the token. Ask again once a key is set.
+  SENDSPIN_PAIRING_TOKEN_STATUS_ENCRYPTION_REQUIRED = 2;
+  // Sendspin is turned off and has not started since boot, so the token does not exist yet.
+  SENDSPIN_PAIRING_TOKEN_STATUS_DISABLED = 3;
+  // The Sendspin client failed to start, and will not start until the device reboots.
+  SENDSPIN_PAIRING_TOKEN_STATUS_FAILED = 4;
 }
 
 enum SensorLastResetType {
@@ -80,6 +124,33 @@ enum TextMode {
   TEXT_MODE_PASSWORD = 1;
 }
 
+enum VoiceAssistantEvent {
+  VOICE_ASSISTANT_ERROR = 0;
+  VOICE_ASSISTANT_RUN_START = 1;
+  VOICE_ASSISTANT_RUN_END = 2;
+  VOICE_ASSISTANT_STT_START = 3;
+  VOICE_ASSISTANT_STT_END = 4;
+  VOICE_ASSISTANT_INTENT_START = 5;
+  VOICE_ASSISTANT_INTENT_END = 6;
+  VOICE_ASSISTANT_TTS_START = 7;
+  VOICE_ASSISTANT_TTS_END = 8;
+  VOICE_ASSISTANT_WAKE_WORD_START = 9;
+  VOICE_ASSISTANT_WAKE_WORD_END = 10;
+  VOICE_ASSISTANT_STT_VAD_START = 11;
+  VOICE_ASSISTANT_STT_VAD_END = 12;
+  VOICE_ASSISTANT_WAKE_WORD_REJECTED = 13;
+  VOICE_ASSISTANT_TTS_STREAM_START = 98;
+  VOICE_ASSISTANT_TTS_STREAM_END = 99;
+  VOICE_ASSISTANT_INTENT_PROGRESS = 100;
+}
+
+enum VoiceAssistantTimerEvent {
+  VOICE_ASSISTANT_TIMER_STARTED = 0;
+  VOICE_ASSISTANT_TIMER_UPDATED = 1;
+  VOICE_ASSISTANT_TIMER_CANCELLED = 2;
+  VOICE_ASSISTANT_TIMER_FINISHED = 3;
+}
+
 message AreaInfo {
   uint32 area_id = 1;
   // max_data_length matches core/config.FRIENDLY_NAME_MAX_LEN via AREA_SCHEMA
@@ -115,6 +186,26 @@ message ButtonCommandRequest {
 
   fixed32 key = 1;
   uint32 device_id = 2;
+}
+
+message CameraImageRequest {
+
+
+
+
+  bool single = 1;
+  bool stream = 2;
+}
+
+message CameraImageResponse {
+
+
+
+
+  fixed32 key = 1;
+  bytes data = 2;
+  bool done = 3;
+  uint32 device_id = 4;
 }
 
 message CrashReportCapabilities {
@@ -407,11 +498,69 @@ message ListEntitiesButtonResponse {
   uint32 device_id = 9;
 }
 
+message ListEntitiesCameraResponse {
+
+
+
+
+  string object_id = 1;
+  fixed32 key = 2;
+  string name = 3;
+  reserved 4; // Deprecated: was string unique_id
+  bool disabled_by_default = 5;
+  string icon = 6;
+  EntityCategory entity_category = 7;
+  uint32 device_id = 8;
+}
+
 message ListEntitiesDoneResponse {
 
 
 
   // Empty
+}
+
+message ListEntitiesEventResponse {
+
+
+
+
+  string object_id = 1;
+  fixed32 key = 2;
+  string name = 3;
+  reserved 4; // Deprecated: was string unique_id
+
+  string icon = 5;
+  bool disabled_by_default = 6;
+  EntityCategory entity_category = 7;
+  string device_class = 8;
+
+  repeated string event_types = 9;
+  uint32 device_id = 10;
+}
+
+message ListEntitiesMediaPlayerResponse {
+
+
+
+
+  string object_id = 1;
+  fixed32 key = 2;
+  string name = 3;
+  reserved 4; // Deprecated: was string unique_id
+
+  string icon = 5;
+  bool disabled_by_default = 6;
+  EntityCategory entity_category = 7;
+
+  // Deprecated in ESPHome 2026.9.0; use feature_flags instead.
+  bool supports_pause = 8;
+
+  repeated MediaPlayerSupportedFormat supported_formats = 9;
+
+  uint32 device_id = 10;
+
+  uint32 feature_flags = 11;
 }
 
 message ListEntitiesNumberResponse {
@@ -561,6 +710,52 @@ message ListEntitiesTextSensorResponse {
   uint32 device_id = 9;
 }
 
+message MediaPlayerCommandRequest {
+
+
+
+
+
+  fixed32 key = 1;
+
+  bool has_command = 2;
+  MediaPlayerCommand command = 3;
+
+  bool has_volume = 4;
+  float volume = 5;
+
+  bool has_media_url = 6;
+  string media_url = 7;
+
+  bool has_announcement = 8;
+  bool announcement = 9;
+  uint32 device_id = 10;
+}
+
+message MediaPlayerStateResponse {
+
+
+
+
+
+  fixed32 key = 1;
+  MediaPlayerState state = 2;
+  float volume = 3;
+  bool muted = 4;
+  uint32 device_id = 5;
+}
+
+message MediaPlayerSupportedFormat {
+
+  string format = 1;
+  uint32 sample_rate = 2;
+  uint32 num_channels = 3;
+  MediaPlayerFormatPurpose purpose = 4;
+  uint32 sample_bytes = 5;
+  // Constant bitrate in kbps for lossy formats; 0 means no preference
+  uint32 bitrate = 6;
+}
+
 message NumberCommandRequest {
 
 
@@ -631,6 +826,22 @@ message SendspinCapabilities {
   string client_id = 2;
 }
 
+message SendspinPairingTokenRequest {
+
+
+
+  // Empty
+}
+
+message SendspinPairingTokenResponse {
+
+
+
+  SendspinPairingTokenStatus status = 1;
+  // The pairing token (Sendspin pairing.md "Pairing Token"). Set only when status is OK.
+  string token = 2;
+}
+
 message SensorStateResponse {
 
 
@@ -682,6 +893,14 @@ message SubscribeStatesRequest {
 
 
   // Empty
+}
+
+message SubscribeVoiceAssistantRequest {
+
+
+
+  bool subscribe = 1;
+  uint32 flags = 2;
 }
 
 message SwitchCommandRequest {
@@ -748,9 +967,129 @@ message TextStateResponse {
   uint32 device_id = 4;
 }
 
+message VoiceAssistantAnnounceFinished {
+
+
+
+  bool success = 1;
+}
+
+message VoiceAssistantAnnounceRequest {
+
+
+
+  string media_id = 1;
+  string text = 2;
+  string preannounce_media_id = 3;
+  bool start_conversation = 4;
+}
+
+message VoiceAssistantAudio {
+
+
+
+  bytes data = 1;
+  bool end = 2;
+  bytes data2 = 3;
+}
+
+message VoiceAssistantAudioSettings {
+  uint32 noise_suppression_level = 1;
+  uint32 auto_gain = 2;
+  float volume_multiplier = 3;
+}
+
 message VoiceAssistantCapabilities {
   // Bitmask of the features this voice assistant supports
   uint32 feature_flags = 1;
+}
+
+message VoiceAssistantConfigurationRequest {
+
+
+
+  repeated VoiceAssistantExternalWakeWord external_wake_words = 1;
+}
+
+message VoiceAssistantConfigurationResponse {
+
+
+
+  repeated VoiceAssistantWakeWord available_wake_words = 1;
+  repeated string active_wake_words = 2;
+  uint32 max_active_wake_words = 3;
+}
+
+message VoiceAssistantEventData {
+  string name = 1;
+  string value = 2;
+}
+
+message VoiceAssistantEventResponse {
+
+
+
+  VoiceAssistantEvent event_type = 1;
+  repeated VoiceAssistantEventData data = 2;
+}
+
+message VoiceAssistantExternalWakeWord {
+  string id = 1;
+  string wake_word = 2;
+  repeated string trained_languages = 3;
+  string model_type = 4;
+  uint32 model_size = 5;
+  string model_hash = 6;
+  string url = 7;
+}
+
+message VoiceAssistantRequest {
+
+
+
+  bool start = 1;
+  string conversation_id = 2;
+  uint32 flags = 3;
+  VoiceAssistantAudioSettings audio_settings = 4;
+  string wake_word_phrase = 5;
+  string wake_word_id = 6;
+  uint32 wake_word_audio_bytes = 7;
+  float wake_word_probability = 8;
+  float wake_word_probability_cutoff = 9;
+  uint32 wake_word_audio_bytes2 = 10;
+}
+
+message VoiceAssistantResponse {
+
+
+
+  uint32 port = 1;
+  bool error = 2;
+}
+
+message VoiceAssistantSetConfiguration {
+
+
+
+  repeated string active_wake_words = 1;
+}
+
+message VoiceAssistantTimerEventResponse {
+
+
+
+  VoiceAssistantTimerEvent event_type = 1;
+  string timer_id = 2;
+  string name = 3;
+  uint32 total_seconds = 4;
+  uint32 seconds_left = 5;
+  bool is_active = 6;
+}
+
+message VoiceAssistantWakeWord {
+  string id = 1;
+  string wake_word = 2;
+  repeated string trained_languages = 3;
 }
 
 message WizardCapabilities {

@@ -133,6 +133,119 @@ var wireVectors = []struct {
 	},
 	{"PingRequest", &PingRequest{}, ""},
 	{"DisconnectRequest", &DisconnectRequest{}, ""},
+	{
+		"VoiceAssistantRequest",
+		&VoiceAssistantRequest{Start: true, ConversationId: "c1", Flags: 0, WakeWordPhrase: "hey jarvis"},
+		"0801120263312a0a686579206a6172766973",
+	},
+	{
+		"VoiceAssistantResponse",
+		&VoiceAssistantResponse{Port: 0, Error: false},
+		"",
+	},
+	{
+		"VoiceAssistantEventResponse",
+		&VoiceAssistantEventResponse{
+			EventType: VoiceAssistantEvent_VOICE_ASSISTANT_STT_END,
+			Data:      []*VoiceAssistantEventData{{Name: "text", Value: "hello"}},
+		},
+		"0804120d0a0474657874120568656c6c6f",
+	},
+	{
+		"VoiceAssistantAudio",
+		&VoiceAssistantAudio{Data: []byte{1, 2, 3, 4}, End: false},
+		"0a0401020304",
+	},
+	{
+		"VoiceAssistantAnnounceRequest",
+		&VoiceAssistantAnnounceRequest{MediaId: "http://ha/media.mp3", Text: "hello"},
+		"0a13687474703a2f2f68612f6d656469612e6d7033120568656c6c6f",
+	},
+	{
+		"VoiceAssistantAnnounceFinished",
+		&VoiceAssistantAnnounceFinished{},
+		"",
+	},
+	{
+		"VoiceAssistantConfigurationResponse",
+		&VoiceAssistantConfigurationResponse{
+			AvailableWakeWords: []*VoiceAssistantWakeWord{{
+				Id: "hey_jarvis_v0.1", WakeWord: "hey jarvis", TrainedLanguages: []string{"en"},
+			}},
+			ActiveWakeWords:    []string{"hey_jarvis_v0.1"},
+			MaxActiveWakeWords: 1,
+		},
+		"0a210a0f6865795f6a61727669735f76302e31120a686579206a61727669731a02656e120f6865795f6a61727669735f76302e311801",
+	},
+	{
+		"VoiceAssistantSetConfiguration",
+		&VoiceAssistantSetConfiguration{ActiveWakeWords: []string{"hey_jarvis_v0.1"}},
+		"0a0f6865795f6a61727669735f76302e31",
+	},
+	{
+		"VoiceAssistantTimerEventResponse",
+		&VoiceAssistantTimerEventResponse{EventType: VoiceAssistantTimerEvent_VOICE_ASSISTANT_TIMER_FINISHED},
+		"0803",
+	},
+	{
+		"ListEntitiesMediaPlayerResponse",
+		&ListEntitiesMediaPlayerResponse{
+			Key: 50, Name: "", SupportsPause: true,
+			FeatureFlags: (1 << 0) | (1 << 2) | (1 << 3) | (1 << 9) | (1 << 12) | (1 << 14) | (1 << 20),
+			SupportedFormats: []*MediaPlayerSupportedFormat{
+				{
+					Purpose:      MediaPlayerFormatPurpose_MEDIA_PLAYER_FORMAT_PURPOSE_DEFAULT,
+					Format:       "wav",
+					SampleRate:   48000,
+					NumChannels:  1,
+					SampleBytes:  2,
+				},
+				{
+					Purpose:      MediaPlayerFormatPurpose_MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT,
+					Format:       "wav",
+					SampleRate:   48000,
+					NumChannels:  1,
+					SampleBytes:  2,
+				},
+			},
+		},
+		"153200000040014a0d0a037761761080f702180128024a0f0a037761761080f702180120012802588da441",
+	},
+	{
+		"MediaPlayerCommandRequest",
+		&MediaPlayerCommandRequest{Key: 50, HasCommand: true, Command: MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PAUSE},
+		"0d3200000010011801",
+	},
+	{
+		"MediaPlayerStateResponse",
+		&MediaPlayerStateResponse{Key: 50, State: MediaPlayerState_MEDIA_PLAYER_STATE_PLAYING, Volume: 0.5, Muted: false},
+		"0d3200000010021d0000003f",
+	},
+	{
+		"ListEntitiesCameraResponse",
+		&ListEntitiesCameraResponse{Key: 51, Name: "Camera", ObjectId: "camera"},
+		"0a0663616d65726115330000001a0643616d657261",
+	},
+	{
+		"CameraImageRequest",
+		&CameraImageRequest{Single: true, Stream: false},
+		"0801",
+	},
+	{
+		"CameraImageResponse",
+		&CameraImageResponse{Key: 51, Data: []byte{0xff, 0xd8, 0xff}, Done: true},
+		"0d330000001203ffd8ff1801",
+	},
+	{
+		"ListEntitiesEventResponse",
+		&ListEntitiesEventResponse{Key: 52, Name: "Action Button", ObjectId: "action_button", DeviceClass: "button", EventTypes: []string{"single"}},
+		"0a0d616374696f6e5f627574746f6e15340000001a0d416374696f6e20427574746f6e4206627574746f6e4a0673696e676c65",
+	},
+	{
+		"SendspinPairingTokenResponse",
+		&SendspinPairingTokenResponse{Status: SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_OK, Token: "tok"},
+		"08011203746f6b",
+	},
 }
 
 // TestWireVectorsMatchAioesphomeapi checks the encoding against the bytes
