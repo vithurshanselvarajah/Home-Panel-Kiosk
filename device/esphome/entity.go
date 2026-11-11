@@ -29,6 +29,14 @@ const (
 	KindTextSensor
 	// KindBinarySensor is true or false that is read, not written.
 	KindBinarySensor
+	// KindMediaPlayer is the speaker.
+	//
+	// It is the entity the reply to a voice turn comes back on, and the
+	// one Music Assistant plays music through. Home Assistant does not
+	// surface a device at all if it reports no entities, and a voice
+	// satellite with no speaker entity is a satellite with nowhere to
+	// speak.
+	KindMediaPlayer
 )
 
 func (k EntityKind) String() string {
@@ -49,6 +57,8 @@ func (k EntityKind) String() string {
 		return "text_sensor"
 	case KindBinarySensor:
 		return "binary_sensor"
+	case KindMediaPlayer:
+		return "media_player"
 	}
 	return "unknown"
 }
@@ -187,6 +197,17 @@ func (r *Registry) Add(entity *Entity) *Entity {
 	r.entities = append(r.entities, entity)
 	r.byKey[entity.Key] = entity
 	return entity
+}
+
+// NextKeyValue returns the key the next entity would be given.
+//
+// It is for the entities that are not in the registry — the speaker has
+// its own message and its own shape — so they can be given a key that
+// does not clash with the registry's.
+func (r *Registry) NextKeyValue() uint32 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.nextKey
 }
 
 // All returns the entities in the order they were added.

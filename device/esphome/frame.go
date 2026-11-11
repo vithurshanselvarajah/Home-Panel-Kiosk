@@ -80,6 +80,9 @@ const (
 	TypeListEntitiesSelectResponse       uint32 = 52
 	TypeListEntitiesButtonResponse       uint32 = 61
 	TypeListEntitiesTextResponse         uint32 = 97
+	TypeListEntitiesMediaPlayerResponse  uint32 = 63
+	TypeMediaPlayerCommandRequest        uint32 = 65
+	TypeMediaPlayerStateResponse         uint32 = 64
 )
 
 // maxFrameSize is the largest frame the protocol allows.
