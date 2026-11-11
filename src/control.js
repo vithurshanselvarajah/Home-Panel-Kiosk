@@ -35,13 +35,14 @@ const DEFAULT_STATE = {
  * ControlClient talks to the device program over the control socket.
  */
 class ControlClient {
-  constructor({ socket, onState, onCommand, onStatus, onLink, onLog }) {
+  constructor({ socket, onState, onCommand, onStatus, onLink, onLog, onConnect }) {
     this.socket = socket;
     this.onState = onState || (() => {});
     this.onCommand = onCommand || (() => {});
     this.onStatus = onStatus || (() => {});
     this.onLink = onLink || (() => {});
     this.onLog = onLog || (() => {});
+    this.onConnect = onConnect || null;
     this.connection = null;
     this.timer = null;
     this.buffer = "";
@@ -81,6 +82,17 @@ class ControlClient {
       this.connected = true;
       this.onStatus("online");
       this.onLog("the device program was reached");
+      // The state is sent as soon as the connection is there.
+      //
+      // The state is sent when it changes, and the connection is made
+      // after the first state has been sent — so without this the device
+      // program never hears what the panel is doing until something
+      // else changes.
+      //
+      // The owner is asked for it rather than the cached copy being
+      // sent, because the cached copy is what was last sent and the
+      // panel's own state is what is current.
+      if (this.onConnect) this.onConnect();
     });
     this.connection.on("data", (chunk) => this.receive(chunk));
     this.connection.on("close", () => {

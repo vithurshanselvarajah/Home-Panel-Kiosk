@@ -567,6 +567,19 @@ func (s *Server) pushAllStates(client *Client) error {
 // It is exported so the device program can report what the speaker is
 // doing when the change comes from the panel rather than from Home
 // Assistant.
+// SetMediaPlayerVolume records the speaker's level.
+//
+// The speaker owns the volume. The panel's own slider and the system
+// mixer follow it, and the music server is told about it, because it is
+// one setting: the volume of the room.
+func (s *Server) SetMediaPlayerVolume(volume float32) {
+	if s.mediaPlayer == nil {
+		return
+	}
+	s.mediaPlayer.SetVolume(volume)
+	s.PushMediaPlayerState()
+}
+
 func (s *Server) PushMediaPlayerState() {
 	s.pushMediaPlayerState()
 }

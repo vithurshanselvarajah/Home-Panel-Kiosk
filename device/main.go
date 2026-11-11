@@ -99,6 +99,15 @@ type State struct {
 	// alone, so a person can see what the microphone hears.
 	Monitoring bool `json:"monitoring"`
 
+	// MusicState is what the music player is doing.
+	MusicState string `json:"music_state"`
+	// MusicPaired is how many servers the player is paired with.
+	MusicPaired int `json:"music_paired"`
+	// MusicBuffered is how much music is queued, in milliseconds.
+	MusicBuffered int64 `json:"music_buffered"`
+	// MusicSynced says the player is in step with its server.
+	MusicSynced bool `json:"music_synced"`
+
 	// LastError is the most recent error, if any.
 	LastError string `json:"last_error"`
 
@@ -267,7 +276,7 @@ func main() {
 
 	// The control plane: the Home Assistant connection and the socket
 	// the panel talks over.
-	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket)
+	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket, speaker_)
 	defer control.Close()
 
 	// The voice assistant is the control plane's. The panel asks it to
@@ -287,11 +296,19 @@ func main() {
 
 	// The speaker. It is the entity the reply to a voice turn comes back
 	// on, and the one Music Assistant plays music through.
+	//
+	// The speaker owns the volume. Everything else follows it: the
+	// panel's own gain, the music server and the system mixer. There is
+	// one volume and the speaker is where it lives.
 	control.OnMediaPlayer(MediaPlayerHooks{
 		OnPlay: func(url string, announcement bool) {
 			go speaker_.playMediaURL(ctx, url, announcement)
 		},
 		OnVolume: func(volume float32) {
+			// Home Assistant asked for a level. The speaker owns the
+			// volume, and the panel's own gain follows it, so the music
+			// and the reply are played at the level Home Assistant
+			// shows.
 			speaker_.setVolume(int(volume * 100))
 		},
 		OnMute: func(muted bool) {
@@ -304,6 +321,24 @@ func main() {
 	// happened.
 	speaker_.onMediaState = func(state esphome.MediaPlayerState) {
 		control.SetMediaPlayerState(state)
+	}
+
+	// The speaker's entity follows the panel's volume.
+	//
+	// The panel's gain and the speaker's level are one setting: the
+	// panel plays the music and the reply at the level the speaker
+	// says, and the panel's own slider says so too.
+	speaker_.onVolume = func(volume float32) {
+		control.SetMediaPlayerVolume(volume)
+	}
+
+	// The system mixer follows the speaker's volume.
+	//
+	// The mixer is the application's business — it is what a person means
+	// by the volume — so the panel asks for it over the control socket
+	// rather than reaching for it itself.
+	speaker_.onSystemVolume = func(level int) {
+		control.SendCommand(ControlCommand{Action: "volume", Value: level})
 	}
 
 	// The wake word hears every block the microphone captures.
@@ -365,7 +400,7 @@ func main() {
 	}
 
 	go reporter.run(ctx)
-	go watchConfig(ctx, *configFile, reporter, speaker_, wake, log)
+	go watchConfig(ctx, *configFile, reporter, speaker_, wake, control, log)
 
 	go func() {
 		<-ctx.Done()
@@ -766,7 +801,7 @@ func (r *stateReporter) writeFile(s State) {
 //
 // The configuration is a set of instructions, not a picture of the panel:
 // a key that is absent was not set, and the panel keeps what it had.
-func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wakeWord, log *slog.Logger) {
+func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wakeWord, control *ControlPlane, log *slog.Logger) {
 	if c.Volume != nil {
 		audio.setVolume(*c.Volume)
 		log.Info("the volume was set", "volume", *c.Volume)
@@ -813,8 +848,15 @@ func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wa
 		log.Info("the microphone monitor was turned on or off", "enabled", *c.MonitorMic)
 	}
 	if c.MuteButton != nil {
-		audio.setMuted(*c.MuteButton)
-		log.Info("the mute switch was turned on or off", "muted", *c.MuteButton)
+		// The setting says the device has a mute switch, not that it is
+		// muted. Treating it as the mute itself left the panel silent
+		// from the moment it was configured, because the setting is on
+		// by default.
+		//
+		// The switch is what the setting means, so the setting only
+		// says whether the switch is there. The panel is muted by the
+		// switch being pressed, and by nothing else.
+		log.Info("the mute switch was configured", "present", *c.MuteButton)
 	}
 	if c.SendspinEnabled != nil || c.SendspinName != nil || c.SendspinUnpaired != nil {
 		audio.applySendspinConfig(c)
@@ -825,7 +867,7 @@ func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wa
 }
 
 // watchConfig applies the configuration file whenever it changes.
-func watchConfig(ctx context.Context, path string, reporter *stateReporter, audio *deviceAudio, wake *wakeWord, log *slog.Logger) {
+func watchConfig(ctx context.Context, path string, reporter *stateReporter, audio *deviceAudio, wake *wakeWord, control *ControlPlane, log *slog.Logger) {
 	if path == "" {
 		return
 	}
@@ -838,7 +880,7 @@ func watchConfig(ctx context.Context, path string, reporter *stateReporter, audi
 		last = string(data)
 		if c, err := readConfig(path); err == nil {
 			log.Info("read the device configuration", "file", path)
-			applyConfig(c, reporter, audio, wake, log)
+			applyConfig(c, reporter, audio, wake, control, log)
 		} else {
 			log.Warn("the device configuration could not be read", "error", err)
 		}
@@ -873,7 +915,7 @@ func watchConfig(ctx context.Context, path string, reporter *stateReporter, audi
 				continue
 			}
 			log.Info("the device configuration changed")
-			applyConfig(c, reporter, audio, wake, log)
+			applyConfig(c, reporter, audio, wake, control, log)
 		}
 	}
 }

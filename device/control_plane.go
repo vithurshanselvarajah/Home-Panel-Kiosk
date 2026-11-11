@@ -40,6 +40,8 @@ type ControlPlane struct {
 	// It is the entity the reply to a voice turn comes back on, and the
 	// one Music Assistant plays music through.
 	mediaPlayer *esphome.MediaPlayer
+	// audio is the panel's own audio, so the volume can be set on it.
+	audio *deviceAudio
 	// voice is the voice assistant.
 	//
 	// The panel is a voice satellite: the wake word fires here, the
@@ -76,8 +78,9 @@ func startControlPlane(
 	name string,
 	board string,
 	socket string,
+	audio *deviceAudio,
 ) *ControlPlane {
-	plane := &ControlPlane{log: log}
+	plane := &ControlPlane{log: log, audio: audio}
 
 	registry := panelEntities(PanelCapabilities{
 		CanControlScreen: true,
@@ -181,6 +184,32 @@ func startControlPlane(
 		}
 	})
 
+	// The panel's own volume is the speaker's volume.
+	//
+	// The panel sends it as part of its state, because the panel is what
+	// knows what the mixer is doing. So the speaker follows the panel,
+	// and the panel follows the speaker, and whichever a person used last
+	// is what both report.
+	//
+	// The one thing that has to be watched for is the two telling each
+	// other about the same change for ever. The panel sends its volume
+	// when it changes and the speaker sends it when it changes, and
+	// each one only acts on what it has just been told, so a change
+	// settles rather than going round.
+	//
+	// The panel's own gain follows too, because the panel plays the
+	// music and the reply at its own gain. A speaker that said one level
+	// and a panel that played at another would be two settings wearing
+	// one name.
+	if server != nil {
+		server.SetVolumeFollower(func(level int) {
+			api.SetMediaPlayerVolume(float32(level) / 100)
+			if plane.audio != nil {
+				plane.audio.setVolume(level)
+			}
+		})
+	}
+
 	// The services and the entities are what Home Assistant acts on.
 	// Each one turns into a command for the panel.
 	services := panelServices(func(command ControlCommand) {
@@ -223,8 +252,6 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, log *slog.L
 				}
 			case "brightness":
 				send(ControlCommand{Action: "brightness", Value: int(value.Number)})
-			case "volume":
-				send(ControlCommand{Action: "volume", Value: int(value.Number)})
 			case "view":
 				if value.Text == "slideshow" {
 					send(ControlCommand{Action: "slideshow"})
@@ -448,6 +475,39 @@ func panelMAC(name string) string {
 	parts[4] = fmt.Sprintf("%02x", (sum>>8)&0xFF)
 	parts[5] = fmt.Sprintf("%02x", sum&0xFF)
 	return strings.Join(parts, ":")
+}
+
+// SendCommand sends a command to the panel.
+//
+// It is how the panel asks the application to do something the
+// application owns — the system volume, for one.
+func (p *ControlPlane) SendCommand(command ControlCommand) {
+	if p.server == nil {
+		return
+	}
+	p.server.SendCommand(command)
+}
+
+// SetMediaPlayerVolume records the speaker's level.
+//
+// The speaker owns the volume. The panel's own slider and the system
+// mixer follow it, and the music server is told about it, because it is
+// one setting: the volume of the room.
+func (p *ControlPlane) SetMediaPlayerVolume(volume float32) {
+	if p.mediaPlayer == nil {
+		return
+	}
+	p.mediaPlayer.SetVolume(volume)
+	p.api.PushMediaPlayerState()
+}
+
+// SetMediaPlayerMute records whether the speaker is muted.
+func (p *ControlPlane) SetMediaPlayerMute(muted bool) {
+	if p.mediaPlayer == nil {
+		return
+	}
+	p.mediaPlayer.SetMuted(muted)
+	p.api.PushMediaPlayerState()
 }
 
 // SetMediaPlayerState records what the speaker is doing and tells Home

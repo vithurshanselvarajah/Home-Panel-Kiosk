@@ -30,14 +30,14 @@ test("the client sends the state and the peer reads it", async () => {
   await waitFor(() => client.connected);
 
   client.sendState({ mode: "slideshow", displayIsOff: true, brightness: 42 });
-  await waitFor(() => received.length > 0);
+  await waitFor(() => received.some((message) => message.value?.mode === "slideshow"));
 
-  assert.equal(received[0].action, "state");
-  assert.equal(received[0].value.mode, "slideshow");
-  assert.equal(received[0].value.displayIsOff, true);
-  assert.equal(received[0].value.brightness, 42);
+  const sent = received.find((message) => message.value?.mode === "slideshow");
+  assert.equal(sent.action, "state");
+  assert.equal(sent.value.displayIsOff, true);
+  assert.equal(sent.value.brightness, 42);
   // The fields that were not given keep their defaults.
-  assert.equal(received[0].value.displayMode, "fullscreen");
+  assert.equal(sent.value.displayMode, "fullscreen");
 
   client.stop();
   server.close();
@@ -154,11 +154,19 @@ test("the client sends the state and the peer sees it as JSON", async () => {
   client.sendState({ mode: "slideshow", displayIsOff: true });
   await waitFor(() => received.length > 0);
 
+  // The client sends the state it knows when the connection is made, so
+  // that the device program hears what the panel is doing even if
+  // nothing changes after the connection. The state that was asked for
+  // comes after it.
+  await waitFor(() => received.some((message) => message.value?.mode === "slideshow"));
+
   // The device program reads the state as one message with the state
   // under a value.
-  assert.equal(received[0].action, "state");
-  assert.equal(received[0].value.mode, "slideshow");
-  assert.equal(received[0].value.displayIsOff, true);
+  for (const message of received) {
+    assert.equal(message.action, "state");
+  }
+  const sent = received.find((message) => message.value?.mode === "slideshow");
+  assert.equal(sent.value.displayIsOff, true);
 
   client.stop();
   server.close();
@@ -173,3 +181,29 @@ async function waitFor(predicate, timeout = 5000) {
   }
   throw new Error("the wait ran out");
 }
+
+test("the client sends the state when the connection is made", async () => {
+  const socket = socketPath();
+  const received = [];
+  const server = net.createServer((conn) => {
+    conn.on("data", (chunk) => {
+      for (const line of chunk.toString("utf8").split("\n")) {
+        if (line.trim()) received.push(JSON.parse(line));
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(socket, resolve));
+
+  // The state is known before the connection is made, which is the
+  // ordinary case: the device program makes the socket, and the panel
+  // connects to it.
+  const client = new ControlClient({ socket, onConnect: () => client.sendState({ mode: "slideshow" }) });
+  client.start();
+  await waitFor(() => received.some((message) => message.value?.mode === "slideshow"));
+
+  assert.equal(received[0].action, "state");
+
+  client.stop();
+  server.close();
+  fs.rmSync(socket, { force: true });
+});
