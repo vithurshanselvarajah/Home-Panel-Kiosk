@@ -39,19 +39,20 @@ The key is kept out of the settings file and encrypted with Electron `safeStorag
 | Entity | Kind | What it does |
 |---|---|---|
 | Screen | switch | Turns the screen off and on |
-| Wake screen | button | Wakes the screen |
-| Turn screen off | button | Turns the screen off |
 | Brightness | number | The screen brightness, 0 to 100 |
+| Volume | number | The volume of the room, 0 to 100 |
 | View | select | `dashboard` or `slideshow` |
-| Open slideshow | button | Shows the slideshow |
-| Return to Home | button | Shows the dashboard |
 | Display mode | select | `fullscreen` or `window` |
-| Send notification | text | Shows a notification on the panel |
-| Open display URL | text | Shows an address on the panel |
+| Return to Home | button | Shows the dashboard |
 | Exit | button | Shuts the app down |
-| Panel state | text sensor | What the panel is doing, as JSON |
+| Drawer open | binary sensor | Whether the drawer is open |
+| Keyboard visible | binary sensor | Whether the touch keyboard is up |
+| Last activity | sensor | When somebody last did something |
+| Version | text sensor | The version of the application |
 
 The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface.
+
+There is a control for each thing the panel can do and a sensor for each thing that can be seen but not set. Nothing is offered twice: the screen switch turns the screen off and on, so there is no separate button for either.
 
 ### The command contract
 
