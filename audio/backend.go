@@ -7,25 +7,24 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 )
 
-// The rates the panel uses.
+// The rates the controller expects.
 //
 // Capture and playback differ, and a device that gets them wrong plays
 // audio at the wrong speed.
 const (
-	// CaptureRate is the rate captured audio is read at. It is what the
-	// wake word and the speech detector expect.
+	// CaptureRate is what the controller expects captured audio at.
 	CaptureRate = 16000
-	// PlaybackRate is the rate audio is played at.
+	// PlaybackRate is what the controller sends audio at.
 	PlaybackRate = 48000
 )
 
 // Backend is the device's audio.
 //
-// It satisfies the audio interfaces above, which is what lets a device
-// program hand it to the voice path without the voice path knowing what
-// it is.
+// It satisfies the audio interfaces in this package, so a device program
+// can be handed a backend without knowing what it is.
 type Backend struct {
 	mu sync.RWMutex
 	// input and output are the names as the listing reported them, which
@@ -36,11 +35,11 @@ type Backend struct {
 	lastError string
 }
 
-// The interfaces, checked at compile time.
+// The audio interfaces, checked at compile time.
 var (
-	_ AudioBackend        = (*Backend)(nil)
-	_ AudioDeviceProvider = (*Backend)(nil)
-	_ ClockedAudioBackend = (*Backend)(nil)
+	_ Stream           = (*Backend)(nil)
+	_ EndpointProvider = (*Backend)(nil)
+	_ ClockedBackend   = (*Backend)(nil)
 )
 
 // New returns a backend that uses the named devices.
@@ -156,18 +155,12 @@ func (b *Backend) SelectAudioDevices(input, output string) error {
 }
 
 // AudioDevices lists the endpoints the machine has.
-func (b *Backend) AudioDevices() (inputs, outputs []AudioDevice, err error) {
+func (b *Backend) AudioDevices() (inputs, outputs []Endpoint, err error) {
 	in, out, err := List()
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, d := range in {
-		inputs = append(inputs, AudioDevice{Name: d.Name, Description: d.Description, Default: d.Default})
-	}
-	for _, d := range out {
-		outputs = append(outputs, AudioDevice{Name: d.Name, Description: d.Description, Default: d.Default})
-	}
-	return inputs, outputs, nil
+	return in, out, nil
 }
 
 // Capture opens the microphone.
@@ -222,7 +215,7 @@ func (b *Backend) Playback(ctx context.Context, rate int) (io.WriteCloser, error
 //
 // The caller has to know what it got, so the returned output carries the
 // channel count it was opened with.
-func (b *Backend) OpenClockedOutput(ctx context.Context, rate, channels int) (ClockedAudioOutput, error) {
+func (b *Backend) OpenClockedOutput(ctx context.Context, rate, channels int) (ClockedOutput, error) {
 	b.mu.RLock()
 	device := b.output
 	b.mu.RUnlock()

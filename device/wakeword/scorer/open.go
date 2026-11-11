@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -97,10 +98,38 @@ func Open(model string, threshold float32, onCross func(score, threshold float32
 
 	s := NewScorer(inf, threshold, onCross)
 	s.closer = inf
+	s.phrase = DisplayName(stem)
 	s.info = fmt.Sprintf("onnxruntime %s, model %s, xnnpack=%v, streaming embedding: %s",
 		rt.Version(), stem, inf.XNNPACKActive(), inf.StreamStatus())
 	return s, nil
 }
+
+// DisplayName turns a model name into the phrase a person says.
+//
+// The openWakeWord models carry a version suffix in their filename —
+// "hey_jarvis_v0.1" — which is a packaging convention and not part of the
+// wake word. The phrase is what somebody says, and what Home Assistant
+// shows in its picker.
+//
+// It is worth being exact about why this matters: Home Assistant compares
+// the phrase on a pipeline start against the state of its wake-word select
+// entity, whose options are the names that were advertised. So the phrase
+// the panel announces and the name it advertises have to be the same
+// string, or Home Assistant matches neither and falls back to the first
+// pipeline.
+//
+// One function produces both, so the two cannot drift.
+func DisplayName(model string) string {
+	name := ModelStem(model)
+	// The suffix is a version, not part of the name.
+	name = versionSuffix.ReplaceAllString(name, "")
+	// The underscores are where the spaces go.
+	name = strings.ReplaceAll(name, "_", " ")
+	return strings.TrimSpace(name)
+}
+
+// versionSuffix is the version a model filename carries.
+var versionSuffix = regexp.MustCompile(`_v\d+(\.\d+)*$`)
 
 // EmbeddingStreamFile is the streaming embedding model's name in Dir(). It
 // must match the streaming embedding model the panel installs

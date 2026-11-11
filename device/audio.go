@@ -9,10 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wilbowes/EchoMuse-SDK/clients/go/echomuse"
-	"github.com/wilbowes/EchoMuse-SDK/clients/go/echomuse/protocol"
-	"github.com/wilbowes/EchoMuse-SDK/clients/go/echomuse/sendspin"
-	"github.com/wilbowes/EchoMuse-SDK/clients/go/echomuse/turn"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/sendspin"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
 )
@@ -30,7 +27,7 @@ type audioBackend interface {
 	Playback(ctx context.Context, rate int) (io.WriteCloser, error)
 	// OpenClockedOutput opens a speaker that reports when each period
 	// reaches the sound card.
-	OpenClockedOutput(ctx context.Context, rate, channels int) (echomuse.ClockedAudioOutput, error)
+	OpenClockedOutput(ctx context.Context, rate, channels int) (audio.ClockedOutput, error)
 	// SelectedAudioDevices reports the devices in use.
 	SelectedAudioDevices() (string, string)
 	// SelectAudioDevices chooses the devices.
@@ -46,9 +43,12 @@ type audioBackend interface {
 // waited for the music to stop would be late answering.
 type deviceAudio struct {
 	backend audioBackend
-	device  *echomuse.Device
-	guard   *turn.Guard
 	log     *slog.Logger
+	// onMicAudio is called with the microphone frames, so they can be
+	// sent to home assistant while a turn is running.
+	onMicAudio func(pcm []byte)
+	// onSendspinStatus is called when the music player's status changes.
+	onSendspinStatus func(status sendspin.Status)
 	// credentialsDir is where the music player keeps its identity.
 	credentialsDir string
 
@@ -76,9 +76,15 @@ type deviceAudio struct {
 	// testSoundSeen is whether a counter has arrived, so the first one is
 	// adopted rather than played.
 	testSoundSeen bool
-	// bounded is whether the turn is bounded, which is the case when the
-	// controller asked for a locked microphone.
-	bounded bool
+	// streaming is whether the microphone frames are being sent to home
+	// assistant.
+	//
+	// They are sent only while a turn is running. The panel does not
+	// decide when the utterance is over — home assistant does, with its
+	// own voice activity detection — so the turn's end is home
+	// assistant's message, and the capture is open for exactly that
+	// long.
+	streaming bool
 
 	// output is the open speaker, if there is one.
 	output io.WriteCloser
@@ -93,7 +99,7 @@ type deviceAudio struct {
 	// clocked is the clocked speaker, when one could be opened. It is
 	// what the music is played through, because it knows when each period
 	// reaches the sound card and the music player needs to know that.
-	clocked echomuse.ClockedAudioOutput
+	clocked audio.ClockedOutput
 	// clockedChannels is how many channels the clocked output really has.
 	clockedChannels int
 	// clockedDisabled says the clocked output could not be used, so the
@@ -484,6 +490,26 @@ func (a *deviceAudio) setVolume(level int) {
 	}
 }
 
+// setDuckDb sets how far the music is turned down under a reply.
+//
+// The level is in decibels, and it is negative: the music is quieter
+// than it would be, not louder.
+func (a *deviceAudio) setDuckDb(db float64) {
+	a.mu.Lock()
+	a.duckDB = db
+	a.mu.Unlock()
+}
+
+// setMuted turns the panel's own mute switch on or off.
+//
+// The mute is the panel's, not the server's: it is the switch on the
+// device, and it holds whatever the server says.
+func (a *deviceAudio) setMuted(muted bool) {
+	a.mu.Lock()
+	a.muted = muted
+	a.mu.Unlock()
+}
+
 // setDucked turns the music duck on or off.
 func (a *deviceAudio) setDucked(on bool) {
 	a.mu.Lock()
@@ -503,13 +529,13 @@ func clampVolume(level int) int {
 }
 
 // applyConfig applies the configuration the controller pushed.
-func (a *deviceAudio) applyConfig(c protocol.Config) {
+func (a *deviceAudio) applyConfig(c Config) {
 	if c.StartupVolume != nil {
 		a.setVolume(*c.StartupVolume)
 	}
 	if c.DuckDb != nil {
 		a.mu.Lock()
-		a.duckDB = *c.DuckDb
+		a.duckDB = float64(*c.DuckDb)
 		a.mu.Unlock()
 	}
 	a.applySendspinConfig(c)
@@ -529,7 +555,7 @@ func (a *deviceAudio) applyConfig(c protocol.Config) {
 // The microphone is opened once. The level meter reads the same frames
 // rather than opening a second capture, because a sound card cannot be
 // opened twice and ALSA says so by taking the process down.
-func (a *deviceAudio) startCapture(bounded bool) {
+func (a *deviceAudio) startCapture() {
 	a.mu.Lock()
 	if a.capturing {
 		a.mu.Unlock()
@@ -544,20 +570,10 @@ func (a *deviceAudio) startCapture(bounded bool) {
 		a.mu.Lock()
 	}
 	a.capturing = true
-	a.bounded = bounded
+	a.streaming = false
 	ctx, cancel := context.WithCancel(context.Background())
 	a.captureCancel = cancel
 	a.mu.Unlock()
-
-	// The bounded turn is the device's own, so it starts when the
-	// microphone does.
-	//
-	// The guard is optional, because a device with no wake-word model
-	// has no turn of its own to bound: the controller's turn is the one
-	// that matters, and this is only the device's own limit.
-	if a.guard != nil {
-		a.guard.Start(time.Now())
-	}
 
 	a.log.Info("the microphone is opening")
 
@@ -604,8 +620,8 @@ func (a *deviceAudio) startCapture(bounded bool) {
 			n, err := reader.Read(buf)
 			if n > 0 {
 				// The level is measured here rather than by the
-				// speech detector, because the detector only sees
-				// the frames of a bounded turn. A meter that only
+				// wake word's gate, because the gate only sees the
+				// frames it decides to score. A meter that only
 				// moves during a turn is a meter that is dead the
 				// rest of the time.
 				a.setLevel(peakLevel(buf[:n]))
@@ -681,28 +697,37 @@ func (a *deviceAudio) stopCapture() {
 	if reader != nil {
 		_ = reader.Close()
 	}
-	if a.guard != nil {
-		a.guard.End()
-	}
 }
 
 // pushFrame sends one block of captured audio.
 //
-// A bounded turn replaces the streaming for the length of the turn, so the
-// turn's own rules apply to what is sent: nothing goes out until somebody
-// is speaking, and the turn ends when they stop.
+// The frames go to home assistant only while a turn is running. The rest
+// of the time they are measured for the level meter and dropped.
 func (a *deviceAudio) pushFrame(pcm []byte) {
 	a.mu.Lock()
-	bounded := a.bounded
+	streaming := a.streaming
 	a.mu.Unlock()
 
-	if bounded && a.guard != nil {
-		a.guard.Push(pcm, time.Now())
-		return
+	// The audio goes to home assistant, over the ESPHome connection.
+	//
+	// It only goes at all while a turn is running. A panel that streams
+	// the room continuously is a panel that uploads the room, and the
+	// wake word is local precisely so that the room stays in the room.
+	if streaming && a.onMicAudio != nil {
+		a.onMicAudio(pcm)
 	}
+}
 
-	if err := a.device.SendMicAudio(pcm); err != nil {
-		a.log.Debug("the audio did not reach the controller", "error", err)
+// playReply plays the reply that came back from home assistant.
+//
+// The reply arrives over the ESPHome connection as a stream of chunks,
+// and the last chunk says the reply is complete. The chunks are queued
+// rather than written straight to the speaker, because the music is
+// playing on the same speaker and the two have to be mixed.
+func (a *deviceAudio) playReply(pcm []byte, final bool) {
+	a.playVoice(pcm)
+	if final {
+		a.finishVoice()
 	}
 }
 
@@ -1041,7 +1066,7 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 //
 // The channel count is a request. The card may give fewer than were
 // asked for, and the output says what it really has.
-func (a *deviceAudio) openClocked(ctx context.Context) (echomuse.ClockedAudioOutput, int) {
+func (a *deviceAudio) openClocked(ctx context.Context) (audio.ClockedOutput, int) {
 	a.mu.Lock()
 	disabled := a.clockedDisabled
 	last := a.lastClockedAttempt
@@ -1189,9 +1214,6 @@ func (a *deviceAudio) finishPlayback() {
 			}
 		}
 	}
-	if err := a.device.SendPlaybackStats(protocol.PlaybackStats{}); err != nil {
-		a.log.Debug("playback completion did not reach the controller", "error", err)
-	}
 }
 
 // applyGain scales the audio by the device's volume.
@@ -1217,33 +1239,34 @@ func applyGain(pcm []byte, volume int) {
 	}
 }
 
-// answerSendspinToken answers the controller's request for the music
-// player's pairing token.
-func (a *deviceAudio) answerSendspinToken() {
+// sendspinToken answers home assistant's request for the music player's
+// pairing token.
+//
+// Home Assistant hands the token to a Sendspin server such as Music
+// Assistant, which pairs with the player over it. That is what stops the
+// same speaker appearing twice: the server pairs with the player that is
+// already there rather than making one of its own.
+func (a *deviceAudio) sendspinToken() (token, clientID string, ok bool) {
 	a.mu.Lock()
 	player := a.sendspin
 	a.mu.Unlock()
 	if player == nil {
-		_ = a.device.SendSendspinTokenResponse("", "", "the music player is not running")
-		return
+		return "", "", false
 	}
-	if err := a.device.SendSendspinTokenResponse(player.PairingToken(), player.ClientID(), ""); err != nil {
-		a.log.Warn("the music player's token did not reach the controller", "error", err)
-	}
+	return player.PairingToken(), player.ClientID(), true
 }
 
 // applySendspinConfig starts or stops the music player.
 //
-// The controller owns the music: it decides whether the device is a music
-// player at all, what it is called, and whether it accepts a server that
-// has not paired with it.
-func (a *deviceAudio) applySendspinConfig(cfg protocol.Config) {
+// The panel's own settings decide whether the device is a music player at
+// all, what it is called, and whether it accepts a server that has not
+// paired with it.
+func (a *deviceAudio) applySendspinConfig(cfg Config) {
 	if cfg.SendspinEnabled == nil {
 		return
 	}
 	if !*cfg.SendspinEnabled {
-		a.stopSendspin("the controller turned the music off")
-		_ = a.device.SendSendspinStatus(nil)
+		a.stopSendspin("the music was turned off")
 		return
 	}
 
@@ -1286,7 +1309,7 @@ func (a *deviceAudio) applySendspinConfig(cfg protocol.Config) {
 		})
 		if err != nil {
 			a.log.Error("the music player could not be started", "error", err)
-			_ = a.device.SendSendspinStatus(map[string]string{"state": "error", "error": err.Error()})
+			a.setSendspinError(err)
 			return
 		}
 		player.OnVolume(func(level int) {
@@ -1298,18 +1321,18 @@ func (a *deviceAudio) applySendspinConfig(cfg protocol.Config) {
 			a.mu.Unlock()
 		})
 		player.OnChange(func() {
-			_ = a.device.SendSendspinStatus(player.Status())
+			a.setSendspinStatus(player.Status())
 		})
 		if err := player.Start(); err != nil {
 			a.log.Error("the music player could not be started", "error", err)
-			_ = a.device.SendSendspinStatus(map[string]string{"state": "error", "error": err.Error()})
+			a.setSendspinError(err)
 			return
 		}
 		a.mu.Lock()
 		a.sendspin = player
 		a.sendspinName = name
 		a.mu.Unlock()
-		_ = a.device.SendSendspinStatus(player.Status())
+		a.setSendspinStatus(player.Status())
 		current = player
 		// The speaker is opened when the music starts playing, not when
 		// the player does. A player that is listening for a server is
@@ -1363,6 +1386,22 @@ func (a *deviceAudio) startSendspinPump() {
 			}
 		}
 	}()
+}
+
+// setSendspinStatus records what the music player is doing.
+//
+// The status is the player's own: whether it is connected to a server,
+// what it is playing, and so on. It is reported to the panel so a person
+// can see whether the music works.
+func (a *deviceAudio) setSendspinStatus(status sendspin.Status) {
+	if a.onSendspinStatus != nil {
+		a.onSendspinStatus(status)
+	}
+}
+
+// setSendspinError records that the music player could not start.
+func (a *deviceAudio) setSendspinError(err error) {
+	a.log.Error("the music player failed", "error", err)
 }
 
 // sendspinStore is where the music player's identity is kept.
