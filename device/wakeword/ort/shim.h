@@ -34,6 +34,7 @@
 typedef const OrtApiBase *(*em_getapibase_fn)(void);
 
 typedef struct {
+	const OrtApiBase *base;
 	const OrtApi *api;
 	OrtEnv *env;
 } em_runtime;
@@ -61,6 +62,29 @@ static char *em_err(const OrtApi *api, OrtStatus *st) {
 	return msg ? msg : em_dup("onnxruntime: error (out of memory copying message)");
 }
 
+/* em_log receives the runtime's messages.
+ *
+ * The runtime and the ONNX library it loads write to the standard error by
+ * default, which on a kiosk means the messages land in the middle of the
+ * device's own log with nothing to say where they came from. They are
+ * taken through the runtime's own logger instead, so they arrive with the
+ * rest of the device's messages.
+ *
+ * The schema messages are the reason this exists. Loading a model
+ * registers the ONNX schema, and the runtime reports the registration
+ * twice, which fills the log with a screenful of "already registered" for
+ * every model. The models work — the melspectrogram produces the frames
+ * it should — so the messages are noise from the runtime's own model
+ * loading, and they are dropped here rather than being printed.
+ */
+static void em_log(void *param, OrtLoggingLevel level, const char *category,
+                   const char *logid, const char *code, const char *msg) {
+	(void)param; (void)level; (void)category; (void)logid; (void)code;
+	/* The message is dropped. Anything that matters comes back as an
+	 * OrtStatus, and the Go side turns that into an error. */
+	(void)msg;
+}
+
 /* em_ort_open creates an OrtEnv and takes the API from the linked runtime. */
 static char *em_ort_open(const char *path, em_runtime *out) {
 	memset(out, 0, sizeof(*out));
@@ -86,12 +110,15 @@ static char *em_ort_open(const char *path, em_runtime *out) {
 	}
 
 	OrtEnv *env = NULL;
-	OrtStatus *st = api->CreateEnv(ORT_LOGGING_LEVEL_ERROR, "home-panel", &env);
+	OrtStatus *st = api->CreateEnvWithCustomLogger(em_log, NULL,
+	                                                ORT_LOGGING_LEVEL_ERROR,
+	                                                "home-panel", &env);
 	if (st) {
 		char *msg = em_err(api, st);
 		return msg;
 	}
 
+	out->base = base;
 	out->api = api;
 	out->env = env;
 	return NULL;
@@ -99,7 +126,12 @@ static char *em_ort_open(const char *path, em_runtime *out) {
 
 /* em_ort_version reports the linked library's version, e.g. "1.23.2". */
 static const char *em_ort_version(em_runtime *r) {
-	return OrtGetApiBase()->GetVersionString();
+	if (!r->base) return "";
+	/* The version comes from the base the runtime was opened with. Asking
+	 * for the base again would re-enter the runtime's initialiser, and
+	 * ONNX Runtime registers its schema once per entry: doing it twice
+	 * fills the log with "already registered" errors. */
+	return r->base->GetVersionString();
 }
 
 /* em_model_load opens one model. The options are the measured optimum for a
