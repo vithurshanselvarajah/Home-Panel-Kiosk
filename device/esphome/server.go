@@ -456,6 +456,10 @@ func (s *Server) sendState(client *client, entity *Entity) error {
 		return client.write(TypeTextSensorStateResponse, &TextSensorStateResponse{
 			Key: entity.Key, State: value.Text,
 		})
+	case KindBinarySensor:
+		return client.write(TypeBinarySensorStateResponse, &BinarySensorStateResponse{
+			Key: entity.Key, State: value.Bool,
+		})
 	}
 	return nil
 }

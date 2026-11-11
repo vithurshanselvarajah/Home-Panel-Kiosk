@@ -258,6 +258,8 @@ function publishState(state) {
     displayMode: state.displayMode,
     brightness: state.brightness,
     volume: state.volume,
+    lastActivity: state.lastActivity,
+    version: state.version,
   });
 }
 
@@ -597,8 +599,8 @@ async function setVolume(value) {
 // for something. They are the same commands and they are handled the
 // same way, so there is one handler for both.
 //
-// The names are the ones the MQTT contract used, so the handling is the
-// handling that was there before.
+// The names are the ones the panel has always used, so an automation
+// that was written against the old broker still works.
 function handleCommand(command) {
   if (typeof command === "string") {
     try { command = JSON.parse(command); } catch { command = { action: command }; }
@@ -621,6 +623,7 @@ function handleCommand(command) {
       openMode("url", command.url || command.target || command.value || "", command.duration);
       break;
     case "brightness": recordActivity("home-assistant"); setBrightness(command.value); break;
+    case "volume": recordActivity("home-assistant"); setVolume(command.value); break;
     case "notification": recordActivity("home-assistant"); showNotice(command); break;
     case "dismiss_notification": sendToOverlay("app:dismiss-notification"); break;
     case "set_mode":

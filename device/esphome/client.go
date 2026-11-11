@@ -279,6 +279,17 @@ func (s *Server) entityMessage(entity *Entity) (entityMessage, error) {
 				DeviceClass: entity.DeviceClass,
 			},
 		}, nil
+	case KindBinarySensor:
+		return entityMessage{
+			Type: TypeListEntitiesBinarySensorResponse,
+			Body: &ListEntitiesBinarySensorResponse{
+				Key:         entity.Key,
+				Name:        entity.Name,
+				ObjectId:    entity.ObjectID,
+				Icon:        entity.Icon,
+				DeviceClass: entity.DeviceClass,
+			},
+		}, nil
 	case KindTextSensor:
 		return entityMessage{
 			Type: TypeListEntitiesTextSensorResponse,
