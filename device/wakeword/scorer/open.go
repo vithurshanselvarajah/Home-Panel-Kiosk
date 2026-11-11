@@ -1,4 +1,4 @@
-package shadow
+package scorer
 
 import (
 	"fmt"
@@ -58,7 +58,7 @@ func Open(model string, threshold float32, onCross func(score, threshold float32
 	dir := Dir()
 	stem := ModelStem(model)
 	if stem == "" {
-		return nil, fmt.Errorf("shadow: no wake word model configured")
+		return nil, fmt.Errorf("scorer: no wake word model configured")
 	}
 
 	models := ort.Models{
@@ -75,7 +75,7 @@ func Open(model string, threshold float32, onCross func(score, threshold float32
 		"classifier model":     models.Classifier,
 	} {
 		if _, err := os.Stat(p); err != nil {
-			return nil, fmt.Errorf("shadow: %s not installed at %s", what, p)
+			return nil, fmt.Errorf("scorer: %s not installed at %s", what, p)
 		}
 	}
 
@@ -88,11 +88,11 @@ func Open(model string, threshold float32, onCross func(score, threshold float32
 	lib := filepath.Join(dir, "libonnxruntime.so")
 	rt, err := ort.Open(lib)
 	if err != nil {
-		return nil, fmt.Errorf("shadow: %w", err)
+		return nil, fmt.Errorf("scorer: %w", err)
 	}
 	inf, err := rt.NewInferer(models, ort.DefaultOptions())
 	if err != nil {
-		return nil, fmt.Errorf("shadow: %w", err)
+		return nil, fmt.Errorf("scorer: %w", err)
 	}
 
 	s := NewScorer(inf, threshold, onCross)
@@ -103,7 +103,7 @@ func Open(model string, threshold float32, onCross func(score, threshold float32
 }
 
 // EmbeddingStreamFile is the streaming embedding model's name in Dir(). It
-// must match em_oww_assets.STREAM_EMBEDDING on the controller, which installs
+// must match the streaming embedding model the panel installs
 // it.
 const EmbeddingStreamFile = "embedding_stream.onnx"
 
