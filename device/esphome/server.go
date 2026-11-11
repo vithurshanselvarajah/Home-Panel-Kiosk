@@ -19,6 +19,13 @@ type Server struct {
 	registry *Registry
 	// services holds the services the device offers.
 	services *ServiceRegistry
+	// onConnect is called when Home Assistant connects or disconnects.
+	//
+	// The panel shows whether it is linked, and only the server knows:
+	// the panel is talking to the sidecar over a socket on this machine,
+	// which says nothing about whether Home Assistant is talking to the
+	// sidecar over the network.
+	onConnect func(connected bool)
 	// mu guards the services.
 	mu sync.Mutex
 	// name is the name Home Assistant shows.
@@ -101,6 +108,28 @@ func NewServer(options ServerOptions) *Server {
 	return server
 }
 
+// OnConnect sets the callback that is called when Home Assistant
+// connects or disconnects.
+//
+// It is how the panel learns whether it is linked, because the panel
+// cannot tell: the socket between the two of them is on this machine
+// and is up whatever Home Assistant is doing.
+func (s *Server) OnConnect(fn func(connected bool)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onConnect = fn
+}
+
+// reportConnected tells the listener whether Home Assistant is there.
+func (s *Server) reportConnected(connected bool) {
+	s.mu.Lock()
+	fn := s.onConnect
+	s.mu.Unlock()
+	if fn != nil {
+		fn(connected)
+	}
+}
+
 // Registry gives access to the entities.
 func (s *Server) Registry() *Registry { return s.registry }
 
@@ -156,6 +185,8 @@ func (s *Server) serve(conn net.Conn) {
 	defer s.connections.Delete(client)
 
 	s.log.Info("home assistant connected", "name", s.name, "address", conn.RemoteAddr())
+	s.reportConnected(true)
+	defer s.reportConnected(false)
 
 	// The client asks what the device is, what it can do, and then
 	// subscribes to the state. The messages come in that order, but the

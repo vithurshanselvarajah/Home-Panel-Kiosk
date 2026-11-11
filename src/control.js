@@ -35,11 +35,12 @@ const DEFAULT_STATE = {
  * ControlClient talks to the device program over the control socket.
  */
 class ControlClient {
-  constructor({ socket, onState, onCommand, onStatus, onLog }) {
+  constructor({ socket, onState, onCommand, onStatus, onLink, onLog }) {
     this.socket = socket;
     this.onState = onState || (() => {});
     this.onCommand = onCommand || (() => {});
     this.onStatus = onStatus || (() => {});
+    this.onLink = onLink || (() => {});
     this.onLog = onLog || (() => {});
     this.connection = null;
     this.timer = null;
@@ -112,6 +113,12 @@ class ControlClient {
       try {
         parsed = JSON.parse(line);
       } catch {
+        continue;
+      }
+      // The link message says whether Home Assistant is talking to the
+      // device program. The rest are commands.
+      if (parsed && parsed.action === "link") {
+        this.onLink(Boolean(parsed.connected));
         continue;
       }
       this.onCommand(parsed);
