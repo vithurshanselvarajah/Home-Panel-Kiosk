@@ -1,27 +1,21 @@
 /*
  * shim.h — the C half of the ONNX Runtime binding.
  *
- * Two reasons this file exists rather than calling ORT from Go directly:
+ * One reason this file exists rather than calling ORT from Go directly:
+ * ORT's C API is a struct of function pointers (OrtApi), and cgo cannot call a
+ * function pointer held in a C struct. Every call therefore needs a C-side
+ * wrapper, which is what most of this file is.
  *
- *  1. ORT's C API is a struct of function pointers (OrtApi), and cgo cannot
- *     call a function pointer held in a C struct. Every call therefore needs a
- *     C-side wrapper, which is what most of this file is.
- *
- *  2. The library is dlopen'd at runtime, not linked. Nothing in the build
- *     references an ORT symbol, so the firmware links and boots on a device
- *     where libonnxruntime.so was never installed — em_ort_open simply fails
- *     and the caller falls back to controller-side wake word. Linking it
- *     properly would make a missing 12MB .so a boot failure, which on a device
- *     whose recovery story is "count fast exits and flip the A/B slot" is a
- *     bad trade.
+ * The runtime is linked, not dlopen'd. The binary carries it, so a device
+ * that has the binary has the wake word: there is nothing to install and
+ * nothing that can be missing. The cost is the size of the runtime in every
+ * binary, and a cross-compiler on the machine that builds them.
  *
  * There is deliberately NO file-scope state here. An earlier version kept the
- * handle, the OrtApi and the OrtEnv in statics, which made a second Open with
- * a different path report a bookkeeping error ("already open") in place of the
- * real one — and made the missing-library path, the whole point of the dlopen
- * design, untestable once any library had loaded. Each em_runtime now owns its
- * handle, api and env, and every model carries the api pointer it was created
- * with.
+ * OrtApi and the OrtEnv in statics, which made a second Open report a
+ * bookkeeping error ("already open") in place of the real one. Each em_runtime
+ * owns its api and env, and every model carries the api pointer it was
+ * created with.
  *
  * Error convention: every function returns char* — NULL on success, or a
  * malloc'd message the Go side turns into an error and frees. OrtStatus is
@@ -40,7 +34,6 @@
 typedef const OrtApiBase *(*em_getapibase_fn)(void);
 
 typedef struct {
-	void *dl;
 	const OrtApi *api;
 	OrtEnv *env;
 } em_runtime;
@@ -68,70 +61,48 @@ static char *em_err(const OrtApi *api, OrtStatus *st) {
 	return msg ? msg : em_dup("onnxruntime: error (out of memory copying message)");
 }
 
-/* em_ort_open dlopens the runtime and creates an OrtEnv for it. */
+/* em_ort_open creates an OrtEnv and takes the API from the linked runtime. */
 static char *em_ort_open(const char *path, em_runtime *out) {
 	memset(out, 0, sizeof(*out));
 
-	/* RTLD_LOCAL: nothing else in the process should resolve against ORT's
-	 * symbols, and libc++ is statically linked inside the .so, so exporting
-	 * them globally risks clashing with the toolchain's own runtime. */
-	void *dl = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-	if (!dl) {
-		const char *e = dlerror();
-		return em_dup(e ? e : "dlopen failed");
-	}
-	em_getapibase_fn base_fn = (em_getapibase_fn)dlsym(dl, "OrtGetApiBase");
-	if (!base_fn) {
-		const char *e = dlerror();
-		char *msg = em_dup(e ? e : "OrtGetApiBase not found");
-		dlclose(dl);
-		return msg;
-	}
-	const OrtApiBase *base = base_fn();
+	/* The runtime is linked, so the API is reached through the exported
+	 * entry point rather than through a handle we opened ourselves. */
+	const OrtApiBase *base = OrtGetApiBase();
 	if (!base) {
-		dlclose(dl);
 		return em_dup("OrtGetApiBase returned NULL");
 	}
 
 	/* GetApi(ORT_API_VERSION) is the documented compatibility contract: a
 	 * NEWER runtime honours an older requested version, an older one returns
-	 * NULL. That is why a 1.19 header works against the 1.23 library used for
-	 * host tests, and why a too-old library fails loudly here instead of
-	 * subtly. */
+	 * NULL. That is why a 1.19 header works against the 1.23 library, and why
+	 * a too-old library fails loudly here instead of subtly. */
 	const OrtApi *api = base->GetApi(ORT_API_VERSION);
 	if (!api) {
 		char msg[192];
 		snprintf(msg, sizeof(msg),
 		         "onnxruntime is too old: it does not provide C API version %d (library reports %s)",
 		         ORT_API_VERSION, base->GetVersionString());
-		dlclose(dl);
 		return em_dup(msg);
 	}
 
 	OrtEnv *env = NULL;
-	OrtStatus *st = api->CreateEnv(ORT_LOGGING_LEVEL_ERROR, "echomuse", &env);
+	OrtStatus *st = api->CreateEnv(ORT_LOGGING_LEVEL_ERROR, "home-panel", &env);
 	if (st) {
 		char *msg = em_err(api, st);
-		dlclose(dl);
 		return msg;
 	}
 
-	out->dl = dl;
 	out->api = api;
 	out->env = env;
 	return NULL;
 }
 
-/* em_ort_version reports the loaded library's version, e.g. "1.19.2". */
+/* em_ort_version reports the linked library's version, e.g. "1.23.2". */
 static const char *em_ort_version(em_runtime *r) {
-	if (!r->dl) return "";
-	em_getapibase_fn base_fn = (em_getapibase_fn)dlsym(r->dl, "OrtGetApiBase");
-	if (!base_fn) return "";
-	return base_fn()->GetVersionString();
+	return OrtGetApiBase()->GetVersionString();
 }
 
-/*
- * em_model_load opens one model. The options are the measured optimum for a
+/* em_model_load opens one model. The options are the measured optimum for a
  * duty-cycled wake word on this hardware, and two of them are counter-intuitive
  * enough to be worth stating here:
  *

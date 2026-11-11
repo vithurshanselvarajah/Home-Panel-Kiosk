@@ -42,7 +42,7 @@
     return insertText(field, current, key);
   };
 
-  const listeners = { "app:state": [], "app:echomuse": [], "app:notification": [], "app:dismiss-notification": [] };
+  const listeners = { "app:state": [], "app:device": [], "app:notification": [], "app:dismiss-notification": [] };
   // The bridge sends the state as soon as it connects, which is before the
   // interface has registered its listeners. The last message of each kind is
   // kept, so a listener that arrives late still gets the current state
@@ -111,7 +111,7 @@
     keyboardKey: (key) => notify("app:keyboard-key", key),
     editFieldValue: (field, key) => window.__editFieldValue(field, key),
     onState: (callback) => on("app:state", callback),
-    onEchoMuseState: (callback) => on("app:echomuse", callback),
+    onDeviceState: (callback) => on("app:device", callback),
     onNotification: (callback) => on("app:notification", callback),
     onDismissNotification: (callback) => on("app:dismiss-notification", callback),
   };

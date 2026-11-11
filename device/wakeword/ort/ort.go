@@ -1,12 +1,10 @@
 // Package ort implements wakeword.Inferer with ONNX Runtime, so the streaming
 // pipeline in the parent package can actually score audio on the device.
 //
-// The runtime is dlopen'd at RUNTIME (see shim.h) rather than linked, so this
-// package builds and the panel runs with no libonnxruntime.so present — Open
-// just returns an error and the caller keeps going without a local wake word,
-// leaving the detection to Home Assistant. Only ONNX Runtime's MIT-licensed C
-// header is vendored, in include/; the 12.3MB library is distributed
-// separately.
+// The runtime is linked, not dlopen'd. The binary carries it, so a device
+// that has the binary has the wake word: there is nothing to install and
+// nothing that can be missing. Only ONNX Runtime's MIT-licensed C header is
+// vendored, in include/; the library itself is linked from the system.
 //
 // Feeding it: the parent package owns all buffering and calls the three
 // methods here in a fixed order per 80ms chunk. Nothing in this package is
@@ -23,7 +21,7 @@ package ort
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/include -O2
-#cgo LDFLAGS: -ldl
+#cgo LDFLAGS: -lonnxruntime
 
 #include "shim.h"
 */

@@ -1,31 +1,24 @@
-// EchoMuse UI.
+// Voice assistant UI.
 //
-// This is the shape of the EchoMuse interface, with a mock data source. The
-// SDK is not wired up yet, so the state comes from the mock below. When the
-// SDK lands, replace the mock source and nothing else has to change.
+// This is the shape of the voice assistant interface, with a mock data
+// source. The state comes from the device program, which owns the link to
+// Home Assistant.
 //
-// The states come from the SDK's `echomuse/state` package, and one of its
-// rules shapes this file: every state that is not known is reported as
+// One rule shapes this file: every state that is not known is reported as
 // unknown, never as its opposite. So an unknown connection is drawn grey and
 // says "Unknown", not "Connected".
 
 (function () {
-  // Connection is what the drawer reports: whether this device can reach a
-  // controller and has been admitted by one. The phases that come with it
-  // are what the on-screen indicator reacts to.
+  // Connection is what the drawer reports: whether this device can reach
+  // Home Assistant. The phases that come with it are what the on-screen
+  // indicator reacts to.
   //
-  // A device that has reached the controller but has not been admitted is
-  // *pending*, not connected. Saying "Connected" for a device that is
-  // waiting for an administrator would be a lie the panel repeats to
-  // somebody who then wonders why nothing happens.
+  // There is no approval step and no credential: Home Assistant finds the
+  // panel on the network and asks it for its key, and the panel either has
+  // one or it does not.
   const CONNECTIONS = {
     unknown: { label: "Unknown", led: "unknown" },
     connected: { label: "Connected", led: "online" },
-    pending: { label: "Awaiting approval", led: "connecting" },
-    pairing: { label: "Pairing", led: "connecting" },
-    unpaired: { label: "Unpaired", led: "connecting" },
-    disabled: { label: "Disabled", led: "offline" },
-    refused: { label: "Refused", led: "offline" },
     disconnected: { label: "Disconnected", led: "offline" },
   };
 
@@ -43,9 +36,8 @@
   // shows it is listening. The dots move and scale with the microphone
   // level, and a different animation plays while a response is playing.
   //
-  // It is an indicator, not a row of LEDs. An Echo's LEDs report the
-  // controller's own animation; these report what this device is doing, and
-  // they are only on screen while it is doing something.
+  // It is an indicator, not a row of LEDs. These report what this device is
+  // doing, and they are only on screen while it is doing something.
 
   const DOT_COUNT = 7;
   const DOT_SPACING = 26;
@@ -268,11 +260,11 @@
   // can be judged on a screen before any protocol code exists.
 
   const MOCK_SCRIPT = [
-    { at: 0, connection: "connected", phase: "ready", listening: false, thinking: false, speaking: false, reason: "the controller admitted this device" },
-    { at: 5000, connection: "connected", phase: "ready", listening: true, thinking: false, speaking: false, reason: "the controller admitted this device" },
-    { at: 13000, connection: "connected", phase: "ready", listening: true, thinking: true, speaking: false, reason: "the controller admitted this device" },
-    { at: 17000, connection: "connected", phase: "ready", listening: false, thinking: false, speaking: true, reason: "the controller admitted this device" },
-    { at: 21000, connection: "connected", phase: "ready", listening: false, thinking: false, speaking: false, reason: "the controller admitted this device" },
+    { at: 0, connection: "connected", phase: "ready", listening: false, thinking: false, speaking: false, reason: "home assistant is connected" },
+    { at: 5000, connection: "connected", phase: "ready", listening: true, thinking: false, speaking: false, reason: "home assistant is connected" },
+    { at: 13000, connection: "connected", phase: "ready", listening: true, thinking: true, speaking: false, reason: "home assistant is connected" },
+    { at: 17000, connection: "connected", phase: "ready", listening: false, thinking: false, speaking: true, reason: "home assistant is connected" },
+    { at: 21000, connection: "connected", phase: "ready", listening: false, thinking: false, speaking: false, reason: "home assistant is connected" },
   ];
 
   function createMockSource() {
@@ -329,21 +321,21 @@
       options.state.title = state.connection_reason || "";
       options.led.dataset.status = connection.led;
 
-      // The same state is repeated at the top of the EchoMuse tab, so the
+      // The same state is repeated at the top of the voice tab, so the
       // settings page says what the drawer says.
       if (options.statusLed) options.statusLed.dataset.status = connection.led;
       if (options.statusLabel) options.statusLabel.textContent = connection.label;
-      if (options.statusReason) options.statusReason.textContent = state.connection_reason || "Not connected to a controller.";
+      if (options.statusReason) options.statusReason.textContent = state.connection_reason || "Not connected to Home Assistant.";
     }
     // The indicator is only on screen while the device is listening or
     // speaking. It is not a row of status LEDs that sits there all the time.
     //
     // What the device is doing is read from the flags, not from the phase.
-    // The phase is the state of the link to the controller — ready,
+    // The phase is the state of the link to Home Assistant — ready,
     // pending, refused, disconnected — and a device whose link is up
     // reports "ready" whether it is listening or not. The flags are where
     // the link's own state is kept, and they are what the indicator wants:
-    // the microphone being open, a reply being played, the controller
+    // the microphone being open, a reply being played, Home Assistant
     // waiting for Home Assistant.
     function paintIndicator(state) {
       let mode = "off";
@@ -365,5 +357,5 @@
     return { apply, indicator };
   }
 
-  window.EchoMuseUI = { create, createMockSource, CONNECTIONS, PHASES };
+  window.VoiceUI = { create, createMockSource, CONNECTIONS, PHASES };
 })();

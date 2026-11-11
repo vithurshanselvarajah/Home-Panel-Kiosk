@@ -11,14 +11,16 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/wakeword/ort"
 )
 
-// DefaultDir is where the ONNX Runtime library and the models live on the
-// panel. Overridable with HOME_PANEL_WAKEWORD_DIR, so the same binary can be
+// DefaultDir is where the wake word models live on the panel.
+//
+// Overridable with HOME_PANEL_WAKEWORD_DIR, so the same binary can be
 // pointed at a scratch directory while iterating.
 //
-// The library is NOT part of the panel: it is 12.3MB, it changes far less
-// often than the application, and shipping it with every install would be
-// wasteful on a device with little disk. It is installed out of band, and
-// its absence is an ordinary, expected condition — see Open.
+// The models are not part of the panel: they are a few megabytes, they
+// change far less often than the application, and a model is chosen by the
+// person who installs it rather than by the build. The ONNX Runtime itself
+// IS part of the panel — it is linked in — so there is nothing else to
+// install.
 const DefaultDir = "/usr/share/home-panel/wakeword"
 
 // Dir returns the configured model directory.
@@ -86,8 +88,7 @@ func Open(model string, threshold float32, onCross func(score, threshold float32
 		models.EmbeddingStream = p
 	}
 
-	lib := filepath.Join(dir, "libonnxruntime.so")
-	rt, err := ort.Open(lib)
+	rt, err := ort.Open("onnxruntime")
 	if err != nil {
 		return nil, fmt.Errorf("scorer: %w", err)
 	}
