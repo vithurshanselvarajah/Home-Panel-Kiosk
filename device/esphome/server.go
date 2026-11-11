@@ -21,6 +21,8 @@ type Server struct {
 	name string
 	// friendlyName is the name a person reads.
 	friendlyName string
+	// manufacturer is who made the device.
+	manufacturer string
 	// mac is the address that identifies the device.
 	mac string
 	// version is the firmware version, which is the app's version.
@@ -42,6 +44,8 @@ type ServerOptions struct {
 	Name string
 	// FriendlyName is the name a person reads.
 	FriendlyName string
+	// Manufacturer is who made the device.
+	Manufacturer string
 	// MAC is the address that identifies the device.
 	MAC string
 	// Version is the firmware version.
@@ -66,10 +70,15 @@ func NewServer(options ServerOptions) *Server {
 	if options.Registry == nil {
 		options.Registry = NewRegistry()
 	}
+	manufacturer := options.Manufacturer
+	if manufacturer == "" {
+		manufacturer = defaultManufacturer
+	}
 	server := &Server{
 		registry:      options.Registry,
 		name:          options.Name,
 		friendlyName:  options.FriendlyName,
+		manufacturer:  manufacturer,
 		mac:           options.MAC,
 		version:       options.Version,
 		encryptionKey: options.EncryptionKey,
@@ -130,6 +139,7 @@ func (s *Server) serve(conn net.Conn) {
 			s.log.Debug("the connection closed", "error", err)
 			return
 		}
+		s.log.Debug("a message arrived", "type", frame.Type, "bytes", len(frame.Payload))
 		if err := s.handle(client, frame); err != nil {
 			s.log.Warn("a message could not be answered", "error", err)
 			return
@@ -156,11 +166,23 @@ func (s *Server) handle(client *client, frame Frame) error {
 		return client.write(TypePingResponse, &PingResponse{})
 
 	case TypeDisconnectRequest:
-		s.log.Info("home assistant disconnected")
+		request := &DisconnectRequest{}
+		if err := proto.Unmarshal(frame.Payload, request); err != nil {
+			s.log.Info("home assistant disconnected")
+			return client.disconnect()
+		}
+		s.log.Info("home assistant disconnected", "reason", request.Reason.String())
 		return client.disconnect()
 
 	case TypeDeviceInfoRequest:
 		return client.write(TypeDeviceInfoResponse, s.deviceInfo())
+
+	case TypeDeviceCapabilitiesRequest:
+		// The device has none of the optional capabilities: no
+		// bluetooth proxy, no voice assistant and no serial proxy. The
+		// answer is empty, and Home Assistant reads the absence of a
+		// capability as the device not having it.
+		return client.write(TypeDeviceCapabilitiesResponse, &DeviceCapabilitiesResponse{})
 
 	case TypeListEntitiesRequest:
 		return s.listEntities(client)
@@ -232,6 +254,7 @@ func (s *Server) handle(client *client, frame Frame) error {
 
 // command applies a command from the client.
 func (s *Server) command(client *client, key uint32, value EntityValue) error {
+	s.log.Debug("a command arrived", "key", key, "value", value.String())
 	if err := s.registry.HandleCommand(key, value); err != nil {
 		s.log.Warn("a command was refused", "key", key, "error", err)
 		return nil
@@ -240,16 +263,22 @@ func (s *Server) command(client *client, key uint32, value EntityValue) error {
 }
 
 // deviceInfo describes the device to the client.
+//
+// The project name is the manufacturer and the model joined by a dot,
+// which is the shape Home Assistant expects. It takes the two parts
+// apart to show them, so a name with no dot in it is a name it cannot
+// read.
 func (s *Server) deviceInfo() *DeviceInfoResponse {
-	info := &DeviceInfoResponse{
+	return &DeviceInfoResponse{
 		Name:           s.name,
 		FriendlyName:   s.friendlyName,
 		MacAddress:     s.mac,
 		EsphomeVersion: s.version,
-		ProjectName:    s.name,
+		ProjectName:    s.manufacturer + "." + s.name,
 		ProjectVersion: s.version,
+		Manufacturer:   s.manufacturer,
+		Model:          s.name,
 	}
-	return info
 }
 
 // listEntities tells the client what the device offers.
@@ -318,6 +347,10 @@ func (s *Server) sendState(client *client, entity *Entity) error {
 		return client.write(TypeSensorStateResponse, &SensorStateResponse{
 			Key: entity.Key, State: float32(value.Number),
 		})
+	case KindTextSensor:
+		return client.write(TypeTextSensorStateResponse, &TextSensorStateResponse{
+			Key: entity.Key, State: value.Text,
+		})
 	}
 	return nil
 }
@@ -331,6 +364,13 @@ const (
 	apiVersionMajor uint32 = 1
 	apiVersionMinor uint32 = 16
 )
+
+// defaultManufacturer is who made the device, when nobody says.
+//
+// The project name is the manufacturer and the model joined by a dot,
+// and Home Assistant takes the two parts apart to show them, so there
+// has to be a manufacturer.
+const defaultManufacturer = "Home Panel"
 
 // keepAlive is how long the server waits for a message before it
 // considers the connection dead.

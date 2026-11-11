@@ -110,15 +110,19 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 	})
 	// The state of the panel itself.
 	//
-	// It is a sensor because it is read and not written: the panel
+	// It is a text sensor because it is read and not written: the panel
 	// reports what it is doing and Home Assistant cannot tell it to do
 	// something else through it.
+	//
+	// It is a text sensor rather than a number because the state is a
+	// set of values rather than one measurement, and the protocol's
+	// sensor carries a number and nothing else.
 	registry.Add(&esphome.Entity{
-		Kind:     esphome.KindSensor,
+		Kind:     esphome.KindTextSensor,
 		Name:     "Panel state",
 		ObjectID: controlStateObjectID,
 		Icon:     "mdi:tablet-dashboard",
-		State:    esphome.EntityValue{Kind: esphome.KindSensor, State: "{}"},
+		State:    esphome.EntityValue{Kind: esphome.KindTextSensor, Text: "{}"},
 	})
 	return registry
 }
