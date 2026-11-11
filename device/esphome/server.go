@@ -21,6 +21,8 @@ type Server struct {
 	services *ServiceRegistry
 	// voice is the voice assistant, when the device has one.
 	voice *Voice
+	// mediaPlayer is the speaker, when the device has one.
+	mediaPlayer *MediaPlayer
 	// onReplyAudio is called with the reply audio as it arrives.
 	//
 	// The panel plays the reply, and the reply arrives on the same
@@ -36,6 +38,8 @@ type Server struct {
 	onConnect func(connected bool)
 	// mu guards the services.
 	mu sync.Mutex
+	// mediaPlayerKeyValue is the key the speaker is known by.
+	mediaPlayerKeyValue uint32
 	// name is the name Home Assistant shows.
 	name string
 	// friendlyName is the name a person reads.
@@ -150,6 +154,43 @@ func (s *Server) SetServices(services *ServiceRegistry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.services = services
+}
+
+// SetMediaPlayer gives the server its speaker.
+//
+// It is set after the server is made, because whether the device has a
+// speaker is the device's business.
+func (s *Server) SetMediaPlayer(player *MediaPlayer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mediaPlayer = player
+}
+
+// MediaPlayer gives access to the speaker.
+//
+// It is nil when the device has no speaker.
+func (s *Server) MediaPlayer() *MediaPlayer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mediaPlayer
+}
+
+// mediaPlayerKey is the key the speaker is known by.
+//
+// The keys of the entities are handed out by the registry, and the
+// speaker is not in the registry: it has its own message and its own
+// shape. So it is given a key of its own, past the entities'.
+//
+// The key has to be stable across a run, because Home Assistant uses it
+// to tell one entity from another, and a key that changes is an entity
+// that Home Assistant forgets and makes again.
+func (s *Server) mediaPlayerKey() uint32 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mediaPlayerKeyValue == 0 {
+		s.mediaPlayerKeyValue = s.registry.NextKeyValue() + 1
+	}
+	return s.mediaPlayerKeyValue
 }
 
 // Services gives access to the services.
@@ -333,6 +374,17 @@ func (s *Server) handle(client *Client, frame Frame) error {
 	case TypeSubscribeHomeassistantServices:
 		return nil
 
+	case TypeMediaPlayerCommandRequest:
+		request := &MediaPlayerCommandRequest{}
+		if err := proto.Unmarshal(frame.Payload, request); err != nil {
+			return err
+		}
+		if s.mediaPlayer != nil {
+			s.mediaPlayer.HandleCommand(s.mediaPlayerKey(), request)
+			s.pushMediaPlayerState()
+		}
+		return nil
+
 	case TypeExecuteServiceRequest:
 		request := &ExecuteServiceRequest{}
 		if err := proto.Unmarshal(frame.Payload, request); err != nil {
@@ -451,6 +503,18 @@ func (s *Server) listEntities(client *Client) error {
 			return err
 		}
 	}
+	// The speaker is listed apart from the entities, because it has its
+	// own message and its own key.
+	if s.mediaPlayer != nil {
+		key := s.mediaPlayerKey()
+		message, err := s.mediaPlayer.Message(key)
+		if err != nil {
+			return err
+		}
+		if err := client.write(message.Type, message.Body); err != nil {
+			return err
+		}
+	}
 	for _, service := range s.services.All() {
 		if err := client.write(TypeListEntitiesServicesResponse, s.serviceMessage(service)); err != nil {
 			return err
@@ -490,7 +554,39 @@ func (s *Server) pushAllStates(client *Client) error {
 			return err
 		}
 	}
+	if s.mediaPlayer != nil {
+		if err := client.write(TypeMediaPlayerStateResponse, s.mediaPlayer.StateMessage(s.mediaPlayerKey())); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// PushMediaPlayerState sends the speaker's state to every client.
+//
+// It is exported so the device program can report what the speaker is
+// doing when the change comes from the panel rather than from Home
+// Assistant.
+func (s *Server) PushMediaPlayerState() {
+	s.pushMediaPlayerState()
+}
+
+// pushMediaPlayerState sends the speaker's state to every client.
+func (s *Server) pushMediaPlayerState() {
+	if s.mediaPlayer == nil {
+		return
+	}
+	message := s.mediaPlayer.StateMessage(s.mediaPlayerKey())
+	s.connections.Range(func(key, _ any) bool {
+		connected, ok := key.(*Client)
+		if !ok {
+			return true
+		}
+		if err := connected.write(TypeMediaPlayerStateResponse, message); err != nil {
+			s.log.Debug("the speaker's state could not be pushed", "error", err)
+		}
+		return true
+	})
 }
 
 // pushState sends the state of one entity to every client.

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/sendspin"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
@@ -56,6 +57,8 @@ type deviceAudio struct {
 	onWakeAudio func(pcm []byte)
 	// onSendspinStatus is called when the music player's status changes.
 	onSendspinStatus func(status sendspin.Status)
+	// onMediaState is called when the speaker changes what it is doing.
+	onMediaState func(state esphome.MediaPlayerState)
 	// credentialsDir is where the music player keeps its identity.
 	credentialsDir string
 
@@ -815,9 +818,13 @@ func (a *deviceAudio) sendMicAudio(pcm []byte) {
 // rather than written straight to the speaker, because the music is
 // playing on the same speaker and the two have to be mixed.
 func (a *deviceAudio) playReply(pcm []byte, final bool) {
+	if len(pcm) > 0 {
+		a.setMediaState(esphome.MediaPlayerState_MEDIA_PLAYER_STATE_PLAYING)
+	}
 	a.playVoice(pcm)
 	if final {
 		a.finishVoice()
+		a.setMediaState(esphome.MediaPlayerState_MEDIA_PLAYER_STATE_IDLE)
 	}
 }
 

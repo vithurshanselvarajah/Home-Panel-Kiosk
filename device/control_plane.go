@@ -35,6 +35,11 @@ type ControlPlane struct {
 	listener net.Listener
 	// api is the Home Assistant server.
 	api *esphome.Server
+	// mediaPlayer is the speaker.
+	//
+	// It is the entity the reply to a voice turn comes back on, and the
+	// one Music Assistant plays music through.
+	mediaPlayer *esphome.MediaPlayer
 	// voice is the voice assistant.
 	//
 	// The panel is a voice satellite: the wake word fires here, the
@@ -99,6 +104,13 @@ func startControlPlane(
 	voice := esphome.NewVoice(esphome.VoiceOptions{Log: log})
 	api.SetVoice(voice)
 	plane.voice = voice
+
+	// The speaker. Home Assistant does not surface a device at all if it
+	// reports no entities, and a voice satellite with no speaker is a
+	// satellite with nowhere to speak.
+	player := esphome.NewMediaPlayer(log)
+	api.SetMediaPlayer(player)
+	plane.mediaPlayer = player
 
 	// The port has to be free before the announcement says which port
 	// it is on, so the listener is made first.
@@ -436,6 +448,48 @@ func panelMAC(name string) string {
 	parts[4] = fmt.Sprintf("%02x", (sum>>8)&0xFF)
 	parts[5] = fmt.Sprintf("%02x", sum&0xFF)
 	return strings.Join(parts, ":")
+}
+
+// SetMediaPlayerState records what the speaker is doing and tells Home
+// Assistant.
+//
+// The player card in Home Assistant shows this, so it is pushed as it
+// changes rather than being asked for.
+func (p *ControlPlane) SetMediaPlayerState(state esphome.MediaPlayerState) {
+	if p.mediaPlayer == nil {
+		return
+	}
+	p.mediaPlayer.SetState(state)
+	p.api.PushMediaPlayerState()
+}
+
+// OnMediaPlayer wires the speaker's callbacks.
+//
+// The panel holds the sound card, so it is the one that plays the audio
+// and the one that knows when it has finished.
+func (p *ControlPlane) OnMediaPlayer(hooks MediaPlayerHooks) {
+	if p.mediaPlayer == nil {
+		return
+	}
+	p.mediaPlayer.OnPlay(hooks.OnPlay)
+	p.mediaPlayer.OnCommand(hooks.OnCommand)
+	p.mediaPlayer.OnVolume(hooks.OnVolume)
+	p.mediaPlayer.OnMute(hooks.OnMute)
+	p.mediaPlayer.OnState(hooks.OnState)
+}
+
+// MediaPlayerHooks are the callbacks the speaker makes.
+type MediaPlayerHooks struct {
+	// OnPlay is called with a URL to play.
+	OnPlay func(url string, announcement bool)
+	// OnCommand is called with a command.
+	OnCommand func(command esphome.MediaPlayerCommand)
+	// OnVolume is called with a level, 0.0 to 1.0.
+	OnVolume func(volume float32)
+	// OnMute is called with whether the player is muted.
+	OnMute func(muted bool)
+	// OnState is called when the player changes what it is doing.
+	OnState func(state esphome.MediaPlayerState)
 }
 
 // OnVoice wires the voice assistant's callbacks.
