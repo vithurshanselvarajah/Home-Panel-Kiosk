@@ -279,7 +279,57 @@ func main() {
 		OnThinking: reporter.setThinking,
 		OnSpeaking: reporter.setSpeaking,
 		OnAudio:    speaker_.playReply,
+		// The microphone's frames go to home assistant while the turn is
+		// running. They are sent from the capture goroutine, which is
+		// where they are captured, so nothing is buffered on the way.
+		OnMicAudio: speaker_.sendMicAudio,
 	})
+
+	// The wake word hears every block the microphone captures.
+	//
+	// The microphone is open for as long as the wake word is listening,
+	// which is as long as the panel is switched on — so this is where the
+	// level comes from too.
+	speaker_.onWakeAudio = func(pcm []byte) {
+		wake.Push(pcm, time.Now())
+	}
+
+	// The wake word needs the microphone, so it is opened for as long as
+	// the wake word is listening.
+	if wake != nil && wake.Enabled() {
+		speaker_.setListening(true)
+	}
+
+	// The wake word is reported to home assistant, so its picker shows
+	// the model the panel is listening for and whether it is on.
+	//
+	// The flags ride the device information, which is a one-shot at
+	// connect, so this is read when the connection is made rather than
+	// every time the state changes.
+	reportWakeWord := func() {
+		model := ""
+		if wake != nil {
+			model = wake.Model()
+		}
+		control.SetWakeWord(model, wake.Ready(), wake.Enabled())
+	}
+	reportWakeWord()
+
+	// When home assistant's picker switches the wake word, the panel
+	// follows it: the same switch, reached from the other side.
+	control.OnWakeWord(func(enabled bool) {
+		wake.SetEnabled(enabled)
+		speaker_.setListening(enabled && wake.Ready())
+	})
+
+	// The microphone's frames go to home assistant over the ESPHome
+	// connection. The device program owns both, so it does not have to
+	// hand the frames across a boundary to get them there.
+	speaker_.onSendMicAudio = func(pcm []byte) {
+		if err := control.SendVoiceAudio(pcm, false); err != nil {
+			log.Debug("the microphone did not reach home assistant", "error", err)
+		}
+	}
 
 	// The wake word fires, the turn starts. The panel opens the
 	// microphone for the turn and closes it when home assistant says the
@@ -407,6 +457,7 @@ func (r *stateReporter) turnStarted(phrase string) {
 	r.state.SetPhase(state.PhaseListening, "the wake word fired")
 	r.state.SetListening(true)
 	r.audio.startCapture()
+	r.audio.setStreaming(true)
 }
 
 // turnEnded records that a turn finished.
@@ -424,6 +475,9 @@ func (r *stateReporter) turnEnded(transcript string, failed bool) {
 	} else {
 		r.state.SetPhase(state.PhaseIdle, "")
 	}
+	// The audio is finished with, so the last block carries the end flag
+	// and the microphone can be given back.
+	r.audio.setStreaming(false)
 	r.audio.stopCapture()
 }
 
@@ -707,6 +761,9 @@ func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wa
 	if c.WakeWordEnabled != nil {
 		wake.SetEnabled(*c.WakeWordEnabled)
 		log.Info("the wake word was switched", "enabled", *c.WakeWordEnabled)
+		// The microphone follows the wake word: it is open for as long as
+		// the wake word is listening, and closed when it is not.
+		audio.setListening(*c.WakeWordEnabled && wake.Ready())
 	}
 	if c.WakeThreshold != nil {
 		wake.SetThreshold(*c.WakeThreshold)

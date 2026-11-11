@@ -44,9 +44,16 @@ type audioBackend interface {
 type deviceAudio struct {
 	backend audioBackend
 	log     *slog.Logger
-	// onMicAudio is called with the microphone frames, so they can be
+	// onSendMicAudio is called with the microphone frames, so they can be
 	// sent to home assistant while a turn is running.
-	onMicAudio func(pcm []byte)
+	onSendMicAudio func(pcm []byte)
+	// onWakeAudio is called with every block of captured audio, so the
+	// wake word can score it.
+	//
+	// Every block, not just the ones in a turn: the wake word is what
+	// decides whether a turn starts, so it has to hear the room all the
+	// time. The gate inside the wake word is what keeps that cheap.
+	onWakeAudio func(pcm []byte)
 	// onSendspinStatus is called when the music player's status changes.
 	onSendspinStatus func(status sendspin.Status)
 	// credentialsDir is where the music player keeps its identity.
@@ -76,6 +83,16 @@ type deviceAudio struct {
 	// testSoundSeen is whether a counter has arrived, so the first one is
 	// adopted rather than played.
 	testSoundSeen bool
+	// listening says the wake word is listening, so the microphone stays
+	// open.
+	//
+	// The wake word has to hear the room all the time: it is what decides
+	// whether a turn starts, so a microphone that opens only when a turn
+	// is already running could never hear one.
+	//
+	// The gate inside the wake word is what keeps that affordable — it
+	// scores only the frames that are loud enough to be somebody talking.
+	listening bool
 	// streaming is whether the microphone frames are being sent to home
 	// assistant.
 	//
@@ -312,13 +329,13 @@ func (a *deviceAudio) monitoringMic() bool {
 // setMonitoring opens or closes the microphone so its level can be shown.
 //
 // The monitoring is a flag rather than a capture of its own when the
-// controller is already using the microphone. The level meter reads the
-// frames the capture produces, because a sound card cannot be opened twice
-// — ALSA says so by taking the process down — and because the level of the
+// microphone is already open. The level meter reads the frames the
+// capture produces, because a sound card cannot be opened twice — ALSA
+// says so by taking the process down — and because the level of the
 // frames being sent is the level that matters.
 //
-// The microphone is opened for the meter alone when the controller is not
-// using it, so a person can see what the microphone hears while they are
+// The microphone is opened for the meter alone when nothing else wants
+// it, so a person can see what the microphone hears while they are
 // setting the device up.
 func (a *deviceAudio) setMonitoring(on bool) {
 	a.mu.Lock()
@@ -704,6 +721,13 @@ func (a *deviceAudio) stopCapture() {
 // The frames go to home assistant only while a turn is running. The rest
 // of the time they are measured for the level meter and dropped.
 func (a *deviceAudio) pushFrame(pcm []byte) {
+	// The wake word hears every block. It is what decides whether a turn
+	// starts, so it has to hear the room all the time — and its gate is
+	// what keeps that cheap.
+	if a.onWakeAudio != nil {
+		a.onWakeAudio(pcm)
+	}
+
 	a.mu.Lock()
 	streaming := a.streaming
 	a.mu.Unlock()
@@ -713,8 +737,74 @@ func (a *deviceAudio) pushFrame(pcm []byte) {
 	// It only goes at all while a turn is running. A panel that streams
 	// the room continuously is a panel that uploads the room, and the
 	// wake word is local precisely so that the room stays in the room.
-	if streaming && a.onMicAudio != nil {
-		a.onMicAudio(pcm)
+	if streaming && a.onSendMicAudio != nil {
+		a.onSendMicAudio(pcm)
+	}
+}
+
+// setListening opens or closes the microphone for the wake word.
+//
+// The microphone is open for as long as the wake word is listening, which
+// is as long as the panel is switched on. The gate inside the wake word is
+// what keeps that affordable: it scores only the frames that are loud
+// enough to be somebody talking, so a silent room costs almost nothing.
+func (a *deviceAudio) setListening(listening bool) {
+	a.mu.Lock()
+	a.listening = listening
+	alreadyCapturing := a.capturing
+	a.mu.Unlock()
+
+	if listening {
+		// The wake word needs the microphone. The meter and the wake
+		// word share it, so there is only ever one capture.
+		a.startCapture()
+		return
+	}
+	if !alreadyCapturing {
+		return
+	}
+	// The wake word has stopped, but a turn may still be running, and the
+	// meter may still be wanted. The capture is only closed when nothing
+	// wants it.
+	a.maybeStopCapture()
+}
+
+// maybeStopCapture closes the microphone when nothing wants it.
+//
+// The microphone is wanted by the wake word, by the level meter and by a
+// turn. It is closed only when none of them does.
+func (a *deviceAudio) maybeStopCapture() {
+	a.mu.Lock()
+	wanted := a.listening || a.monitoring || a.streaming
+	a.mu.Unlock()
+	if !wanted {
+		a.stopCapture()
+	}
+}
+
+// setStreaming says whether the microphone's frames go to home assistant.
+//
+// It is on for the length of a turn and off the rest of the time. A panel
+// that streams the room continuously is a panel that uploads the room, and
+// the wake word is local precisely so that the room stays in the room.
+func (a *deviceAudio) setStreaming(streaming bool) {
+	a.mu.Lock()
+	a.streaming = streaming
+	a.mu.Unlock()
+}
+
+// sendMicAudio sends a block of the microphone to home assistant.
+//
+// It is called for every block while a turn is running. The last block
+// carries the end flag, which tells home assistant the utterance is over
+// from this side — though it decides that for itself, with its own voice
+// activity detection.
+//
+// The audio is signed 16-bit little-endian mono at 16 kHz, which is what
+// home assistant expects.
+func (a *deviceAudio) sendMicAudio(pcm []byte) {
+	if a.onSendMicAudio != nil {
+		a.onSendMicAudio(pcm)
 	}
 }
 

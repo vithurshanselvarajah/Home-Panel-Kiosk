@@ -445,6 +445,17 @@ func (p *ControlPlane) SendVoiceAudio(pcm []byte, end bool) error {
 	return p.api.SendVoiceAudio(pcm, end)
 }
 
+// OnWakeWord sets the callback for the wake word being switched.
+//
+// It is called when home assistant's picker switches the wake word on or
+// off, and when the panel's own settings do the same.
+func (p *ControlPlane) OnWakeWord(fn func(enabled bool)) {
+	if p.voice == nil {
+		return
+	}
+	p.voice.SetWakeWordCallback(fn)
+}
+
 // SetWakeWord tells the voice assistant what the local wake word is.
 //
 // It is what Home Assistant's picker shows, and it decides whether the
