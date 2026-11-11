@@ -114,14 +114,13 @@ PY
     existing_display_mode=$(read_existing displayMode)
   fi
 
-  local dashboard_url slideshow_url device_name esphome_key
+  local dashboard_url slideshow_url device_name esphome_key esphome_encryption
   local idle_slideshow_min slideshow_off_min touch_keyboard display_mode
 
   # Fall back to the documented defaults if no prior value is recorded.
   local def_dashboard=${existing_dashboard_url:-http://homeassistant.local:8123}
   local def_slideshow=${existing_slideshow_url:-}
   local def_device_name=${existing_device_name:-Home Panel}
-  local def_esphome_key=${PITOUCH_ESPHOME_KEY:-}
   local def_idle_slideshow_min=${existing_idle_slideshow_min:-5}
   local def_slideshow_off_min=${existing_slideshow_off_min:-15}
   local def_touch_keyboard=${existing_touch_keyboard:-true}
@@ -168,10 +167,11 @@ PY
     [[ -n "$def_device_name" && "$def_device_name" != "Home Panel" ]] && name_prompt="Device name shown in Home Assistant [$def_device_name]"
     read -r -p "$name_prompt: " device_name
     device_name=${device_name:-$def_device_name}
-    # The key is optional. A panel without one still connects and is
-    # still set up in one step, but the traffic is in plain text.
-    read -r -p "Home Assistant encryption key (optional, blank for none): " esphome_key
-    esphome_key=${esphome_key:-$def_esphome_key}
+    # The key is not asked for here. It is made by the application when
+    # the connection is turned to encrypted, and it is shown in the
+    # settings to be copied into Home Assistant.
+    esphome_key=""
+    esphome_encryption="false"
   else
     dashboard_url=${PITOUCH_DASHBOARD_URL:-http://homeassistant.local:8123}
     slideshow_url=${PITOUCH_SLIDESHOW_URL:-}
@@ -180,6 +180,7 @@ PY
     touch_keyboard=${PITOUCH_TOUCH_KEYBOARD:-true}
     device_name=${PITOUCH_DEVICE_NAME:-Home Panel}
     esphome_key=${PITOUCH_ESPHOME_KEY:-}
+    esphome_encryption=${PITOUCH_ESPHOME_ENCRYPTION:-false}
     display_mode=${PITOUCH_DISPLAY_MODE:-fullscreen}
     validate_url "$dashboard_url" "dashboard" "https?" || { echo "PITOUCH_DASHBOARD_URL is invalid." >&2; exit 1; }
     [[ -z "$slideshow_url" ]] || validate_url "$slideshow_url" "slideshow" "https?" || { echo "PITOUCH_SLIDESHOW_URL is invalid." >&2; exit 1; }
@@ -197,6 +198,7 @@ PY
   PITOUCH_TOUCH_KEYBOARD="$touch_keyboard" \
   PITOUCH_DEVICE_NAME="$device_name" \
   PITOUCH_ESPHOME_KEY="$esphome_key" \
+  PITOUCH_ESPHOME_ENCRYPTION="$esphome_encryption" \
   PITOUCH_DISPLAY_MODE="$display_mode" \
   python3 - "$settings_file" <<'PY'
 import json, os, sys
@@ -220,6 +222,7 @@ settings = {
     "displayMode": os.environ.get("PITOUCH_DISPLAY_MODE", "fullscreen") or "fullscreen",
     "touchKeyboardEnabled": os.environ.get("PITOUCH_TOUCH_KEYBOARD", "true").lower() not in ("0", "false", "no"),
     "deviceName": os.environ.get("PITOUCH_DEVICE_NAME", "Home Panel") or "Home Panel",
+    "esphomeEncryptionEnabled": os.environ.get("PITOUCH_ESPHOME_ENCRYPTION", "false").lower() in ("1", "true", "yes"),
     "esphomeEncryptionKey": os.environ.get("PITOUCH_ESPHOME_KEY", ""),
     "esphomeDeviceName": os.environ.get("PITOUCH_DEVICE_NAME", "Home Panel") or "Home Panel",
 }

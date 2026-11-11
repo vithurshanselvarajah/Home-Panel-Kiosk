@@ -99,15 +99,25 @@ function sendKey(value) {
 
 // syncEncryptionKeyField enables or disables the encryption key field.
 //
-// The key is only changed when the person says it is. While the saved
-// key is kept the field is off, so it cannot be typed into by mistake
-// and the saved one is not overwritten by a blank field.
+// The key is only wanted when the connection is encrypted, so the field
+// is off when it is not. The key itself is shown: it is a setting that
+// is read and copied into Home Assistant, not a password that is typed.
 function syncEncryptionKeyField() {
   const key = form.elements.namedItem("esphomeEncryptionKey");
-  const keep = form.elements.namedItem("esphomeKeepEncryptionKey");
-  if (!key || !keep) return;
-  key.disabled = keep.checked;
-  key.placeholder = keep.checked ? "The saved key is kept" : "Leave blank for no key";
+  const enabled = form.elements.namedItem("esphomeEncryptionEnabled");
+  if (!key || !enabled) return;
+  key.disabled = !enabled.checked;
+}
+
+// makeEncryptionKey puts a new key in the field.
+//
+// The key is made by the application, which is where the random source
+// is, so it is made properly rather than in the page.
+async function makeEncryptionKey() {
+  const key = await window.homePanel.newEncryptionKey();
+  const field = form.elements.namedItem("esphomeEncryptionKey");
+  if (field) field.value = key;
+  return key;
 }
 
 function populate(settings) {
@@ -125,13 +135,11 @@ function populate(settings) {
       else echomuseInput.value = value;
     }
   }
-  // The encryption key is shown as dots, because it is a secret. The
-  // field is emptied and the toggle says the saved one is kept, so the
-  // key is never on the screen and is not overwritten by a blank field.
-  const keyField = form.elements.namedItem("esphomeEncryptionKey");
-  const keepToggle = form.elements.namedItem("esphomeKeepEncryptionKey");
-  if (keyField) keyField.value = "";
-  if (keepToggle) keepToggle.checked = Boolean(settings.esphomeEncryptionKey);
+  // The encryption key is shown, because it is a setting that is read
+  // and copied rather than a password that is typed. The toggle says
+  // whether it is wanted at all.
+  const enabledToggle = form.elements.namedItem("esphomeEncryptionEnabled");
+  if (enabledToggle) enabledToggle.checked = Boolean(settings.esphomeEncryptionEnabled);
   syncEncryptionKeyField();
 }
 
@@ -297,9 +305,30 @@ form.addEventListener("focusout", (event) => {
   setKeyboard(false);
 });
 
-// The toggle decides whether the key is changed.
-const keepKeyToggle = form.elements.namedItem("esphomeKeepEncryptionKey");
-if (keepKeyToggle) keepKeyToggle.addEventListener("change", syncEncryptionKeyField);
+// The toggle decides whether the key is wanted.
+//
+// Turning it on makes a key, so the panel is encrypted from the first
+// moment rather than being left in plain text until somebody thinks of
+// one.
+const encryptionToggle = form.elements.namedItem("esphomeEncryptionEnabled");
+if (encryptionToggle) {
+  encryptionToggle.addEventListener("change", async () => {
+    syncEncryptionKeyField();
+    if (encryptionToggle.checked) {
+      const field = form.elements.namedItem("esphomeEncryptionKey");
+      if (field && !field.value) await makeEncryptionKey();
+    }
+  });
+}
+
+// The button makes a new key.
+const regenerateKeyButton = document.querySelector("[data-action='new-encryption-key']");
+if (regenerateKeyButton) {
+  regenerateKeyButton.addEventListener("click", async (event) => {
+    event.preventDefault();
+    await makeEncryptionKey();
+  });
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -307,12 +336,11 @@ form.addEventListener("submit", async (event) => {
   data.idleToSlideshowMinutes = Number(data.idleToSlideshowMinutes);
   data.slideshowToOffMinutes = Number(data.slideshowToOffMinutes);
   data.touchKeyboardEnabled = form.elements.namedItem("touchKeyboardEnabled").checked;
-  // The key is only changed when the toggle says it is, and a blank
-  // field with the toggle off clears it.
-  const keepKey = form.elements.namedItem("esphomeKeepEncryptionKey").checked;
-  if (keepKey) {
-    delete data.esphomeEncryptionKey;
-  } else if (!data.esphomeEncryptionKey) {
+  // The key is only wanted when the connection is encrypted. The toggle
+  // says so, and the key follows it: no key when the connection is in
+  // plain text.
+  data.esphomeEncryptionEnabled = form.elements.namedItem("esphomeEncryptionEnabled").checked;
+  if (!data.esphomeEncryptionEnabled) {
     data.esphomeEncryptionKey = "";
   }
   $("#form-error").textContent = "";

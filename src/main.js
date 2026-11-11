@@ -5,6 +5,7 @@ const path = require("node:path");
 const { execFile } = require("node:child_process");
 const os = require("node:os");
 const { safeUrl, settingNumber, settingBoolean, displayMode: readDisplayMode, windowBounds, DISPLAY_MODES } = require("./utils");
+const { generateEncryptionKey } = require("./encryption");
 const { createHealthChecker, probeHttp } = require("./health");
 const { EchoMuseClient, findSidecar } = require("./echomuse");
 const { ControlClient, findControlSocket } = require("./control");
@@ -26,6 +27,7 @@ const DEFAULTS = {
   echomuseAudioInput: "",
   echomuseAudioOutput: "",
   echomusePair: true,
+  esphomeEncryptionEnabled: false,
   esphomeEncryptionKey: "",
   esphomeDeviceName: "",
 };
@@ -205,6 +207,16 @@ function sendState(force = false) {
   }
   publishState(state);
 }
+
+// newEncryptionKey makes a key for the Home Assistant connection.
+//
+// The key is thirty two bytes, and the protocol wants it as base64.
+// It is made from the system's own random source, so two panels never
+// get the same one.
+//
+// The key is shown in the settings, because it is a setting that is read
+// and copied into Home Assistant rather than a password that is typed
+// once and forgotten.
 
 // Sends the EchoMuse state to the overlay.
 //
@@ -683,11 +695,21 @@ async function saveSettings(next) {
   // The encryption key is what the Home Assistant connection is made
   // with. It is a secret, so it is kept out of the file and put back
   // when the settings are read.
+  // Whether the connection is encrypted is a setting of its own, and the
+  // key follows it: no key means the connection is in plain text.
+  clean.esphomeEncryptionEnabled = Boolean(clean.esphomeEncryptionEnabled);
   clean.esphomeEncryptionKey = String(clean.esphomeEncryptionKey || "").trim();
+  if (!clean.esphomeEncryptionEnabled) {
+    // The connection is in plain text, so there is no key.
+    clean.esphomeEncryptionKey = "";
+  } else if (!clean.esphomeEncryptionKey) {
+    // The connection is to be encrypted and there is no key, so one is
+    // made. A panel that is encrypted is encrypted from the first
+    // moment, rather than being left in plain text until somebody
+    // thinks of a key.
+    clean.esphomeEncryptionKey = generateEncryptionKey();
+  }
   clean.esphomeDeviceName = String(clean.esphomeDeviceName || "").trim();
-  // The toggle is about the key and not about anything else, so it is
-  // not carried about.
-  delete clean.esphomeKeepEncryptionKey;
   // The display mode is a setting, so a device that was set up before it
   // existed has none, and one with a nonsense value falls back to the
   // mode it was running in.
@@ -772,9 +794,7 @@ async function writeSettingsFile(data) {
 }
 
 function publicSettings() {
-  const shown = { ...settings };
-  if (shown.esphomeEncryptionKey) shown.esphomeEncryptionKey = "••••••••";
-  return shown;
+  return { ...settings };
 }
 
 // Starts the EchoMuse sidecar, if the device is set up to use one.
@@ -1083,6 +1103,7 @@ function quitApp() {
 function registerIpc() {
   ipcMain.handle("app:get-settings", (event) => { assertOverlaySender(event); return publicSettings(); });
   ipcMain.handle("app:save-settings", async (event, value) => { assertOverlaySender(event); return saveSettings(value); });
+  ipcMain.handle("app:new-encryption-key", (event) => { assertOverlaySender(event); return generateEncryptionKey(); });
   ipcMain.handle("app:command", (event, command) => {
     assertOverlaySender(event);
     if (!command || typeof command.action !== "string") return false;
