@@ -23,6 +23,10 @@ set -e
 root=$(cd "$(dirname "$0")/.." && pwd)
 proto="$root/device/esphome"
 
+# The plugin is installed with "go install", which puts it in the Go
+# binary directory rather than on the path.
+export PATH="$PATH:$(go env GOPATH)/bin"
+
 cd "$proto"
 python3 trim_proto.py
 
