@@ -7,25 +7,25 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/wilbowes/EchoMuse-SDK/clients/go/echomuse"
 )
 
-// The rates the controller expects.
+// The rates the panel uses.
 //
 // Capture and playback differ, and a device that gets them wrong plays
 // audio at the wrong speed.
 const (
-	// CaptureRate is what the controller expects captured audio at.
+	// CaptureRate is the rate captured audio is read at. It is what the
+	// wake word and the speech detector expect.
 	CaptureRate = 16000
-	// PlaybackRate is what the controller sends audio at.
+	// PlaybackRate is the rate audio is played at.
 	PlaybackRate = 48000
 )
 
 // Backend is the device's audio.
 //
-// It satisfies the SDK's audio interfaces, so a device program can hand it
-// to the SDK without the SDK knowing what it is.
+// It satisfies the audio interfaces above, which is what lets a device
+// program hand it to the voice path without the voice path knowing what
+// it is.
 type Backend struct {
 	mu sync.RWMutex
 	// input and output are the names as the listing reported them, which
@@ -36,11 +36,11 @@ type Backend struct {
 	lastError string
 }
 
-// The SDK's interfaces, checked at compile time.
+// The interfaces, checked at compile time.
 var (
-	_ echomuse.AudioBackend        = (*Backend)(nil)
-	_ echomuse.AudioDeviceProvider = (*Backend)(nil)
-	_ echomuse.ClockedAudioBackend = (*Backend)(nil)
+	_ AudioBackend        = (*Backend)(nil)
+	_ AudioDeviceProvider = (*Backend)(nil)
+	_ ClockedAudioBackend = (*Backend)(nil)
 )
 
 // New returns a backend that uses the named devices.
@@ -156,16 +156,16 @@ func (b *Backend) SelectAudioDevices(input, output string) error {
 }
 
 // AudioDevices lists the endpoints the machine has.
-func (b *Backend) AudioDevices() (inputs, outputs []echomuse.AudioDevice, err error) {
+func (b *Backend) AudioDevices() (inputs, outputs []AudioDevice, err error) {
 	in, out, err := List()
 	if err != nil {
 		return nil, nil, err
 	}
 	for _, d := range in {
-		inputs = append(inputs, echomuse.AudioDevice{Name: d.Name, Description: d.Description, Default: d.Default})
+		inputs = append(inputs, AudioDevice{Name: d.Name, Description: d.Description, Default: d.Default})
 	}
 	for _, d := range out {
-		outputs = append(outputs, echomuse.AudioDevice{Name: d.Name, Description: d.Description, Default: d.Default})
+		outputs = append(outputs, AudioDevice{Name: d.Name, Description: d.Description, Default: d.Default})
 	}
 	return inputs, outputs, nil
 }
@@ -222,7 +222,7 @@ func (b *Backend) Playback(ctx context.Context, rate int) (io.WriteCloser, error
 //
 // The caller has to know what it got, so the returned output carries the
 // channel count it was opened with.
-func (b *Backend) OpenClockedOutput(ctx context.Context, rate, channels int) (echomuse.ClockedAudioOutput, error) {
+func (b *Backend) OpenClockedOutput(ctx context.Context, rate, channels int) (ClockedAudioOutput, error) {
 	b.mu.RLock()
 	device := b.output
 	b.mu.RUnlock()
