@@ -263,17 +263,24 @@ function voiceOverlayNeeded(state) {
 // Assistant sees.
 function publishState(state) {
   if (!controlClient?.connected) return;
-  controlClient.sendState({
+  // The volume is the speaker's volume, so it goes to the device
+  // program, which tells the speaker.
+  //
+  // It is only sent when it is known. A panel that has not read the
+  // mixer yet does not know the volume, and saying nothing is not the
+  // same as saying zero.
+  const payload = {
     mode: state.mode,
     displayIsOff: state.displayIsOff,
     keyboardVisible: state.keyboardVisible,
     sidePanelOpen: state.sidePanelOpen,
     displayMode: state.displayMode,
     brightness: state.brightness,
-    volume: state.volume,
     lastActivity: state.lastActivity,
     version: state.version,
-  });
+  };
+  if (Number.isFinite(state.volume)) payload.volume = state.volume;
+  controlClient.sendState(payload);
 }
 
 function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {
@@ -683,6 +690,9 @@ function startControlPlane() {
     // says nothing about Home Assistant. It is kept for the health
     // check, which is about the panel being able to reach it at all.
     onStatus: () => {},
+    // The state is sent as soon as the connection is there, because the
+    // connection is made after the first state has been sent.
+    onConnect: () => sendState(true),
     // The link to Home Assistant is what the drawer shows, and only the
     // device program knows whether it is there.
     onLink: (connected) => {
@@ -1364,8 +1374,19 @@ app.whenReady().then(async () => {
   // It is not waited for: the panel is the thing a person is waiting
   // for, and a quarter of a second of mixer work does not hold it up.
   refreshVolume();
-  startControlPlane();
+  // The device program is started before the control socket is opened.
+  //
+  // The socket is made by the device program, and it makes a new one
+  // every time it starts — it removes the old file and binds a new
+  // socket in its place. So a panel that connects first connects to
+  // whichever socket file is lying around, which is the previous run's,
+  // and the device program never sees it.
+  //
+  // The order is the other way round for the same reason: the device
+  // program is stopped before the socket is closed, so that it is not
+  // holding the sound card when the next one starts.
   await startDeviceProgram();
+  startControlPlane();
   app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
   app.on("second-instance", () => {
     if (!win || win.isDestroyed()) return;

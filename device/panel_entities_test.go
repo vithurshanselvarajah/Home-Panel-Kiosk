@@ -32,8 +32,13 @@ func TestPanelEntitiesHaveNoDuplicates(t *testing.T) {
 	}
 
 	// The controls that are wanted are there.
+	//
+	// There is no volume entity: the volume is the speaker's, and the
+	// speaker is a media player. A separate volume number would be a
+	// second control for the same setting, and the two would be able to
+	// disagree.
 	for _, want := range []string{
-		"screen", "brightness", "volume", "view", "dashboard", "display_mode", "exit",
+		"screen", "brightness", "view", "dashboard", "display_mode", "exit",
 		"drawer_open", "keyboard_visible", "last_activity", "version",
 	} {
 		if !seen[want] {
@@ -42,7 +47,7 @@ func TestPanelEntitiesHaveNoDuplicates(t *testing.T) {
 	}
 
 	// The ones that say the same thing as another are not.
-	for _, unwanted := range []string{"wake", "screen_off", "slideshow", "notification", "open_url"} {
+	for _, unwanted := range []string{"wake", "screen_off", "slideshow", "notification", "open_url", "volume"} {
 		if seen[unwanted] {
 			t.Errorf("the entity %q says the same thing as another one", unwanted)
 		}

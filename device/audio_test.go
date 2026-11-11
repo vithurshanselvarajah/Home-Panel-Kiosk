@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/state"
 )
 
 // fakeBackend is a sound card that is not there.
@@ -174,4 +175,106 @@ func waitFor(t *testing.T, ok func() bool, message string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal(message)
+}
+
+// TestTheSendspinGainFollowsTheVolume checks that the music is scaled by
+// the panel's volume.
+//
+// It is the whole of the music's level, so a volume of zero is silence.
+// The panel reported zero for a long time, because the volume was never
+// copied into the reported state and Home Assistant sent back what it
+// was told.
+func TestTheSendspinGainFollowsTheVolume(t *testing.T) {
+	full := []byte{0x00, 0x40, 0x00, 0x40} // 16384, 16384
+	half := append([]byte(nil), full...)
+	applySendspinGain(half, 50, false, false, 0)
+
+	if half[0] != 0x00 || half[1] != 0x20 {
+		t.Errorf("at half volume the sample was %d, want %d", int16(uint16(half[1])|uint16(half[0])<<8), 8192)
+	}
+
+	silent := append([]byte(nil), full...)
+	applySendspinGain(silent, 0, false, false, 0)
+	if silent[0] != 0x00 || silent[1] != 0x00 {
+		t.Error("at zero volume the music was not silent")
+	}
+}
+
+// TestTheMuteSilencesTheMusic checks that the mute switch is honoured.
+//
+// The mute is the panel's own, and it is what the volume is not: the
+// volume is a level and the mute is a switch.
+func TestTheMuteSilencesTheMusic(t *testing.T) {
+	pcm := []byte{0x00, 0x40, 0x00, 0x40}
+	applySendspinGain(pcm, 100, true, false, 0)
+
+	for i := 0; i < len(pcm); i += 2 {
+		if pcm[i] != 0x00 || pcm[i+1] != 0x00 {
+			t.Fatal("the music was not silent when it was muted")
+		}
+	}
+}
+
+// TestTheReportedVolumeIsThePanelsVolume checks that the panel reports
+// the volume it is actually using.
+//
+// The volume is pushed to Home Assistant as the speaker's state, and Home
+// Assistant sends the volume back as a command. A panel that reported
+// zero would be told to be silent, and would then be silent.
+func TestTheReportedVolumeIsThePanelsVolume(t *testing.T) {
+	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
+	a.setVolume(42)
+
+	state := &State{}
+	a.fillState(state)
+
+	if state.Volume != 42 {
+		t.Errorf("the reported volume was %d, want 42", state.Volume)
+	}
+	if state.Muted {
+		t.Error("the panel reported itself muted when it was not")
+	}
+}
+
+// TestTheMuteSwitchDoesNotMuteThePanel checks that the setting which
+// says the device has a mute switch does not mute it.
+//
+// The setting describes the hardware. Treating it as the mute itself left
+// the panel silent from the moment it was configured, because the setting
+// is on by default.
+func TestTheMuteSwitchDoesNotMuteThePanel(t *testing.T) {
+	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
+
+	present := true
+	tracker := state.NewTracker()
+	applyConfig(Config{MuteButton: &present}, &stateReporter{state: tracker}, a, nil, nil, testLogger())
+
+	state := &State{}
+	a.fillState(state)
+	if state.Muted {
+		t.Error("the panel muted itself because it has a mute switch")
+	}
+}
+
+// TestTheServersMuteSilencesTheMusic checks that a mute from the music
+// server reaches the speaker.
+//
+// The server can mute the music, and that is not the panel's own switch.
+// The two are kept apart, so that unmuting on one does not unmute the
+// other, and both are honoured.
+func TestTheServersMuteSilencesTheMusic(t *testing.T) {
+	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
+
+	a.mu.Lock()
+	a.sendspinMuted = true
+	muted := a.muted || a.sendspinMuted
+	a.mu.Unlock()
+
+	pcm := []byte{0x00, 0x40, 0x00, 0x40}
+	applySendspinGain(pcm, 100, muted, false, 0)
+	for i := 0; i < len(pcm); i += 2 {
+		if pcm[i] != 0x00 || pcm[i+1] != 0x00 {
+			t.Error("the music was not silent when the server had muted it")
+		}
+	}
 }

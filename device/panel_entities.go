@@ -68,21 +68,6 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 			State:    esphome.EntityValue{Kind: esphome.KindSelect, Text: "dashboard"},
 		})
 	}
-	// The volume of the room.
-	//
-	// It is a number because it is a measurement that is set, and the
-	// panel's own drawer sets it too.
-	registry.Add(&esphome.Entity{
-		Kind:        esphome.KindNumber,
-		Name:        "Volume",
-		ObjectID:    "volume",
-		Icon:        "mdi:volume-high",
-		Min:         0,
-		Max:         100,
-		Step:        1,
-		DeviceClass: "volume",
-		State:       esphome.EntityValue{Kind: esphome.KindNumber, Number: 60},
-	})
 	registry.Add(&esphome.Entity{
 		Kind:     esphome.KindButton,
 		Name:     "Return to Home",

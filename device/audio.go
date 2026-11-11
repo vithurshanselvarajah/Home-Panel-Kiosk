@@ -57,6 +57,16 @@ type deviceAudio struct {
 	onWakeAudio func(pcm []byte)
 	// onSendspinStatus is called when the music player's status changes.
 	onSendspinStatus func(status sendspin.Status)
+	// onVolume is called when the panel's volume changes, so the speaker's
+	// entity can report it.
+	onVolume func(volume float32)
+	// onSystemVolume is called when the panel's volume changes, so the
+	// system mixer can be set to match.
+	//
+	// The mixer is the application’s business — it is what the person
+	// means by the volume — so the panel asks for it rather than
+	// reaching for it itself.
+	onSystemVolume func(level int)
 	// onMediaState is called when the speaker changes what it is doing.
 	onMediaState func(state esphome.MediaPlayerState)
 	// credentialsDir is where the music player keeps its identity.
@@ -172,6 +182,9 @@ type deviceAudio struct {
 	sendspinUnpaired bool
 	// sendspinMuted is whether the music player was muted by its server.
 	sendspinMuted bool
+	// sendspinStatus is the music player's own account of what it is
+	// doing.
+	sendspinStatus sendspin.Status
 	// sendspinPump is the goroutine that watches for music and opens the
 	// speaker for it.
 	sendspinPump context.CancelFunc
@@ -217,6 +230,25 @@ func (a *deviceAudio) fillState(s *State) {
 		s.Level = a.level
 	}
 	s.Monitoring = a.monitoring
+	s.Muted = a.muted
+	// The music player's own state. It says whether a server is
+	// connected, whether the player is in step with it, and how much
+	// music is queued.
+	//
+	// It is the first thing to look at when the music is not playing: a
+	// player that is connected but not in step has the music and
+	// cannot play it.
+	s.MusicState = a.sendspinStatus.State
+	s.MusicPaired = a.sendspinStatus.PairedWith
+	s.MusicBuffered = a.sendspinStatus.BufferedMs
+	s.MusicSynced = a.sendspinStatus.Synced
+	// The volume is the panel's own, and it is reported so that Home
+	// Assistant shows the right level on the speaker's card.
+	//
+	// It has to be reported: the volume is pushed to Home Assistant as
+	// the speaker's state, and Home Assistant sends the volume back as a
+	// command. A panel that reported zero would be told to be silent.
+	s.Volume = a.volume
 }
 
 // selectInput chooses the microphone.
@@ -500,14 +532,52 @@ func (a *deviceAudio) setTestSound(counter int) {
 	}()
 }
 
-// setVolume sets the device's volume.
+// setVolume sets the panel's volume.
+//
+// There is one volume, and the speaker owns it. The speaker's level is
+// what Home Assistant shows, the panel's own gain is what the music and
+// the reply are played at, the music server is told, and the system mixer
+// is set to match.
+//
+// They are one setting seen from four places, so they are set together:
+// a panel whose speaker says one thing and whose music plays at another
+// is a panel nobody can reason about.
+//
+// The level is a percentage, 0 to 100. The protocol's media player uses
+// a fraction, so that is converted at the boundary rather than kept in
+// two forms.
 func (a *deviceAudio) setVolume(level int) {
+	level = clampVolume(level)
+
 	a.mu.Lock()
-	a.volume = clampVolume(level)
+	a.volume = level
+	player := a.sendspin
 	a.mu.Unlock()
-	if a.sendspin != nil {
-		a.sendspin.SetVolume(level)
+
+	if player != nil {
+		// The player is told, so the server knows what the panel is
+		// playing at.
+		player.SetVolume(level)
 	}
+
+	// The speaker's own state is told, so Home Assistant's slider shows
+	// the level the panel is actually using.
+	if a.onVolume != nil {
+		a.onVolume(float32(level) / 100)
+	}
+
+	// The system mixer is set to match, because the volume a person means
+	// when they reach for it on a panel is the volume of the room.
+	if a.onSystemVolume != nil {
+		a.onSystemVolume(level)
+	}
+}
+
+// currentVolume returns the panel's volume level.
+func (a *deviceAudio) currentVolume() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.volume
 }
 
 // setDuckDb sets how far the music is turned down under a reply.
@@ -1048,7 +1118,10 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		a.mu.Lock()
 		player := a.sendspin
 		volume := a.volume
-		muted := a.muted
+		// The mute is the panel's own switch or the server's, and
+		// either silences the music. The server's mute is not the
+		// panel's switch, so they are kept apart and both are honoured.
+		muted := a.muted || a.sendspinMuted
 		ducked := a.ducked
 		duckDB := a.duckDB
 		// One period is taken from each queue, so a long reply is spread
@@ -1080,10 +1153,16 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 
 		// The reply is mono and the music is stereo, so the reply is
 		// laid into both channels of the music.
+		//
+		// The reply is scaled by the volume first, so it is played at
+		// the level the speaker says. The music is scaled when it is
+		// mixed in, above.
 		if len(test) > 0 {
+			applyGain(test, volume)
 			a.mixVoiceIntoStereo(stereo, test)
 		}
 		if len(voice) > 0 {
+			applyGain(voice, volume)
 			a.mixVoiceIntoStereo(stereo, voice)
 		}
 		if muted {
@@ -1413,6 +1492,9 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 			a.setVolume(level)
 		})
 		player.OnSettings(func(_ int, muted bool, _ int) {
+			// The server can mute the music, and it is not the panel's
+			// own switch. It is kept apart from it so that unmuting on
+			// one does not unmute the other.
 			a.mu.Lock()
 			a.sendspinMuted = muted
 			a.mu.Unlock()
@@ -1478,7 +1560,15 @@ func (a *deviceAudio) startSendspinPump() {
 			a.mu.Lock()
 			player := a.sendspin
 			a.mu.Unlock()
-			if player != nil && player.Active() {
+			if player == nil {
+				continue
+			}
+			// The status is refreshed here as well as on the change
+			// callback, because the things it reports — whether the
+			// player is in step with its server, how much music is
+			// queued — change without the session changing.
+			a.setSendspinStatus(player.Status())
+			if player.Active() {
 				a.ensureOutput()
 			}
 		}
@@ -1491,6 +1581,9 @@ func (a *deviceAudio) startSendspinPump() {
 // what it is playing, and so on. It is reported to the panel so a person
 // can see whether the music works.
 func (a *deviceAudio) setSendspinStatus(status sendspin.Status) {
+	a.mu.Lock()
+	a.sendspinStatus = status
+	a.mu.Unlock()
 	if a.onSendspinStatus != nil {
 		a.onSendspinStatus(status)
 	}
