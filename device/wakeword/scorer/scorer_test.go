@@ -1,4 +1,4 @@
-package shadow
+package scorer
 
 import (
 	"errors"
@@ -151,7 +151,7 @@ func TestDropsAreCountedNotSilent(t *testing.T) {
 // TestCrossingFiresOncePerUtterance covers the refractory period. Wake scores
 // stay above threshold for several consecutive frames, so an unguarded
 // implementation reports a burst of crossings for one utterance — which floods
-// the log and makes the controller's correlation match an arbitrary one of them.
+// the log and makes the correlation match an arbitrary one of them.
 func TestCrossingFiresOncePerUtterance(t *testing.T) {
 	var (
 		mu      sync.Mutex
@@ -313,7 +313,7 @@ func (s *Scorer) peek() Stats {
 }
 
 // TestBargeThresholdAppliesOnlyWhileSpeaking is the fix for the bug that made
-// every barge-in look like an on-device miss: the controller lowers its wake bar
+// every barge-in look like an on-device miss: the panel lowers its wake bar
 // to bargeInThreshold during playback (echo at the mic is ~25dB louder than the
 // person, so speech-over-TTS scores are depressed), and a device scoring against
 // the normal threshold is not answering the same question.
@@ -365,7 +365,7 @@ func TestBargeThresholdAppliesOnlyWhileSpeaking(t *testing.T) {
 }
 
 // TestBargeThresholdIgnoredWhenUnset keeps an un-configured scorer behaving
-// exactly as before — a controller that never sends a barge threshold must not
+// exactly as before — a reply that never sends a barge threshold must not
 // change the device's behaviour.
 func TestBargeThresholdIgnoredWhenUnset(t *testing.T) {
 	inf := &fakeInferer{}
@@ -464,7 +464,7 @@ func TestTheProducerGapIsMeasuredForBothEntryPoints(t *testing.T) {
 	}
 }
 
-// TestCrossingReportsTheThresholdItCleared pins the value the controller
+// TestCrossingReportsTheThresholdItCleared pins the value the panel
 // records against the turn. During playback the bar drops to the barge-in
 // threshold, and reporting the nominal one instead is what once produced rows
 // claiming a wake had fired below its own threshold — self-contradictory data
@@ -811,7 +811,7 @@ func TestBargeCrossingIsDatedFromItsFirstFrame(t *testing.T) {
 }
 
 // TestBargeWindowReportsThePeakAtTheBargeBar: the private path's replacement
-// for the controller barge watcher's "peak=" line.
+// for the barge watcher's "peak=" line.
 func TestBargeWindowReportsThePeakAtTheBargeBar(t *testing.T) {
 	inf := &fakeInferer{}
 	s := NewScorer(inf, 0.5, nil)

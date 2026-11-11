@@ -1,10 +1,10 @@
-package shadow
+package scorer
 
 import "testing"
 
 // TestModelStemMirrorsPython pins agreement with
-// controller/em_oww_models.py::prediction_key. The device looks for
-// <stem>.onnx, so a stem that disagrees with the controller's means shadow mode
+// the original models.py prediction_key. The panel looks for
+// <stem>.onnx, so a stem that disagrees with the installed one means shadow mode
 // silently never starts — which is exactly what happened on the first
 // deployment, because filepath.Ext treats the ".1" of "hey_mycroft_v0.1" as a
 // file extension.

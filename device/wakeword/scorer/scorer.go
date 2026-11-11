@@ -1,5 +1,5 @@
 // Package shadow scores the wake stream on the device WITHOUT acting on it, so
-// on-device detection can be compared against the controller's on the same
+// on-device detection can be compared against the original on the same
 // audio before anything depends on it.
 //
 // The one hard rule: a shadow feature must never be able to damage the real
@@ -12,14 +12,14 @@
 // A shadow run that drops frames tells you something useful. One that stutters
 // the microphone tells you nothing and costs a working device.
 //
-// Scoring is otherwise identical to the controller's: the same models, the same
+// Scoring is otherwise identical to the original: the same models, the same
 // streaming buffers, the same threshold. Nothing HERE triggers a turn, touches
 // the LEDs, or sends audio — it counts, and it reports crossings. Whether a
 // crossing goes on to start a turn is owwOnDevice's business and is decided by
 // the callback, which is why this package kept its name and its rule after
 // on-device triggering shipped: the scorer is the same instrument either way,
 // and it must stay unable to damage the audio path in both.
-package shadow
+package scorer
 
 import (
 	"fmt"
@@ -64,8 +64,8 @@ type Stats struct {
 	// a device is nearly detecting or nowhere close.
 	MaxScore float32
 	// Threshold is the crossing threshold in force at the end of the window.
-	// Reported because the controller cannot judge a non-crossing without it:
-	// during playback the controller lowers its own bar to the barge-in
+	// Reported because the panel cannot judge a non-crossing without it:
+	// during playback home assistant lowers its own bar to the barge-in
 	// threshold, and a device scoring against the normal one was never asked
 	// the same question. Without this the comparison records every barge-in as
 	// an on-device miss.
@@ -77,7 +77,7 @@ type Stats struct {
 	LastErr string
 	// MaxInferMs and MaxGapMs exist to explain DROPS, which is the one number
 	// here nobody has been able to account for: 58 in 925k frames, in discrete
-	// steps, on an idle device, with turn bursts / core hotplug / controller
+	// steps, on an idle device, with turn bursts / core hotplug / home assistant
 	// redeploys all ruled out by measurement.
 	//
 	// A drop means the 8-frame (640ms) queue was full, which has exactly two
@@ -98,8 +98,8 @@ type Scorer struct {
 	det       *wakeword.Detector
 	threshold float32
 	// bargeThreshold is used instead of threshold while the speaker is
-	// streaming, mirroring the controller's own effective threshold. Zero
-	// disables the behaviour, so a controller that never sends one leaves the
+	// streaming, mirroring home assistant's own effective threshold. Zero
+	// disables the behaviour, so a reply that never sends one leaves the
 	// scorer exactly as it was.
 	bargeThreshold float32
 	speakerActive  func() bool
@@ -155,7 +155,7 @@ type Scorer struct {
 	runAts    []time.Time
 	// The barge window: frames scored at the barge-in bar since the last
 	// TakeBargeWindow, and the highest score among them. The answer to "did
-	// barge-in nearly fire, or was it nowhere close" — the controller's
+	// barge-in nearly fire, or was it nowhere close" — home assistant's
 	// barge watcher logged exactly this, and a privately listening Echo
 	// gives the watcher nothing to score.
 	bargePeak   float32
@@ -234,7 +234,7 @@ func (s *Scorer) traceFrame(score, bar float32, crossed bool) {
 }
 
 // NewScorer starts a scorer. onCross is called from the scorer goroutine when
-// the score reaches threshold, so it must not block — the controller-bound
+// the score reaches threshold, so it must not block — home-assistant-bound
 // send it wraps is buffered for that reason.
 //
 // `at` is when the crossing frame was CAPTURED (handed to Push), not when
@@ -260,7 +260,7 @@ func NewScorer(inf wakeword.Inferer, threshold float32, onCross func(score, thre
 	return s
 }
 
-// SetThreshold updates the crossing threshold, which the controller can change
+// SetThreshold updates the crossing threshold, which home assistant can change
 // at any time via a config push.
 func (s *Scorer) SetThreshold(t float32) {
 	s.mu.Lock()
@@ -290,10 +290,10 @@ func (s *Scorer) SetMinFrames(n int) {
 // the predicate for "is it streaming". Pass 0 (or a nil predicate) to score
 // against the normal threshold at all times.
 //
-// This mirrors the controller: echo at the mic is ~25dB louder than the person,
-// so speech-over-TTS scores are depressed and the controller drops its bar to
+// This mirrors what was measured: echo at the mic is ~25dB louder than the person,
+// so speech-over-TTS scores are depressed and the panel drops its bar to
 // bargeInThreshold during playback. A device that did not do the same would
-// disagree with the controller on every barge-in — and did, which is how this
+// disagree with the original on every barge-in — and did, which is how this
 // was found.
 func (s *Scorer) SetBargeThreshold(t float32, active func() bool) {
 	s.mu.Lock()
@@ -506,7 +506,7 @@ func (s *Scorer) run() {
 		// At the barge-in bar a single frame is not enough: that bar sits ~10x
 		// below the wake threshold and scores the assistant's own voice, and
 		// one frame there cut long answers off mid-sentence. Two consecutive
-		// frames, the same rule as the controller's em_barge.decide.
+		// frames, the same rule the original used.
 		if lowBar {
 			s.bargeFrames++
 			s.bargeBar = threshold
