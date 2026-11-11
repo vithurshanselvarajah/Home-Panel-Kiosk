@@ -336,3 +336,46 @@ func TestVoiceAssistantIsSafeToUseFromSeveralGoroutines(t *testing.T) {
 		}
 	}
 }
+
+func TestSetConfigurationTellsTheDevice(t *testing.T) {
+	voice := NewVoice(VoiceOptions{})
+	voice.SetWakeWord("hey_jarvis", true, true)
+
+	enabled := true
+	called := false
+	voice.SetWakeWordCallback(func(value bool) {
+		enabled = value
+		called = true
+	})
+
+	if err := voice.handleSetConfiguration(&VoiceAssistantSetConfiguration{
+		ActiveWakeWords: []string{},
+	}); err != nil {
+		t.Fatalf("the wake word could not be switched off: %v", err)
+	}
+
+	if !called {
+		t.Fatal("the device was not told the wake word was switched")
+	}
+	if enabled {
+		t.Error("the device was told the wake word was switched on when it was off")
+	}
+}
+
+func TestTheWakeWordCallbackIsNotCalledForAModelThePanelDoesNotHave(t *testing.T) {
+	voice := NewVoice(VoiceOptions{})
+	voice.SetWakeWord("hey_jarvis", true, true)
+
+	called := false
+	voice.SetWakeWordCallback(func(bool) { called = true })
+
+	if err := voice.handleSetConfiguration(&VoiceAssistantSetConfiguration{
+		ActiveWakeWords: []string{"alexa"},
+	}); err == nil {
+		t.Fatal("the panel accepted a wake word it does not have")
+	}
+
+	if called {
+		t.Error("the device was told about a request the panel could not satisfy")
+	}
+}
