@@ -68,6 +68,11 @@ let sidePanelOpen = false;
 let keyboardVisible = false;
 let inputBlurTimer;
 let keyboardKeySequence = 0;
+// The status of each thing the drawer shows.
+//
+// "control" is the link to Home Assistant. It is not the socket to the
+// device program, which is on this machine and is up whatever Home
+// Assistant is doing.
 const serviceStatus = { control: "unknown", immich: "unknown", dashboard: "unknown" };
 let lastSentState = "";
 let displayCommandId = 0;
@@ -100,6 +105,14 @@ const healthChecker = createHealthChecker({
   },
 });
 
+// probeControl checks that the device program is reachable.
+//
+// This is the socket between the panel and the device program, which is
+// on this machine. It is not the link to Home Assistant: the drawer
+// shows that, and the device program is what knows about it.
+//
+// It is checked under its own name so that it does not overwrite what
+// the drawer shows.
 function probeControl() {
   if (!controlClient?.connected) throw new Error("disconnected");
 }
@@ -118,7 +131,7 @@ async function probeImmich({ timeoutMs } = {}) {
 
 function registerHealthProbes() {
   healthChecker.setProbes({
-    control: probeControl,
+    device: probeControl,
     dashboard: probeHomeAssistant,
     immich: probeImmich,
   });
@@ -654,8 +667,18 @@ function startControlPlane() {
   controlClient = new ControlClient({
     socket,
     onCommand: (command) => handleCommand(command),
-    onStatus: (status) => {
-      setServiceStatus("control", status);
+    // The link to the device program is not the link to Home
+    // Assistant. The socket between the two is on this machine and is
+    // up whatever Home Assistant is doing, so the drawer shows what the
+    // device program says about Home Assistant instead.
+    // The socket to the device program is on this machine, so its state
+    // says nothing about Home Assistant. It is kept for the health
+    // check, which is about the panel being able to reach it at all.
+    onStatus: () => {},
+    // The link to Home Assistant is what the drawer shows, and only the
+    // device program knows whether it is there.
+    onLink: (connected) => {
+      setServiceStatus("control", connected ? "online" : "offline");
     },
     onLog: (message) => console.info(`control: ${message}`),
   });
