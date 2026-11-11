@@ -7,6 +7,7 @@ const os = require("node:os");
 const { safeUrl, settingNumber, settingBoolean, displayMode: readDisplayMode, windowBounds, DISPLAY_MODES } = require("./utils");
 const { createHealthChecker, probeHttp } = require("./health");
 const { EchoMuseClient, findSidecar } = require("./echomuse");
+const { ControlClient, findControlSocket } = require("./control");
 const { systemVolumePercent, setSystemVolume } = require("./volume");
 
 const DEFAULTS = {
@@ -17,10 +18,6 @@ const DEFAULTS = {
   slideshowToOffMinutes: 15,
   displayMode: "fullscreen",
   touchKeyboardEnabled: true,
-  mqttUrl: "",
-  mqttUsername: "",
-  mqttPassword: "",
-  mqttPrefix: "homepanel",
   deviceName: "Home Panel",
   echomuseEnabled: false,
   echomuseControllerUrl: "",
@@ -45,7 +42,7 @@ let echomuseTestSound = 0;
 let win;
 let overlayView;
 let settings = { ...DEFAULTS };
-let mqttClient;
+let controlClient;
 let mode = "dashboard";
 let lastActivity = Date.now();
 let idleTimer;
@@ -67,12 +64,7 @@ let sidePanelOpen = false;
 let keyboardVisible = false;
 let inputBlurTimer;
 let keyboardKeySequence = 0;
-const serviceStatus = { mqtt: "unknown", immich: "unknown", dashboard: "unknown" };
-let lastPublishedMode;
-let lastPublishedPower;
-let lastPublishedDisplayMode;
-let lastPublishedServiceStatus = "";
-let lastPublishedAt = 0;
+const serviceStatus = { control: "unknown", immich: "unknown", dashboard: "unknown" };
 let lastSentState = "";
 let displayCommandId = 0;
 let requestedDisplayStatus = null;
@@ -104,9 +96,8 @@ const healthChecker = createHealthChecker({
   },
 });
 
-function probeMqtt() {
-  if (!settings.mqttUrl) throw new Error("not configured");
-  if (!mqttClient?.connected) throw new Error("disconnected");
+function probeControl() {
+  if (!controlClient?.connected) throw new Error("disconnected");
 }
 
 async function probeHomeAssistant({ timeoutMs } = {}) {
@@ -123,7 +114,7 @@ async function probeImmich({ timeoutMs } = {}) {
 
 function registerHealthProbes() {
   healthChecker.setProbes({
-    mqtt: probeMqtt,
+    control: probeControl,
     dashboard: probeHomeAssistant,
     immich: probeImmich,
   });
@@ -160,14 +151,15 @@ async function injectScrollbarCSS(webContents) {
 }
 
 async function decodeSettings(data) {
-  if (data.mqttPasswordEncrypted && await safeStorage.isAsyncEncryptionAvailable()) {
-    try {
-      const { result } = await safeStorage.decryptStringAsync(Buffer.from(data.mqttPasswordEncrypted, "base64"));
-      data.mqttPassword = result;
-    } catch {}
-  }
   delete data.cameras;
+  // The MQTT settings are gone. A panel that was set up before the
+  // change still has them in its file, so they are dropped here rather
+  // than being carried about for ever.
+  delete data.mqttUrl;
+  delete data.mqttUsername;
+  delete data.mqttPassword;
   delete data.mqttPasswordEncrypted;
+  delete data.mqttPrefix;
   return { ...DEFAULTS, ...data };
 }
 
@@ -226,18 +218,23 @@ function voiceOverlayNeeded(state) {
   return Boolean(state.listening || state.speaking);
 }
 
+// publishState tells the device program what the panel is doing.
+//
+// The device program holds the Home Assistant connection, so it is the
+// one that publishes the state. The panel only has to say what it is
+// doing, and the device program turns that into the entities Home
+// Assistant sees.
 function publishState(state) {
-  if (!mqttClient?.connected) return;
-  const currentServiceStatus = JSON.stringify(state.serviceStatus);
-  const stateChanged = state.mode !== lastPublishedMode || state.displayIsOff !== lastPublishedPower
-    || state.displayMode !== lastPublishedDisplayMode || currentServiceStatus !== lastPublishedServiceStatus;
-  if (!stateChanged && Date.now() - lastPublishedAt < 30_000) return;
-  lastPublishedMode = state.mode;
-  lastPublishedPower = state.displayIsOff;
-  lastPublishedDisplayMode = state.displayMode;
-  lastPublishedServiceStatus = currentServiceStatus;
-  lastPublishedAt = Date.now();
-  mqttClient.publish(`${settings.mqttPrefix}/state`, JSON.stringify(state), { qos: 1, retain: true });
+  if (!controlClient?.connected) return;
+  controlClient.sendState({
+    mode: state.mode,
+    displayIsOff: state.displayIsOff,
+    keyboardVisible: state.keyboardVisible,
+    sidePanelOpen: state.sidePanelOpen,
+    displayMode: state.displayMode,
+    brightness: state.brightness,
+    volume: state.volume,
+  });
 }
 
 function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {
@@ -540,7 +537,6 @@ async function setBrightness(value) {
       const maximum = Number(await fs.readFile(path.join(root, "max_brightness"), "utf8"));
       if (!maximum) continue;
       await fs.writeFile(path.join(root, "brightness"), String(Math.round(maximum * percent / 100)));
-      if (mqttClient?.connected) mqttClient.publish(`${settings.mqttPrefix}/brightness`, String(percent), { qos: 1, retain: true });
       // The drawer shows the brightness, so it has to be told.
       sendState();
       return;
@@ -567,6 +563,15 @@ async function setVolume(value) {
   await refreshVolume();
 }
 
+// handleCommand acts on a command.
+//
+// The commands come from two places: the interface, when a person
+// presses something, and the device program, when Home Assistant asks
+// for something. They are the same commands and they are handled the
+// same way, so there is one handler for both.
+//
+// The names are the ones the MQTT contract used, so the handling is the
+// handling that was there before.
 function handleCommand(command) {
   if (typeof command === "string") {
     try { command = JSON.parse(command); } catch { command = { action: command }; }
@@ -587,7 +592,6 @@ function handleCommand(command) {
     case "url":
       recordActivity("home-assistant");
       openMode("url", command.url || command.target || command.value || "");
-      clearOpenUrlText();
       break;
     case "brightness": recordActivity("home-assistant"); setBrightness(command.value); break;
     case "notification": recordActivity("home-assistant"); showNotice(command); break;
@@ -604,15 +608,8 @@ function handleCommand(command) {
       recordActivity("home-assistant");
       quitApp();
       break;
-    default: console.warn("Ignored unknown MQTT action:", action);
+    default: console.warn("Ignored unknown command:", action);
   }
-}
-
-function clearOpenUrlText() {
-  if (!mqttClient?.connected) return;
-  // Keep a retained blank-equivalent value so Home Assistant restores this
-  // text entity as empty after a reload instead of losing its state topic.
-  mqttClient.publish(`${settings.mqttPrefix}/open_url/state`, " ", { qos: 1, retain: true });
 }
 
 function setServiceStatus(name, status) {
@@ -621,99 +618,24 @@ function setServiceStatus(name, status) {
   sendState();
 }
 
-function connectMqtt() {
-  if (!settings.mqttUrl) {
-    setServiceStatus("mqtt", "offline");
-    return;
-  }
-  try {
-    // Loaded on demand so installs without MQTT do not parse the client.
-    const mqtt = require("mqtt");
-    mqttClient = mqtt.connect(settings.mqttUrl, {
-      username: settings.mqttUsername || undefined,
-      password: settings.mqttPassword || undefined,
-      clientId: deviceId,
-      reconnectPeriod: 10_000,
-      connectTimeout: 10_000,
-      clean: true,
-      will: { topic: `${settings.mqttPrefix}/availability`, payload: "offline", retain: true, qos: 1 },
-    });
-    mqttClient.on("connect", () => {
-      console.info("MQTT connected");
-      mqttClient.publish(`${settings.mqttPrefix}/availability`, "online", { retain: true, qos: 1 });
-      mqttClient.subscribe(`${settings.mqttPrefix}/command`, { qos: 1 });
-      mqttClient.subscribe("homeassistant/status", { qos: 1 });
-      publishDiscovery();
-      healthChecker.probe("mqtt").catch(() => {});
-      sendState();
-    });
-    mqttClient.on("message", (topic, payload) => {
-      if (topic === "homeassistant/status") { if (payload.toString() === "online") publishDiscovery(); return; }
-      handleCommand(payload.toString());
-    });
-    mqttClient.on("close", () => { healthChecker.probe("mqtt").catch(() => {}); });
-    mqttClient.on("error", () => { healthChecker.probe("mqtt").catch(() => {}); });
-  } catch (error) {
-    setServiceStatus("mqtt", "offline");
-    console.error("MQTT setup failed:", error.message);
-  }
-}
-
-function publishDiscovery() {
-  const device = {
-    identifiers: [deviceId], name: settings.deviceName || "Home Panel",
-    manufacturer: "Vithurshan Selvarajah", model: "Home Panel", sw_version: app.getVersion(),
-  };
-  const common = { availability_topic: `${settings.mqttPrefix}/availability`, device };
-  const publishEntity = (component, objectId, config) => mqttClient.publish(
-    `homeassistant/${component}/${deviceId}/${objectId}/config`, JSON.stringify({ ...common, ...config, unique_id: `${deviceId}_${objectId}` }), { qos: 1, retain: true });
-  const removeEntity = (component, objectId) => mqttClient.publish(`homeassistant/${component}/${deviceId}/${objectId}/config`, "", { qos: 1, retain: true });
-  const commandAvailable = (name) => String(process.env.PATH || "").split(path.delimiter).some((dir) => {
-    try { fsSync.accessSync(path.join(dir, name), fsSync.constants.X_OK); return true; } catch { return false; }
+// startControlPlane connects the panel to the device program.
+//
+// The device program holds the Home Assistant connection, so the panel
+// talks to it rather than to Home Assistant. The socket is in memory
+// and the connection is tried again until it works, because the two
+// are started together and the socket is not there yet when the panel
+// starts.
+function startControlPlane() {
+  const socket = findControlSocket(runtimeDirectory(), deviceId);
+  controlClient = new ControlClient({
+    socket,
+    onCommand: (command) => handleCommand(command),
+    onStatus: (status) => {
+      setServiceStatus("control", status);
+    },
+    onLog: (message) => console.info(`control: ${message}`),
   });
-  const canControlDisplay = Boolean(process.env.WAYLAND_DISPLAY && ["wlopm", "kscreen-doctor"].some(commandAvailable))
-    || Boolean(process.env.DISPLAY && commandAvailable("xset"));
-  const hasBacklight = (() => {
-    try { return fsSync.readdirSync("/sys/class/backlight").some((entry) => {
-      const brightnessPath = path.join("/sys/class/backlight", entry, "brightness");
-      const maxPath = path.join("/sys/class/backlight", entry, "max_brightness");
-      fsSync.accessSync(brightnessPath, fsSync.constants.W_OK);
-      return Number(fsSync.readFileSync(maxPath, "utf8")) > 0;
-    }); } catch { return false; }
-  })();
-  const config = {
-    name: "Mode", unique_id: `${deviceId}_mode`, state_topic: `${settings.mqttPrefix}/state`,
-    value_template: "{{ value_json.mode }}", availability_topic: `${settings.mqttPrefix}/availability`,
-    device, icon: "mdi:tablet-dashboard",
-  };
-  mqttClient.publish(`homeassistant/sensor/${deviceId}/mode/config`, JSON.stringify(config), { qos: 1, retain: true });
-  if (settings.slideshowUrl) {
-    publishEntity("select", "view", { name: "View", options: ["dashboard", "slideshow"], command_topic: `${settings.mqttPrefix}/command`, command_template: '{"action":"set_mode","mode":"{{ value }}"}', state_topic: `${settings.mqttPrefix}/state`, value_template: "{{ value_json.mode if value_json.mode in ['dashboard', 'slideshow'] else 'dashboard' }}", optimistic: false, qos: 1, icon: "mdi:monitor-dashboard" });
-    publishEntity("button", "slideshow", { name: "Open slideshow", command_topic: `${settings.mqttPrefix}/command`, payload_press: '{"action":"slideshow"}', icon: "mdi:image-multiple" });
-  } else { removeEntity("select", "view"); removeEntity("button", "slideshow"); }
-  if (canControlDisplay) {
-    publishEntity("switch", "screen", { name: "Screen", command_topic: `${settings.mqttPrefix}/command`, payload_on: '{"action":"wake"}', payload_off: '{"action":"screen_off"}', state_topic: `${settings.mqttPrefix}/state`, value_template: "{{ 'OFF' if value_json.displayIsOff else 'ON' }}", state_on: "ON", state_off: "OFF", icon: "mdi:monitor" });
-    publishEntity("button", "wake", { name: "Wake screen", command_topic: `${settings.mqttPrefix}/command`, payload_press: '{"action":"wake"}', icon: "mdi:monitor" });
-    publishEntity("button", "screen_off", { name: "Turn screen off", command_topic: `${settings.mqttPrefix}/command`, payload_press: '{"action":"screen_off"}', icon: "mdi:monitor-off" });
-  } else { removeEntity("switch", "screen"); removeEntity("button", "wake"); removeEntity("button", "screen_off"); }
-  if (hasBacklight) publishEntity("number", "brightness", { name: "Brightness", command_topic: `${settings.mqttPrefix}/command`, command_template: '{"action":"brightness","value":{{ value | int }}}', state_topic: `${settings.mqttPrefix}/brightness`, min: 0, max: 100, step: 1, mode: "slider", unit_of_measurement: "%", icon: "mdi:brightness-6" });
-  else removeEntity("number", "brightness");
-  removeEntity("switch", "keyboard");
-  publishEntity("text", "notification", { name: "Send notification", command_topic: `${settings.mqttPrefix}/command`, command_template: '{{ {"action":"notification","message":value} | tojson }}', min: 1, max: 255, mode: "text", icon: "mdi:message-text" });
-  publishEntity("text", "open_url", { name: "Open display URL", command_topic: `${settings.mqttPrefix}/command`, command_template: '{{ {"action":"open_url","url":value} | tojson }}', state_topic: `${settings.mqttPrefix}/open_url/state`, value_template: "{{ value | trim }}", optimistic: false, min: 8, max: 255, mode: "text", icon: "mdi:link-variant" });
-  clearOpenUrlText();
-  removeEntity("button", "exit_view"); removeEntity("button", "keyboard_toggle");
-  publishEntity("button", "dashboard", { name: "Return to Home", command_topic: `${settings.mqttPrefix}/command`, payload_press: '{"action":"dashboard"}', icon: "mdi:home" });
-  // The display mode is a select rather than a switch, because there are
-  // two modes and neither is the absence of the other.
-  publishEntity("select", "display_mode", { name: "Display mode", options: ["fullscreen", "window"], command_topic: `${settings.mqttPrefix}/command`, command_template: '{"action":"display_mode","mode":"{{ value }}"}', state_topic: `${settings.mqttPrefix}/state`, value_template: "{{ value_json.displayMode }}", optimistic: false, qos: 1, icon: "mdi:monitor" });
-  publishEntity("button", "exit", { name: "Exit", command_topic: `${settings.mqttPrefix}/command`, payload_press: '{"action":"exit"}', icon: "mdi:power" });
-  // The camera picker has been removed, so clear any entity it left behind.
-  removeEntity("select", "camera");
-  for (const name of legacyCameraNames) {
-    removeEntity("button", `camera_${String(name).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 48)}`);
-  }
-  legacyCameraNames = [];
+  controlClient.start();
 }
 
 async function loadSettings() {
@@ -731,7 +653,6 @@ async function saveSettings(next) {
   const clean = { ...settings, ...next };
   clean.configured = true;
   clean.touchKeyboardEnabled = Boolean(clean.touchKeyboardEnabled);
-  if (next.mqttPassword === "••••••••" || next.mqttPassword === "") clean.mqttPassword = settings.mqttPassword;
   clean.dashboardUrl = safeUrl(clean.dashboardUrl) || DEFAULTS.dashboardUrl;
   clean.slideshowUrl = clean.slideshowUrl ? safeUrl(clean.slideshowUrl) || "" : "";
   clean.echomuseEnabled = Boolean(clean.echomuseEnabled);
@@ -747,10 +668,6 @@ async function saveSettings(next) {
   // mode it was running in.
   clean.displayMode = DISPLAY_MODES.includes(clean.displayMode) ? clean.displayMode : displayMode();
   const persisted = { ...clean };
-  if (clean.mqttPassword && await safeStorage.isAsyncEncryptionAvailable()) {
-    persisted.mqttPasswordEncrypted = (await safeStorage.encryptStringAsync(clean.mqttPassword)).toString("base64");
-    delete persisted.mqttPassword;
-  }
   await fs.mkdir(path.dirname(configPath()), { recursive: true });
   await writeSettingsFile(persisted);
   const previousDisplayMode = displayMode();
@@ -760,8 +677,6 @@ async function saveSettings(next) {
   if (settings.displayMode !== previousDisplayMode) applyDisplayMode();
   if (!settings.touchKeyboardEnabled) setKeyboardVisible(false);
   registerHealthProbes();
-  if (mqttClient) { mqttClient.end(true); mqttClient = null; }
-  connectMqtt();
   openMode(mode === "slideshow" ? "slideshow" : "dashboard");
   // The device program is restarted because the settings it was given may
   // have changed — the microphone, the speaker, the controller. It is
@@ -821,7 +736,7 @@ async function writeSettingsFile(data) {
 }
 
 function publicSettings() {
-  return { ...settings, mqttPassword: settings.mqttPassword ? "••••••••" : "" };
+  return { ...settings };
 }
 
 // Starts the EchoMuse sidecar, if the device is set up to use one.
@@ -1362,7 +1277,7 @@ app.whenReady().then(async () => {
   // It is not waited for: the panel is the thing a person is waiting
   // for, and a quarter of a second of mixer work does not hold it up.
   refreshVolume();
-  connectMqtt();
+  startControlPlane();
   await startEchoMuse();
   app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
   app.on("second-instance", () => {
@@ -1392,9 +1307,9 @@ app.on("before-quit", (event) => {
       app.quit();
     });
   }
-  if (mqttClient) {
-    mqttClient.publish(`${settings.mqttPrefix}/availability`, "offline", { retain: true, qos: 1 });
-    mqttClient.end();
+  if (controlClient) {
+    controlClient.stop();
+    controlClient = null;
   }
 });
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
