@@ -168,7 +168,9 @@ PY
     [[ -n "$def_device_name" && "$def_device_name" != "Home Panel" ]] && name_prompt="Device name shown in Home Assistant [$def_device_name]"
     read -r -p "$name_prompt: " device_name
     device_name=${device_name:-$def_device_name}
-    read -r -p "Home Assistant encryption key (optional, leave blank for none): " esphome_key
+    # The key is optional. A panel without one still connects and is
+    # still set up in one step, but the traffic is in plain text.
+    read -r -p "Home Assistant encryption key (optional, blank for none): " esphome_key
     esphome_key=${esphome_key:-$def_esphome_key}
   else
     dashboard_url=${PITOUCH_DASHBOARD_URL:-http://homeassistant.local:8123}

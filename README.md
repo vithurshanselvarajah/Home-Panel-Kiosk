@@ -22,7 +22,15 @@ The panel talks to Home Assistant over the ESPHome native API: the protocol ever
 
 The panel announces itself on the network, so Home Assistant finds it on its own. The address that is announced is the one on the interface that carries the default route, which is the one Home Assistant can reach it on.
 
-Put the **encryption key** in the settings and Home Assistant asks for the same key when the device is added. The key is what the connection is made with; without one the connection is made in plain text, which is what the protocol allows and what a device on a trusted network does.
+### The encryption key
+
+**The key is optional.** The panel works without one.
+
+Without a key the connection is made in plain text, and Home Assistant sets the device up in one step: it finds the panel, asks for its address and its port, and that is all. The traffic is readable by anything on the network, which is the whole of what a key is for.
+
+With a key the connection is encrypted, and Home Assistant asks for the key when the device is added. Give it the same key the panel has.
+
+Put the key in the settings, or leave it blank. The setting is **Keep the saved key** by default, so a saved key is not overwritten by accident; turn it off and leave the field empty to remove the key.
 
 The key is kept out of the settings file and encrypted with Electron `safeStorage`, the same way a password would be.
 
@@ -96,7 +104,7 @@ The installer writes a `settings.json` into Electron's per-user app config direc
 | `PITOUCH_TOUCH_KEYBOARD` | `true` / `false` — enable the automatic touch keyboard. |
 | `PITOUCH_DISPLAY_MODE` | `fullscreen` / `window` — how the device starts (default `fullscreen`). |
 | `PITOUCH_DEVICE_NAME` | Device name shown in Home Assistant (default `Home Panel`). |
-| `PITOUCH_ESPHOME_KEY` | Optional encryption key for the Home Assistant connection. The same key is given to Home Assistant when the device is added. |
+| `PITOUCH_ESPHOME_KEY` | Optional. Encrypts the connection to Home Assistant. The same key is given to Home Assistant when the device is added. Blank means the connection is in plain text, which is what the protocol allows. |
 | `PITOUCH_SKIP_SETUP` | Set to `1` to skip install-time setup entirely; the app will open its settings UI on first launch. |
 | `PITOUCH_SKIP_SERVICE` | Set to `1` to skip installing, enabling, or starting the systemd user service. |
 | `PITOUCH_INSTALL_WLOPM` | Set to `0` to skip installing the optional Wayland display power helper. |
