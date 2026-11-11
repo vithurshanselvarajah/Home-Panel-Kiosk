@@ -20,20 +20,22 @@ const (
 	TypeVoiceAssistantEventResponse uint32 = 92
 	// TypeVoiceAssistantAnnounceRequest is home assistant asking the
 	// device to speak.
-	TypeVoiceAssistantAnnounceRequest uint32 = 103
+	TypeVoiceAssistantAnnounceRequest uint32 = 119
 	// TypeVoiceAssistantAnnounceFinished is the device saying it has
 	// finished speaking.
-	TypeVoiceAssistantAnnounceFinished uint32 = 104
+	TypeVoiceAssistantAnnounceFinished uint32 = 120
 	// TypeVoiceAssistantConfigurationRequest is home assistant asking
 	// what wake words the device has.
-	TypeVoiceAssistantConfigurationRequest uint32 = 105
-	// TypeVoiceAssistantAudio is the audio, in both directions.
-	TypeVoiceAssistantAudio uint32 = 106
+	TypeVoiceAssistantConfigurationRequest uint32 = 121
 	// TypeVoiceAssistantConfigurationResponse is the answer.
-	TypeVoiceAssistantConfigurationResponse uint32 = 107
+	TypeVoiceAssistantConfigurationResponse uint32 = 122
 	// TypeVoiceAssistantSetConfiguration is home assistant switching the
 	// wake word on or off.
-	TypeVoiceAssistantSetConfiguration uint32 = 108
+	TypeVoiceAssistantSetConfiguration uint32 = 123
+	// TypeVoiceAssistantAudio is the audio, in both directions.
+	TypeVoiceAssistantAudio uint32 = 106
+	// TypeVoiceAssistantTimerEventResponse is a timer event.
+	TypeVoiceAssistantTimerEventResponse uint32 = 115
 )
 
 // handleVoiceMessage handles the messages of the voice assistant.
