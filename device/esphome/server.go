@@ -19,6 +19,14 @@ type Server struct {
 	registry *Registry
 	// services holds the services the device offers.
 	services *ServiceRegistry
+	// voice is the voice assistant, when the device has one.
+	voice *voiceAssistant
+	// onReplyAudio is called with the reply audio as it arrives.
+	//
+	// The panel plays the reply, and the reply arrives on the same
+	// connection as everything else, so it has to be handed over rather
+	// than fetched.
+	onReplyAudio func(pcm []byte, final bool)
 	// onConnect is called when Home Assistant connects or disconnects.
 	//
 	// The panel shows whether it is linked, and only the server knows:
@@ -149,6 +157,35 @@ func (s *Server) Services() *ServiceRegistry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.services
+}
+
+// SetVoice gives the server its voice assistant.
+//
+// It is set after the server is made, because whether the device is a
+// voice assistant is the device's business and not the protocol's.
+func (s *Server) SetVoice(voice *voiceAssistant) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.voice = voice
+}
+
+// Voice gives access to the voice assistant.
+//
+// It is nil when the device is not a voice assistant.
+func (s *Server) Voice() *voiceAssistant {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.voice
+}
+
+// OnReplyAudio sets the callback that receives the reply audio.
+//
+// The reply comes back on the connection as audio, so somebody has to
+// play it, and that somebody is the device.
+func (s *Server) OnReplyAudio(fn func(pcm []byte, final bool)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onReplyAudio = fn
 }
 
 // Listen serves the API on the given listener.
@@ -303,6 +340,13 @@ func (s *Server) handle(client *client, frame Frame) error {
 		}
 		return s.callService(client, request)
 	}
+
+	// The voice assistant's messages are handled apart, because there are
+	// enough of them to be worth keeping out of the way.
+	if handled, err := s.handleVoiceMessage(client, frame.Type, frame.Payload); handled {
+		return err
+	}
+
 	// A message the device does not know is ignored, as the protocol
 	// says: a device that answers a message it does not understand is
 	// worse than one that says nothing.
@@ -385,6 +429,10 @@ func (s *Server) deviceInfo() *DeviceInfoResponse {
 		ProjectVersion: s.version,
 		Manufacturer:   s.manufacturer,
 		Model:          s.name,
+		// The voice assistant flags say what the device can do as a
+		// voice satellite. They are read once, when home assistant
+		// connects, so they are decided once too.
+		VoiceAssistantFeatureFlags: s.voiceAssistantFlags(),
 	}
 }
 
