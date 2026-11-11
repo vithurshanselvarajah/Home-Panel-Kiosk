@@ -25,8 +25,8 @@ func TestVoiceFlagsSayWhatTheDeviceCanDo(t *testing.T) {
 
 func TestVoiceFlagsIncludeStartConversationWithAWakeWord(t *testing.T) {
 	server := NewServer(ServerOptions{Name: "panel", MAC: "AA:BB:CC:DD:EE:FF"})
-	voice := newVoiceAssistant(voiceOptions{})
-	voice.setWakeWord("hey_jarvis", true, true)
+	voice := NewVoice(VoiceOptions{})
+	voice.SetWakeWord("hey_jarvis", true, true)
 	server.SetVoice(voice)
 
 	if server.voiceAssistantFlags()&startConversationFlag == 0 {
@@ -36,8 +36,8 @@ func TestVoiceFlagsIncludeStartConversationWithAWakeWord(t *testing.T) {
 
 func TestVoiceFlagsAreOffWhenTheWakeWordIsSwitchedOff(t *testing.T) {
 	server := NewServer(ServerOptions{Name: "panel", MAC: "AA:BB:CC:DD:EE:FF"})
-	voice := newVoiceAssistant(voiceOptions{})
-	voice.setWakeWord("hey_jarvis", true, false)
+	voice := NewVoice(VoiceOptions{})
+	voice.SetWakeWord("hey_jarvis", true, false)
 	server.SetVoice(voice)
 
 	if server.voiceAssistantFlags()&startConversationFlag != 0 {
@@ -46,10 +46,10 @@ func TestVoiceFlagsAreOffWhenTheWakeWordIsSwitchedOff(t *testing.T) {
 }
 
 func TestTurnStartsWithThePhrase(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	var started string
-	voice.onTurn = func(phrase string) { started = phrase }
+	voice.SetVoiceHooks(VoiceHooks{OnTurn: func(phrase string) { started = phrase }})
 
 	voice.startTurn("hey jarvis")
 
@@ -62,10 +62,10 @@ func TestTurnStartsWithThePhrase(t *testing.T) {
 }
 
 func TestOnlyOneTurnRunsAtATime(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	starts := 0
-	voice.onTurn = func(string) { starts++ }
+	voice.SetVoiceHooks(VoiceHooks{OnTurn: func(string) { starts++ }})
 
 	voice.startTurn("hey jarvis")
 	voice.startTurn("hey jarvis")
@@ -76,14 +76,14 @@ func TestOnlyOneTurnRunsAtATime(t *testing.T) {
 }
 
 func TestTurnEndsWithTheTranscript(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	var transcript string
 	var failed bool
-	voice.onEnd = func(text string, isFailed bool) {
+	voice.SetVoiceHooks(VoiceHooks{OnEnd: func(text string, isFailed bool) {
 		transcript = text
 		failed = isFailed
-	}
+	}})
 
 	voice.startTurn("hey jarvis")
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
@@ -106,10 +106,10 @@ func TestTurnEndsWithTheTranscript(t *testing.T) {
 }
 
 func TestAnErrorIsAFailedTurn(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	var failed bool
-	voice.onEnd = func(_ string, isFailed bool) { failed = isFailed }
+	voice.SetVoiceHooks(VoiceHooks{OnEnd: func(_ string, isFailed bool) { failed = isFailed }})
 
 	voice.startTurn("hey jarvis")
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
@@ -126,10 +126,10 @@ func TestAnErrorIsAFailedTurn(t *testing.T) {
 }
 
 func TestThinkingFollowsTheEvents(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	thinking := false
-	voice.onThinking = func(value bool) { thinking = value }
+	voice.SetVoiceHooks(VoiceHooks{OnThinking: func(value bool) { thinking = value }})
 
 	voice.startTurn("hey jarvis")
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
@@ -148,10 +148,10 @@ func TestThinkingFollowsTheEvents(t *testing.T) {
 }
 
 func TestSpeakingFollowsTheReply(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	speaking := false
-	voice.onSpeaking = func(value bool) { speaking = value }
+	voice.SetVoiceHooks(VoiceHooks{OnSpeaking: func(value bool) { speaking = value }})
 
 	voice.startTurn("hey jarvis")
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
@@ -170,8 +170,8 @@ func TestSpeakingFollowsTheReply(t *testing.T) {
 }
 
 func TestConfigurationRequestOffersTheWakeWord(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
-	voice.setWakeWord("hey_jarvis", true, true)
+	voice := NewVoice(VoiceOptions{})
+	voice.SetWakeWord("hey_jarvis", true, true)
 
 	response := voice.handleConfigurationRequest()
 
@@ -187,7 +187,7 @@ func TestConfigurationRequestOffersTheWakeWord(t *testing.T) {
 }
 
 func TestConfigurationRequestOffersNothingWithoutAModel(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	response := voice.handleConfigurationRequest()
 
@@ -200,8 +200,8 @@ func TestConfigurationRequestOffersNothingWithoutAModel(t *testing.T) {
 }
 
 func TestConfigurationRequestIsEmptyWhenTheWakeWordIsOff(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
-	voice.setWakeWord("hey_jarvis", true, false)
+	voice := NewVoice(VoiceOptions{})
+	voice.SetWakeWord("hey_jarvis", true, false)
 
 	response := voice.handleConfigurationRequest()
 
@@ -216,8 +216,8 @@ func TestConfigurationRequestIsEmptyWhenTheWakeWordIsOff(t *testing.T) {
 }
 
 func TestSetConfigurationSwitchesTheWakeWordOn(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
-	voice.setWakeWord("hey_jarvis", true, false)
+	voice := NewVoice(VoiceOptions{})
+	voice.SetWakeWord("hey_jarvis", true, false)
 
 	if err := voice.handleSetConfiguration(&VoiceAssistantSetConfiguration{
 		ActiveWakeWords: []string{"hey_jarvis"},
@@ -231,8 +231,8 @@ func TestSetConfigurationSwitchesTheWakeWordOn(t *testing.T) {
 }
 
 func TestSetConfigurationSwitchesTheWakeWordOff(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
-	voice.setWakeWord("hey_jarvis", true, true)
+	voice := NewVoice(VoiceOptions{})
+	voice.SetWakeWord("hey_jarvis", true, true)
 
 	if err := voice.handleSetConfiguration(&VoiceAssistantSetConfiguration{
 		ActiveWakeWords: []string{},
@@ -246,8 +246,8 @@ func TestSetConfigurationSwitchesTheWakeWordOff(t *testing.T) {
 }
 
 func TestSetConfigurationRefusesAModelThePanelDoesNotHave(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
-	voice.setWakeWord("hey_jarvis", true, true)
+	voice := NewVoice(VoiceOptions{})
+	voice.SetWakeWord("hey_jarvis", true, true)
 
 	err := voice.handleSetConfiguration(&VoiceAssistantSetConfiguration{
 		ActiveWakeWords: []string{"alexa"},
@@ -263,13 +263,13 @@ func TestSetConfigurationRefusesAModelThePanelDoesNotHave(t *testing.T) {
 }
 
 func TestAnnounceIsHandedOn(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	var mediaID, text string
-	voice.onAnnounce = func(id, message string) {
+	voice.SetVoiceHooks(VoiceHooks{OnAnnounce: func(id, message string) {
 		mediaID = id
 		text = message
-	}
+	}})
 
 	voice.handleAnnounce(&VoiceAssistantAnnounceRequest{
 		MediaId: "http://homeassistant/media.mp3",
@@ -296,10 +296,10 @@ func TestConversationIDsAreUnique(t *testing.T) {
 }
 
 func TestEndTurnOnATurnThatNeverStartedIsHarmless(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	ended := 0
-	voice.onEnd = func(string, bool) { ended++ }
+	voice.SetVoiceHooks(VoiceHooks{OnEnd: func(string, bool) { ended++ }})
 
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
 		EventType: VoiceAssistantEvent_VOICE_ASSISTANT_RUN_END,
@@ -311,7 +311,7 @@ func TestEndTurnOnATurnThatNeverStartedIsHarmless(t *testing.T) {
 }
 
 func TestVoiceAssistantIsSafeToUseFromSeveralGoroutines(t *testing.T) {
-	voice := newVoiceAssistant(voiceOptions{})
+	voice := NewVoice(VoiceOptions{})
 
 	done := make(chan struct{})
 	for i := 0; i < 4; i++ {
