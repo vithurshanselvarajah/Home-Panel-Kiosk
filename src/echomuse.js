@@ -89,7 +89,7 @@ function findSidecar(appPath, resourcesPath, execPath) {
  * EchoMuseClient runs the sidecar and reads the state it reports.
  */
 class EchoMuseClient {
-  constructor({ binary, stateFile, levelFile, configFile, credentialsDir, deviceId, board, controllerUrl, pair, mic, speaker, runtimeDirectory, onState, onLog }) {
+  constructor({ binary, stateFile, levelFile, configFile, credentialsDir, deviceId, board, controllerUrl, pair, mic, speaker, runtimeDirectory, controlSocket, esphomeKey, esphomeName, onState, onLog }) {
     this.binary = binary;
     this.stateFile = stateFile;
     this.levelFile = levelFile || `${stateFile}.level`;
@@ -104,6 +104,12 @@ class EchoMuseClient {
     this.pair = Boolean(pair);
     this.mic = mic || "";
     this.speaker = speaker || "";
+    // The control socket is where the panel talks to this program.
+    this.controlSocket = controlSocket || "";
+    // The Home Assistant connection is made here, so the key and the name
+    // the panel is known by come from the panel.
+    this.esphomeKey = esphomeKey || "";
+    this.esphomeName = esphomeName || "";
     this.onState = onState || (() => {});
     this.onLog = onLog || (() => {});
     this.child = null;
@@ -143,6 +149,11 @@ class EchoMuseClient {
     // the device opens the right ones before the configuration is read.
     if (this.mic) args.push("--mic", this.mic);
     if (this.speaker) args.push("--speaker", this.speaker);
+    // The control plane: the socket the panel talks over and the Home
+    // Assistant connection.
+    if (this.controlSocket) args.push("--control-socket", this.controlSocket);
+    if (this.esphomeKey) args.push("--esphome-key", this.esphomeKey);
+    if (this.esphomeName) args.push("--esphome-name", this.esphomeName);
 
     // The spawn is guarded, because a path that is not executable throws
     // here rather than arriving as an error event, and a throw in here

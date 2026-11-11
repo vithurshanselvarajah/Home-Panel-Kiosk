@@ -135,6 +135,36 @@ test("a line that is not JSON does not take the connection down", async () => {
   fs.rmSync(socket, { force: true });
 });
 
+test("the client sends the state and the peer sees it as JSON", async () => {
+  const socket = socketPath();
+  const received = [];
+  const server = net.createServer((conn) => {
+    conn.on("data", (chunk) => {
+      for (const line of chunk.toString("utf8").split("\n")) {
+        if (line.trim()) received.push(JSON.parse(line));
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(socket, resolve));
+
+  const client = new ControlClient({ socket });
+  client.start();
+  await waitFor(() => client.connected);
+
+  client.sendState({ mode: "slideshow", displayIsOff: true });
+  await waitFor(() => received.length > 0);
+
+  // The device program reads the state as one message with the state
+  // under a value.
+  assert.equal(received[0].action, "state");
+  assert.equal(received[0].value.mode, "slideshow");
+  assert.equal(received[0].value.displayIsOff, true);
+
+  client.stop();
+  server.close();
+  fs.rmSync(socket, { force: true });
+});
+
 async function waitFor(predicate, timeout = 5000) {
   const started = Date.now();
   while (Date.now() - started < timeout) {
