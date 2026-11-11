@@ -77,6 +77,12 @@ type noiseConnection struct {
 	handshake *noise.HandshakeState
 	// buffer holds bytes that arrived early.
 	buffer []byte
+	// pending holds bytes that were read before the handshake started.
+	//
+	// The first byte of the connection says which conversation it is,
+	// and it is read before the handshake is prepared, so it has to be
+	// given back to the handshake.
+	pending []byte
 }
 
 // newNoiseConnection prepares an encrypted connection.
@@ -167,8 +173,15 @@ func (n *noiseConnection) writeServerHello(name, mac string) error {
 // pre-shared key.
 func (n *noiseConnection) readClientHandshake() error {
 	// The hello marker: an indicator and a length of zero.
-	var marker [3]byte
-	if _, err := io.ReadFull(n.conn, marker[:]); err != nil {
+	//
+	// The indicator was read before the handshake was prepared, so it
+	// is given back here.
+	marker := make([]byte, 3)
+	if len(n.pending) > 0 {
+		copy(marker, n.pending)
+		n.pending = nil
+	}
+	if _, err := io.ReadFull(n.conn, marker[1:]); err != nil {
 		return err
 	}
 	if marker[0] != 0x01 {
@@ -201,6 +214,13 @@ func (n *noiseConnection) readClientHandshake() error {
 
 	// Reading the client's message is the first half of the handshake.
 	if _, _, _, err := n.handshake.ReadMessage(nil, message[1:]); err != nil {
+		// The client does not know the key. It is told so, rather than
+		// being left to wait for a reply that will never come.
+		//
+		// The reply is the one a real ESPHome device sends, so the
+		// client reads it the same way and says the key is wrong
+		// rather than that the device has gone.
+		_ = n.writeHandshakeFailure()
 		return fmt.Errorf("esphome: the noise handshake failed: %w", err)
 	}
 
@@ -229,6 +249,23 @@ func (n *noiseConnection) readClientHandshake() error {
 		return err
 	}
 	return nil
+}
+
+// writeHandshakeFailure tells the client that the handshake failed.
+//
+// The frame is the indicator, the length of what follows as a sixteen
+// bit number, the number of the error, and the text. The text is the
+// one a real ESPHome device sends, so the client reads it the same way.
+func (n *noiseConnection) writeHandshakeFailure() error {
+	message := "Handshake MAC failure"
+	length := len(message) + 1
+	frame := make([]byte, 0, 4+len(message))
+	frame = append(frame, 0x01)
+	frame = append(frame, byte(length>>8), byte(length))
+	frame = append(frame, 0x01)
+	frame = append(frame, message...)
+	_, err := n.conn.Write(frame)
+	return err
 }
 
 // writeRawFrame writes bytes in the encrypted frame shape, without

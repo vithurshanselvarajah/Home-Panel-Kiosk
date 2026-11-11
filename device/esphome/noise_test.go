@@ -2,6 +2,7 @@ package esphome
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"testing"
 )
@@ -38,7 +39,19 @@ func TestEncryptedFrameRoundTrip(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		// The server reads the client's handshake and answers it.
+		// The server reads the indicator first, because it is what
+		// says which conversation this is.
+		var indicator [1]byte
+		if _, err := io.ReadFull(server, indicator[:]); err != nil {
+			done <- err
+			return
+		}
+		if indicator[0] != 0x01 {
+			done <- errWrongIndicator
+			return
+		}
+		responder.pending = indicator[:]
+		// Then it reads the client's handshake and answers it.
 		if err := responder.readClientHandshake(); err != nil {
 			done <- err
 			return
@@ -66,19 +79,18 @@ func TestEncryptedFrameRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The client sends the marker and then the handshake.
-	if _, err := client.Write([]byte{0x01, 0x00, 0x00}); err != nil {
-		t.Fatal(err)
-	}
-	header := []byte{0x01, 0x00, byte(len(first) + 1)}
-	if _, err := client.Write(header); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := client.Write([]byte{0}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := client.Write(first); err != nil {
-		t.Fatal(err)
-	}
+	//
+	// The marker is the indicator and a length of zero. The server
+	// reads the indicator on its own first, because it is what says
+	// which conversation this is, so it is written on its own.
+	go func() {
+		client.Write([]byte{0x01})
+		client.Write([]byte{0x00, 0x00})
+		header := []byte{0x01, 0x00, byte(len(first) + 1)}
+		client.Write(header)
+		client.Write([]byte{0})
+		client.Write(first)
+	}()
 
 	// The server answers: the hello and then the handshake reply.
 	go func() {

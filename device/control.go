@@ -177,6 +177,7 @@ func (s *ControlServer) accept(listener net.Listener) {
 // serve handles one panel.
 func (s *ControlServer) serve(conn net.Conn) {
 	defer conn.Close()
+	s.log.Debug("a panel connected")
 	s.connections.Store(conn, struct{}{})
 	defer s.connections.Delete(conn)
 
@@ -257,8 +258,8 @@ func (s *ControlServer) applyEntities(state ControlState) {
 			continue
 		}
 		s.registry.SetState(entity.Key, esphome.EntityValue{
-			Kind:  esphome.KindSensor,
-			State: string(encoded),
+			Kind: esphome.KindTextSensor,
+			Text: string(encoded),
 		})
 	}
 }
@@ -269,6 +270,7 @@ func (s *ControlServer) applyEntities(state ControlState) {
 // screen off or open a dashboard, and the panel knows how. The command
 // goes to every panel that is connected, and there is one.
 func (s *ControlServer) SendCommand(command ControlCommand) {
+	s.log.Debug("a command is sent to the panels", "action", command.Action)
 	s.connections.Range(func(key, _ any) bool {
 		conn, ok := key.(net.Conn)
 		if !ok {

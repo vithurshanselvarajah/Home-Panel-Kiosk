@@ -2,6 +2,7 @@ package esphome
 
 import (
 	"encoding/base64"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -62,6 +63,14 @@ func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 			results <- result{err: err}
 			return
 		}
+		// The indicator is read first, because it says which
+		// conversation this is.
+		var indicator [1]byte
+		if _, err := io.ReadFull(conn, indicator[:]); err != nil {
+			results <- result{err: err}
+			return
+		}
+		secure.pending = indicator[:]
 		// The server hello comes first, then the handshake.
 		if err := secure.writeServerHello("home-panel", "aabbccddeeff"); err != nil {
 			results <- result{err: err}

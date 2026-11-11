@@ -109,3 +109,24 @@ func TestServerPushesAndAppliesState(t *testing.T) {
 		t.Errorf("the command did not reach the entity: %+v", got)
 	}
 }
+
+// TestProjectNameHasBothParts checks the shape of the project name.
+//
+// Home Assistant takes the project name apart to show the manufacturer
+// and the model, and it expects two parts joined by a dot. A name with
+// no dot in it is a name it cannot read, and the device is set up
+// without any entities at all when it cannot read it.
+func TestProjectNameHasBothParts(t *testing.T) {
+	server := NewServer(ServerOptions{
+		Name: "home-panel", FriendlyName: "Home Panel", MAC: "aabbccddeeff",
+		Version: "0.0.2", Registry: NewRegistry(),
+	})
+	info := server.deviceInfo()
+	parts := strings.Split(info.ProjectName, ".")
+	if len(parts) != 2 {
+		t.Fatalf("the project name %q has %d parts, it should have 2", info.ProjectName, len(parts))
+	}
+	if parts[0] == "" || parts[1] == "" {
+		t.Fatalf("the project name %q has an empty part", info.ProjectName)
+	}
+}

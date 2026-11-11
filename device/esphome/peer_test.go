@@ -53,7 +53,7 @@ func splitLines(text string) []string {
 // It uses aioesphomeapi's own client, so the handshake, the framing and
 // the messages are all the ones Home Assistant uses.
 const apiPeerSource = `
-import asyncio, sys
+import asyncio, base64, sys
 
 from aioesphomeapi import APIClient
 
@@ -80,6 +80,35 @@ async def main():
         return
 
     host, port = address.rsplit(":", 1)
+
+    if mode == "handshake_failure":
+        # The client does not know the key, so the device refuses. The
+        # raw noise client is used rather than aioesphomeapi, because
+        # aioesphomeapi closes the connection when the handshake fails
+        # and the reply is what is being checked.
+        from noise.connection import NoiseConnection
+        import struct
+        proto = NoiseConnection.from_name(b"Noise_NNpsk0_25519_ChaChaPoly_SHA256")
+        proto.set_as_initiator()
+        proto.set_psks(base64.b64decode(key))
+        proto.set_prologue(b"NoiseAPIInit\x00\x00")
+        proto.start_handshake()
+        reader, writer = await asyncio.open_connection(host, int(port))
+        writer.write(b"\x01\x00\x00")
+        await writer.drain()
+        handshake = proto.write_message()
+        writer.write(b"\x01" + struct.pack(">H", len(handshake) + 1) + b"\x00" + handshake)
+        await writer.drain()
+        # The server hello comes first, then the failure.
+        header = await reader.readexactly(3)
+        length = struct.unpack(">H", header[1:3])[0]
+        await reader.readexactly(length)
+        header = await reader.readexactly(3)
+        length = struct.unpack(">H", header[1:3])[0]
+        payload = await reader.readexactly(length)
+        print("failure:" + payload[1:].decode("utf-8", "replace"))
+        return
+
     client = APIClient(host, int(port), noise_psk=key or None)
     await client.connect(login=True)
 

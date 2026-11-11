@@ -23,8 +23,10 @@ const (
 	KindText
 	// KindButton is something that is pressed.
 	KindButton
-	// KindSensor is a value that is read, not written.
+	// KindSensor is a number that is read, not written.
 	KindSensor
+	// KindTextSensor is a string that is read, not written.
+	KindTextSensor
 )
 
 func (k EntityKind) String() string {
@@ -41,6 +43,8 @@ func (k EntityKind) String() string {
 		return "button"
 	case KindSensor:
 		return "sensor"
+	case KindTextSensor:
+		return "text_sensor"
 	}
 	return "unknown"
 }
@@ -103,11 +107,9 @@ type EntityValue struct {
 	Number float64
 	// Bool is the value, for a switch.
 	Bool bool
-	// Text is the value, for a select and for a text.
+	// Text is the value, for a select, for a text and for a text
+	// sensor.
 	Text string
-	// State is the value, for a sensor. It is kept apart from Number
-	// so a sensor can report a value that is not a measurement.
-	State string
 }
 
 // String renders the value the way it is sent on the wire.
@@ -123,7 +125,9 @@ func (v EntityValue) String() string {
 	case KindSelect, KindText:
 		return v.Text
 	case KindSensor:
-		return v.State
+		return formatFloat(v.Number)
+	case KindTextSensor:
+		return v.Text
 	}
 	return ""
 }
