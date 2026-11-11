@@ -26,6 +26,8 @@ const DEFAULTS = {
   echomuseAudioInput: "",
   echomuseAudioOutput: "",
   echomusePair: true,
+  esphomeEncryptionKey: "",
+  esphomeDeviceName: "",
 };
 
 // The microphone monitor and the test sound are not settings.
@@ -151,6 +153,16 @@ async function injectScrollbarCSS(webContents) {
 }
 
 async function decodeSettings(data) {
+  if (data.esphomeEncryptionKeyEncrypted && await safeStorage.isAsyncEncryptionAvailable()) {
+    try {
+      const { result } = await safeStorage.decryptStringAsync(Buffer.from(data.esphomeEncryptionKeyEncrypted, "base64"));
+      data.esphomeEncryptionKey = result;
+    } catch (error) {
+      console.warn("The saved encryption key could not be read:", error.message);
+      delete data.esphomeEncryptionKey;
+    }
+  }
+  delete data.esphomeEncryptionKeyEncrypted;
   delete data.cameras;
   // The MQTT settings are gone. A panel that was set up before the
   // change still has them in its file, so they are dropped here rather
@@ -626,7 +638,9 @@ function setServiceStatus(name, status) {
 // are started together and the socket is not there yet when the panel
 // starts.
 function startControlPlane() {
-  const socket = findControlSocket(runtimeDirectory(), deviceId);
+  // The socket is where the sidecar was told to put it, so the two
+  // cannot disagree about it.
+  const socket = findControlSocket(runtimeDirectory(settings.echomuseDeviceId || deviceId));
   controlClient = new ControlClient({
     socket,
     onCommand: (command) => handleCommand(command),
@@ -663,11 +677,20 @@ async function saveSettings(next) {
   // they are. An empty name is the system default.
   clean.echomuseAudioInput = String(clean.echomuseAudioInput || "").trim();
   clean.echomuseAudioOutput = String(clean.echomuseAudioOutput || "").trim();
+  // The encryption key is what the Home Assistant connection is made
+  // with. It is a secret, so it is kept out of the file and put back
+  // when the settings are read.
+  clean.esphomeEncryptionKey = String(clean.esphomeEncryptionKey || "").trim();
+  clean.esphomeDeviceName = String(clean.esphomeDeviceName || "").trim();
   // The display mode is a setting, so a device that was set up before it
   // existed has none, and one with a nonsense value falls back to the
   // mode it was running in.
   clean.displayMode = DISPLAY_MODES.includes(clean.displayMode) ? clean.displayMode : displayMode();
   const persisted = { ...clean };
+  if (clean.esphomeEncryptionKey && await safeStorage.isAsyncEncryptionAvailable()) {
+    persisted.esphomeEncryptionKeyEncrypted = (await safeStorage.encryptStringAsync(clean.esphomeEncryptionKey)).toString("base64");
+    delete persisted.esphomeEncryptionKey;
+  }
   await fs.mkdir(path.dirname(configPath()), { recursive: true });
   await writeSettingsFile(persisted);
   const previousDisplayMode = displayMode();
@@ -736,7 +759,9 @@ async function writeSettingsFile(data) {
 }
 
 function publicSettings() {
-  return { ...settings };
+  const shown = { ...settings };
+  if (shown.esphomeEncryptionKey) shown.esphomeEncryptionKey = "••••••••";
+  return shown;
 }
 
 // Starts the EchoMuse sidecar, if the device is set up to use one.
@@ -854,6 +879,16 @@ async function startEchoMuse() {
     // configuration is read.
     mic: settings.echomuseAudioInput || "",
     speaker: settings.echomuseAudioOutput || "",
+    // The control socket is where the panel and the device program meet.
+    // It is in memory, because it carries what is happening now rather
+    // than anything worth keeping.
+    // The socket is in the device's own directory, beside the live
+    // state, so the panel and the device program find the same one.
+    controlSocket: path.join(runtimeDir, "control.sock"),
+    // The Home Assistant connection is made by the device program, so it
+    // needs the key and the name the panel is known by.
+    esphomeKey: settings.esphomeEncryptionKey || "",
+    esphomeName: settings.esphomeDeviceName || identity,
     onState: () => sendEchoMuseState(),
     onLog: (message) => { if (message) console.info("echomuse:", message); },
   });

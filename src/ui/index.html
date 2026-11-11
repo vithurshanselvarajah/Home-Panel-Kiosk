@@ -79,6 +79,8 @@
         <label>Display mode<select name="displayMode"><option value="fullscreen">Fullscreen — covers the screen</option><option value="window">Window — a movable window</option></select></label>
         <div class="section-label"><span>HOME ASSISTANT COMMANDS</span><span class="line"></span></div>
         <label>Device name<input name="deviceName" placeholder="Kitchen Display" /></label>
+        <label>Encryption key <span class="optional">optional</span><input name="esphomeEncryptionKey" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" /></label>
+        <label>Name in Home Assistant<input name="esphomeDeviceName" placeholder="Kitchen Display" /></label>
         <div id="form-error" class="form-error" role="alert"></div>
         <div class="form-footer"><span>Settings are stored on this device.</span><button class="save-button" type="submit">Save settings <span>→</span></button></div>
       </form>

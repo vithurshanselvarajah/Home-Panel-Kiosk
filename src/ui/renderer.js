@@ -99,6 +99,12 @@ function sendKey(value) {
 
 function populate(settings) {
   loadedSettings = settings;
+  // The encryption key is shown as dots, so the field is told it is
+  // already saved rather than empty.
+  const key = form.elements.namedItem("esphomeEncryptionKey");
+  if (key && settings.esphomeEncryptionKey === "••••••••") {
+    key.placeholder = "Saved securely · blank keeps current";
+  }
   for (const [key, value] of Object.entries(settings)) {
     const input = form.elements.namedItem(key);
     if (input) {
@@ -282,6 +288,10 @@ form.addEventListener("submit", async (event) => {
   data.idleToSlideshowMinutes = Number(data.idleToSlideshowMinutes);
   data.slideshowToOffMinutes = Number(data.slideshowToOffMinutes);
   data.touchKeyboardEnabled = form.elements.namedItem("touchKeyboardEnabled").checked;
+  // A blank encryption key means the one that is saved is kept.
+  if (!data.esphomeEncryptionKey && loadedSettings?.esphomeEncryptionKey === "••••••••") {
+    data.esphomeEncryptionKey = loadedSettings.esphomeEncryptionKey;
+  }
   $("#form-error").textContent = "";
   try {
     const saved = await window.homePanel.saveSettings(data);
