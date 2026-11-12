@@ -325,6 +325,76 @@ func (c *Client) gainVolume(v int) int {
 	return v
 }
 
+// ── transport ──────────────────────────────────────────────────────────────
+//
+// The commands are the controller role's. The panel's transport buttons
+// come through here, and so does anything else that wants to drive the
+// music.
+
+// TransportCommands says what the transport can do.
+//
+// It is empty when there is no server, or when the server has not said,
+// and the panel offers no buttons then. A control that does nothing is
+// worse than no control.
+func (c *Client) TransportCommands() []string {
+	c.mu.Lock()
+	s := c.admitted
+	c.mu.Unlock()
+	if s == nil {
+		return nil
+	}
+	controller := s.Controller()
+	if controller == nil {
+		return nil
+	}
+	// The list is copied, because the session owns it and the caller
+	// may keep it.
+	return append([]string(nil), controller.SupportedCommands...)
+}
+
+// CanTransport says whether the transport can do a command.
+//
+// The server decides which commands it will accept, so the panel is
+// told rather than guessing.
+func (c *Client) CanTransport(command string) bool {
+	for _, name := range c.TransportCommands() {
+		if name == command {
+			return true
+		}
+	}
+	return false
+}
+
+// Transport sends a command to the transport.
+//
+// The commands are the ones the server says it supports, and it checks
+// them again, so a command it does not want is dropped there.
+func (c *Client) Transport(command string) bool {
+	return c.transport(&controllerCommand{Command: command})
+}
+
+// SeekTo moves the music to a position, in milliseconds.
+func (c *Client) SeekTo(positionMs int64) bool {
+	return c.transport(&controllerCommand{Command: "seek", PositionMs: &positionMs})
+}
+
+// SeekRelative moves the music by an offset, in milliseconds. The offset
+// is signed: negative goes back.
+func (c *Client) SeekRelative(offsetMs int64) bool {
+	return c.transport(&controllerCommand{Command: "seek_relative", OffsetMs: &offsetMs})
+}
+
+// transport sends one controller command to the admitted server.
+func (c *Client) transport(cmd *controllerCommand) bool {
+	c.mu.Lock()
+	s := c.admitted
+	c.mu.Unlock()
+	if s == nil {
+		return false
+	}
+	return s.send("client/command", clientCommand{Controller: cmd}) == nil
+}
+
 func (c *Client) applySettings(p playerSettings) {
 	prev := c.store.settings()
 	c.store.setSettings(p)
@@ -396,7 +466,7 @@ func (c *Client) SyncDiag() (SyncDiag, bool) {
 func (c *Client) hello() clientHello {
 	return clientHello{
 		Name:           c.cfg.Name,
-		SupportedRoles: []string{rolePlayer},
+		SupportedRoles: []string{rolePlayer, roleMetadata, roleController},
 		DeviceInfo: &deviceInfo{
 			ProductName:     c.cfg.Product,
 			Manufacturer:    "EchoMuse",
@@ -514,6 +584,67 @@ type Status struct {
 	DelayMs    int         `json:"delayMs"`
 	Unpaired   bool        `json:"unpairedAccess"`
 	Player     playerStats `json:"player"`
+	// Metadata is what is playing.
+	//
+	// It is empty when nothing is playing, and the panel shows nothing
+	// rather than an empty box.
+	Metadata Metadata `json:"metadata"`
+	// Transport is what the transport can do.
+	//
+	// It is empty when there is no server, and the panel shows no
+	// buttons rather than buttons that do nothing.
+	Transport []string `json:"transport,omitempty"`
+}
+
+// Metadata is what the server says is playing.
+//
+// The progress is in milliseconds from the start of the track, and the
+// duration is zero for a live stream, which has no end.
+type Metadata struct {
+	Title       string `json:"title,omitempty"`
+	Artist      string `json:"artist,omitempty"`
+	Album       string `json:"album,omitempty"`
+	AlbumArtist string `json:"albumArtist,omitempty"`
+	ArtworkURL  string `json:"artworkUrl,omitempty"`
+	Year        int    `json:"year,omitempty"`
+	Track       int    `json:"track,omitempty"`
+	// ProgressMs is how far into the track the music has got.
+	ProgressMs int64 `json:"progressMs,omitempty"`
+	// DurationMs is how long the track is, or zero for a live stream.
+	DurationMs int64 `json:"durationMs,omitempty"`
+	// Speed is the playback speed as a multiplier of a thousand. A
+	// thousand is normal and zero is paused.
+	Speed int `json:"speed,omitempty"`
+}
+
+// Empty says whether there is anything to show.
+//
+// A server that sends the metadata role's object with nothing in it is
+// saying that nothing is playing, and the panel shows nothing then.
+func (m Metadata) Empty() bool {
+	return m.Title == "" && m.Artist == "" && m.Album == "" && m.ArtworkURL == ""
+}
+
+// metadataOf turns what the wire carried into what the panel shows.
+//
+// The wire's names are the spec's, and the panel's are its own, so the
+// two are kept apart rather than sharing a type.
+func metadataOf(m streamMetadata) Metadata {
+	out := Metadata{
+		Title:       m.Title,
+		Artist:      m.Artist,
+		Album:       m.Album,
+		AlbumArtist: m.AlbumArtist,
+		ArtworkURL:  m.ArtworkURL,
+		Year:        m.Year,
+		Track:       m.Track,
+	}
+	if m.Progress != nil {
+		out.ProgressMs = int64(m.Progress.TrackProgress)
+		out.DurationMs = int64(m.Progress.TrackDuration)
+		out.Speed = m.Progress.PlaybackSpeed
+	}
+	return out
 }
 
 func (c *Client) Status() Status {
@@ -544,6 +675,10 @@ func (c *Client) Status() Status {
 		st.Group = s.group.GroupName
 		if time.Since(s.lastAudio) < 2*time.Second {
 			st.State = "playing"
+		}
+		st.Metadata = metadataOf(s.metadata)
+		if controller := s.controller; controller != nil {
+			st.Transport = append([]string(nil), controller.SupportedCommands...)
 		}
 		s.mu.Unlock()
 	}

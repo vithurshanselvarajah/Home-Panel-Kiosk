@@ -23,12 +23,8 @@ type Server struct {
 	voice *Voice
 	// mediaPlayer is the speaker, when the device has one.
 	mediaPlayer *MediaPlayer
-	// onReplyAudio is called with the reply audio as it arrives.
-	//
-	// The panel plays the reply, and the reply arrives on the same
-	// connection as everything else, so it has to be handed over rather
-	// than fetched.
-	onReplyAudio func(pcm []byte, final bool)
+	// sendspin is the music player, when the device has one.
+	sendspin *Sendspin
 	// onConnect is called when Home Assistant connects or disconnects.
 	//
 	// The panel shows whether it is linked, and only the server knows:
@@ -156,6 +152,16 @@ func (s *Server) SetServices(services *ServiceRegistry) {
 	s.services = services
 }
 
+// SetSendspin gives the server its music player.
+//
+// The music player's identity is what Home Assistant pairs a music server
+// with, so it has to be in the device's capabilities.
+func (s *Server) SetSendspin(player *Sendspin) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sendspin = player
+}
+
 // SetMediaPlayer gives the server its speaker.
 //
 // It is set after the server is made, because whether the device has a
@@ -219,16 +225,6 @@ func (s *Server) Voice() *Voice {
 	return s.voice
 }
 
-// OnReplyAudio sets the callback that receives the reply audio.
-//
-// The reply comes back on the connection as audio, so somebody has to
-// play it, and that somebody is the device.
-func (s *Server) OnReplyAudio(fn func(pcm []byte, final bool)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.onReplyAudio = fn
-}
-
 // Listen serves the API on the given listener.
 //
 // The listener is already bound, so the caller decides the port and
@@ -241,8 +237,43 @@ func (s *Server) Listen(listener net.Listener) error {
 		if err != nil {
 			return err
 		}
+		enableKeepalive(conn)
 		go s.serve(conn)
 	}
+}
+
+// keepaliveIdle is how long a connection may be quiet before the
+// operating system probes it.
+//
+// It is for a connection that goes quiet without being closed: a Home
+// Assistant that is killed rather than shut down leaves a socket that
+// looks open and is not, and without keepalive the device waits on it
+// for ever. The keepalive gives the operating system a way to notice
+// that the peer has gone.
+//
+// The value is for "somebody knows something is wrong" rather than for
+// the protocol, which has no opinion on it.
+const keepaliveIdle = 30 * time.Second
+
+// enableKeepalive turns on TCP keepalive for a connection.
+//
+// It is best effort: the options are the operating system's, and a
+// platform without them gets a connection without keepalive rather than
+// an error.
+//
+// The idle time is what matters and the standard library reaches it.
+// The probe count and the probe interval are left at the system's
+// defaults, which are a reasonable number of probes at a reasonable
+// spacing.
+func enableKeepalive(conn net.Conn) {
+	tcp, ok := conn.(*net.TCPConn)
+	if !ok {
+		return
+	}
+	if err := tcp.SetKeepAlive(true); err != nil {
+		return
+	}
+	_ = tcp.SetKeepAlivePeriod(keepaliveIdle)
 }
 
 // serve handles one client.
@@ -315,11 +346,22 @@ func (s *Server) handle(client *Client, frame Frame) error {
 		return client.write(TypeDeviceInfoResponse, s.deviceInfo())
 
 	case TypeDeviceCapabilitiesRequest:
-		// The device has none of the optional capabilities: no
-		// bluetooth proxy, no voice assistant and no serial proxy. The
-		// answer is empty, and Home Assistant reads the absence of a
-		// capability as the device not having it.
-		return client.write(TypeDeviceCapabilitiesResponse, &DeviceCapabilitiesResponse{})
+		// The optional capabilities are answered here.
+		//
+		// The voice assistant's flags have to be in this answer and not
+		// only in the device information, because from API 1.15 onwards
+		// this is where Home Assistant reads them from. An empty answer
+		// says the device has no voice assistant at all, and Home
+		// Assistant then never sends the reply audio over the connection.
+		return client.write(TypeDeviceCapabilitiesResponse, &DeviceCapabilitiesResponse{
+			VoiceAssistant: &VoiceAssistantCapabilities{
+				FeatureFlags: s.voiceAssistantFlags(),
+			},
+			Sendspin: &SendspinCapabilities{
+				FeatureFlags: s.sendspinFlags(),
+				ClientId:     s.sendspinClientID(),
+			},
+		})
 
 	case TypeListEntitiesRequest:
 		return s.listEntities(client)
@@ -560,6 +602,45 @@ func (s *Server) pushAllStates(client *Client) error {
 		}
 	}
 	return nil
+}
+
+// SendAnnounceFinished tells Home Assistant that an announcement has been
+// played out.
+//
+// It is what Home Assistant waits for after it has asked the panel to
+// speak, and without it the wait times out and the connection is
+// dropped.
+func (s *Server) SendAnnounceFinished() {
+	s.connections.Range(func(key, _ any) bool {
+		client, ok := key.(*Client)
+		if !ok {
+			return true
+		}
+		if err := s.sendAnnounceFinished(client); err != nil {
+			s.log.Debug("the announcement could not be finished", "error", err)
+		}
+		return true
+	})
+}
+
+// sendspinFlags are the capabilities of the music player.
+//
+// The only one is the pairing token: the flag says the device hands out
+// the token that a music server pairs with, and Home Assistant passes it
+// on to the server.
+func (s *Server) sendspinFlags() uint32 {
+	if !s.sendspin.Enabled() {
+		return 0
+	}
+	return 1 << 0
+}
+
+// sendspinClientID is the music player's own identity.
+//
+// It is empty until the player has started once, and Home Assistant reads
+// an empty one as "not started yet" rather than as a broken device.
+func (s *Server) sendspinClientID() string {
+	return s.sendspin.ClientID()
 }
 
 // PushMediaPlayerState sends the speaker's state to every client.

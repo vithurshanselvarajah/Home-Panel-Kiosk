@@ -41,6 +41,9 @@ const DEFAULT_STATE = {
   listening: false,
   speaking: false,
   thinking: false,
+  transcript: "",
+  spoken: "",
+  spoken_progress: 0,
   muted: false,
   volume: 0,
   level: 0,
@@ -52,6 +55,20 @@ const DEFAULT_STATE = {
   selected_audio_output: "",
   monitoring: false,
   last_error: "",
+  // The music. It is what the music server says is playing, and the
+  // transport is what the server says it will take.
+  music_state: "listening",
+  music_paired: 0,
+  music_buffered: 0,
+  music_synced: false,
+  music_title: "",
+  music_artist: "",
+  music_album: "",
+  music_artwork: "",
+  music_position: 0,
+  music_duration: 0,
+  music_playing: false,
+  music_transport: [],
 };
 
 /**

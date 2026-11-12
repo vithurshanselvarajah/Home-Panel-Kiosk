@@ -1,4 +1,4 @@
-:root{font-family:'DM Sans',sans-serif;color:#f5f7fa;font-synthesis:none;--ink:#10161f;--muted:#aab3c1;--accent:#8fe3c2;--panel:rgba(16,22,31,.97)}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:transparent;overflow:hidden}body{pointer-events:none}.side-panel{position:absolute;right:0;top:0;bottom:0;width:min(330px,calc(100vw - 32px));display:flex;flex-direction:column;overflow-y:auto;padding:22px 20px 14px;border-left:1px solid rgba(255,255,255,.14);border-radius:24px 0 0 24px;background:var(--panel);backdrop-filter:blur(25px);box-shadow:-24px 0 90px rgba(0,0,0,.48);pointer-events:auto;transform:translateX(100%);visibility:hidden;transition:transform .22s ease,visibility 0s linear .22s,bottom .16s ease}.side-panel.open{transform:translateX(0);visibility:visible;transition:transform .22s ease,visibility 0s,bottom .16s ease}.side-panel.with-home-bar{top:58px}.side-panel.dragging{visibility:visible;transition:transform none,bottom .16s ease}.drawer-heading{flex:none}.side-panel .service-status,.side-panel .drawer-actions{flex:none}.drawer-heading{display:flex;align-items:flex-start;justify-content:space-between}.eyebrow{color:var(--accent);font-size:9px;font-weight:700;letter-spacing:.16em}.drawer-heading h2{margin:0;font-size:20px;letter-spacing:-.04em}.close-button{border:0;background:transparent;color:#a7b2bf;font-size:29px;line-height:1;cursor:pointer}.service-status{display:grid;gap:3px;margin:18px 0 15px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.035)}.service-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:9px;min-height:29px;color:#d5dce5;font-size:12px}.service-row b{color:#8d99a8;font-size:10px;font-weight:500}.service-led{width:8px;height:8px;border-radius:50%;background:#657180}.service-led[data-status="online"]{background:#75e0a8;box-shadow:0 0 11px rgba(117,224,168,.65)}.service-led[data-status="connecting"]{background:#f0c568;box-shadow:0 0 10px rgba(240,197,104,.55)}.service-led[data-status="offline"]{background:#ef7777;box-shadow:0 0 10px rgba(239,119,119,.5)}/* ── The quick controls ─────────────────────────────────────────────── */
+:root{font-family:'DM Sans',sans-serif;color:#f5f7fa;font-synthesis:none;--ink:#10161f;--muted:#aab3c1;--accent:#8fe3c2;--panel:rgba(16,22,31,.97)}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:transparent;overflow:hidden}body{pointer-events:none}.side-panel{position:absolute;right:0;top:0;bottom:0;width:min(330px,calc(100vw - 32px));display:flex;flex-direction:column;overflow-y:auto;padding:22px 20px 14px;border-left:1px solid rgba(255,255,255,.14);border-radius:24px 0 0 24px;background:var(--panel);backdrop-filter:blur(25px);box-shadow:-24px 0 90px rgba(0,0,0,.48);pointer-events:auto;transform:translateX(100%);visibility:hidden;transition:transform .22s ease,visibility 0s linear .22s,bottom .16s ease}.side-panel.open{transform:translateX(0);visibility:visible;transition:transform .22s ease,visibility 0s,bottom .16s ease}.side-panel.with-home-bar{top:58px}.side-panel.dragging{visibility:visible;transition:transform none,bottom .16s ease}.drawer-heading{flex:none}.side-panel .service-status,.side-panel .drawer-actions{flex:none}.drawer-heading{display:flex;align-items:flex-start;justify-content:space-between}.eyebrow{color:var(--accent);font-size:9px;font-weight:700;letter-spacing:.16em}.drawer-heading h2{margin:0;font-size:20px;letter-spacing:-.04em}.close-button{border:0;background:transparent;color:#a7b2bf;font-size:29px;line-height:1;cursor:pointer}.service-status{display:grid;gap:3px;margin:auto 0 12px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.035)}.service-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:9px;min-height:29px;color:#d5dce5;font-size:12px}.service-row b{color:#8d99a8;font-size:10px;font-weight:500}.service-led{width:8px;height:8px;border-radius:50%;background:#657180}.service-led[data-status="online"]{background:#75e0a8;box-shadow:0 0 11px rgba(117,224,168,.65)}.service-led[data-status="connecting"]{background:#f0c568;box-shadow:0 0 10px rgba(240,197,104,.55)}.service-led[data-status="offline"]{background:#ef7777;box-shadow:0 0 10px rgba(239,119,119,.5)}/* ── The quick controls ─────────────────────────────────────────────── */
 
 /* Brightness and volume sit at the top of the drawer because they are
    the two things a person reaches for most often. */
@@ -20,10 +20,45 @@
    and a control that does nothing is worse than no control. */
 .quick-control[hidden]{display:none}
 
+/* ── The music ─────────────────────────────────────────────────────────── */
+
+/* The now-playing panel. It is a card with the album art on the left, the
+   name of the track beside it, the scrubber under both and the transport
+   buttons underneath, so the drawer reads as a music player rather than a
+   list of settings. */
+.media-panel{flex:none;display:grid;grid-template-columns:72px 1fr;grid-template-rows:auto auto auto;gap:11px 13px;margin:16px 0 4px;padding:14px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.035)}
+.media-panel[hidden]{display:none}
+.media-panel__art{position:relative;width:72px;height:72px;border-radius:12px;overflow:hidden;background:linear-gradient(150deg,#1d2a38,#131a24);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.media-panel__image{width:100%;height:100%;object-fit:cover;display:block}
+.media-panel__image[hidden]{display:none}
+.media-panel__fallback{position:absolute;inset:0;display:grid;place-items:center;color:var(--accent);font-size:26px;opacity:.75}
+.media-panel__image:not([hidden])+.media-panel__fallback{display:none}
+.media-panel__details{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0}
+.media-panel__title{color:#eef2f7;font-size:13px;font-weight:600;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.media-panel__artist{color:#8d99a8;font-size:11px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.media-panel__artist:empty{display:none}
+.media-panel__scrub{grid-column:1 / -1;display:grid;gap:2px}
+.media-panel__times{display:flex;justify-content:space-between;color:#6f7b89;font-size:9.5px;font-variant-numeric:tabular-nums}
+.media-panel__transport{grid-column:1 / -1;display:flex;align-items:center;justify-content:center;gap:16px;padding-top:3px}
+.media-button{display:grid;place-items:center;width:38px;height:38px;border:0;border-radius:50%;background:rgba(255,255,255,.07);color:#d5dce5;font-size:14px;cursor:pointer;transition:background .12s ease,color .12s ease}
+.media-button:hover{background:rgba(255,255,255,.14);color:#fff}
+.media-button:disabled{opacity:.32;cursor:default}
+.media-button:disabled:hover{background:rgba(255,255,255,.07);color:#d5dce5}
+.media-button--play{width:46px;height:46px;background:var(--accent);color:#12221d;font-size:17px}
+.media-button--play:hover{background:#a4ecd0;color:#12221d}
+.media-button--play:disabled:hover{background:var(--accent)}
+
+/* A slim slider for the position in a track. The big one is for the
+   volume and the brightness, where the thumb is what is aimed at; here
+   the thumb is small and the track is thin. */
+.slider--slim{height:20px;background-size:100% 4px}
+.slider--slim::-webkit-slider-thumb{width:14px;height:14px;margin-top:-5px;border-width:2px}
+.slider--slim:disabled{cursor:default;opacity:.55}
+
 .drawer-actions{display:grid;gap:5px}.drawer-button{width:100%;min-height:45px;display:flex;align-items:center;gap:12px;padding:0 12px;border:0;border-radius:12px;background:transparent;color:#e6ebf1;text-align:left;font:500 13px 'DM Sans',sans-serif;cursor:pointer}.drawer-button>span{width:22px;color:#a5b5c2;text-align:center;font-size:19px}.drawer-button:hover,.drawer-button.selected{background:rgba(255,255,255,.09);color:var(--accent)}.drawer-button:hover>span,.drawer-button.selected>span{color:var(--accent)}/* The footer says what the panel is doing and what it is. The version is
    here because it is the thing a person is asked for when something goes
    wrong, and the drawer is where they would look. */
-.side-panel footer{margin-top:auto;padding-top:12px;border-top:1px solid rgba(255,255,255,.09);display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.side-panel footer{padding-top:12px;border-top:1px solid rgba(255,255,255,.09);display:flex;align-items:baseline;justify-content:space-between;gap:12px}
 #mode-label{color:#8490a0;font-size:10px;text-transform:uppercase;letter-spacing:.12em}
 .version-label{color:#6f7b89;font-size:10.5px;letter-spacing:.02em;text-transform:none;font-variant-numeric:tabular-nums}.notice{position:absolute;top:24px;left:50%;transform:translateX(-50%);width:min(560px,calc(100% - 40px));padding:15px 16px;display:flex;align-items:center;gap:14px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:rgba(13,19,27,.96);backdrop-filter:blur(22px);box-shadow:0 20px 80px rgba(0,0,0,.32);pointer-events:auto}.notice[hidden]{display:none}.notice-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:13px;background:#1b3e37;color:var(--accent);font-size:24px}.notice-copy{flex:1;min-width:0;display:grid;gap:3px}.notice-copy strong{font-size:14px}.notice-copy span{color:#c1cad5;font-size:13px;line-height:1.4}.notice-close{border:0;background:transparent;color:#9fa9b7;font-size:26px;cursor:pointer}.settings-panel{position:absolute;inset:0;z-index:15;display:flex;flex-direction:column;padding:24px 22px 20px;background:rgba(8,12,18,.97);box-shadow:0 24px 100px rgba(0,0,0,.46);pointer-events:auto;transition:bottom .16s ease}.settings-panel[hidden]{display:none}.panel-heading{display:flex;justify-content:space-between;align-items:flex-start;flex:none}.panel-heading h1{margin:6px 0 0;font-size:27px;letter-spacing:-.04em}.panel-intro{margin:8px 0 22px;color:var(--muted);font-size:13px;flex:none}.settings-panel form{display:grid;gap:13px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:6px}.settings-panel label{display:grid;gap:6px;color:#dfe5ec;font-size:11px;font-weight:600}.settings-panel input,.settings-panel textarea{width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.11);border-radius:10px;outline:none;background:rgba(255,255,255,.055);color:#f7f8fa;font:500 12px 'DM Sans',sans-serif}.settings-panel input:focus,.settings-panel textarea:focus{border-color:rgba(143,227,194,.65);box-shadow:0 0 0 3px rgba(143,227,194,.09)}.settings-panel input::placeholder,.settings-panel textarea::placeholder{color:#6f7b89}.settings-panel textarea{resize:vertical;min-height:70px}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.optional,.field-unit{margin-left:5px;color:#8490a0;font-size:10px;font-weight:400}
 .field-note{margin:-6px 0 0;color:#8490a0;font-size:10.5px;font-weight:400;line-height:1.5}.field-unit{margin:0;font-size:9px}.section-label{display:flex;align-items:center;gap:10px;margin:6px 0 0;color:#8894a3;font-size:9px;font-weight:700;letter-spacing:.14em}.section-label .line{height:1px;flex:1;background:rgba(255,255,255,.1)}.form-footer{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:5px;color:#8994a2;font-size:10px}.save-button{padding:10px 14px;border:0;border-radius:10px;background:var(--accent);color:#12221d;font:700 11px 'DM Sans',sans-serif;cursor:pointer}
@@ -47,13 +82,11 @@
 
 /* The voice indicator is an overlay on the view, so it never depends on the
    Home Assistant page re-rendering to stay put. */
-.voice-dim{position:absolute;inset:0;z-index:7;background:rgba(4,7,12,.55);pointer-events:none;opacity:0;transition:opacity .28s ease}
-.voice-dim[hidden]{display:none}
-.voice-dim.is-active{opacity:1}
-.voice-indicator{position:absolute;left:0;right:0;bottom:0;z-index:8;display:flex;flex-direction:column;align-items:center;gap:9px;padding-bottom:16px;pointer-events:none;transition:bottom .16s ease}
-.voice-indicator[hidden]{display:none}
-.voice-indicator__label{color:var(--accent);font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;line-height:1;transition:color .28s ease}
-.voice-indicator__canvas{display:block;width:100%;height:34px}
+
+
+
+
+
 
 /* Settings tabs */
 .settings-tabs{display:flex;gap:4px;flex:none;margin:0 0 16px;padding:3px;border:1px solid rgba(255,255,255,.08);border-radius:11px;background:rgba(255,255,255,.03)}
@@ -87,3 +120,61 @@
 .audio-meter{flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}
 .audio-meter>i{display:block;width:0;height:100%;border-radius:4px;background:var(--accent);transition:width .08s linear}
 .audio-test__value{flex:none;width:38px;text-align:right;color:#8d99a8;font-size:11px;font-variant-numeric:tabular-nums}
+
+/* ── The wake word overlay ─────────────────────────────────────────────── */
+
+/* The overlay covers the screen while the assistant is working, the way
+   a smart display does. Everything behind it is dimmed out of the way:
+   the drawer, the keyboard and the dashboard alike.
+   
+   It is above everything else, so nothing is left showing around it. */
+.voice-overlay{position:absolute;inset:0;z-index:12;display:flex;align-items:center;justify-content:center;padding:6vh 8vw;background:radial-gradient(120% 90% at 50% 40%,rgba(20,30,44,.92),rgba(4,7,12,.97));backdrop-filter:blur(26px);pointer-events:auto;opacity:0;transition:opacity .22s ease}
+.voice-overlay[hidden]{display:none}
+.voice-overlay.is-active{opacity:1}
+.voice-overlay__inner{display:flex;flex-direction:column;align-items:center;gap:26px;max-width:900px;text-align:center}
+
+/* The orb. It breathes with the microphone level while it listens and
+   turns over slowly while it thinks, so the state is visible from across
+   a room without reading anything. */
+.voice-overlay__orb{position:relative;width:132px;height:132px;display:grid;place-items:center}
+.voice-overlay__ring{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(143,227,194,.45);transform:scale(1);opacity:.55;transition:transform .12s ease-out,opacity .3s ease}
+.voice-overlay__core{width:74px;height:74px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#b9f4de,var(--accent) 55%,#4fbf9a);box-shadow:0 0 44px rgba(143,227,194,.45);transition:transform .18s ease,box-shadow .3s ease}
+/* Thinking is still listening: the panel is hearing the room and
+   working out what to say. It looks the same, and only turns over
+   rather than breathing, so the change is not something to be read. */
+.voice-overlay[data-state="thinking"] .voice-overlay__core{background:radial-gradient(circle at 35% 30%,#b9f4de,var(--accent) 55%,#4fbf9a);box-shadow:0 0 44px rgba(143,227,194,.45)}
+.voice-overlay[data-state="speaking"] .voice-overlay__core{background:radial-gradient(circle at 35% 30%,#d7c6ff,#a98cf0 55%,#7a5ec4);box-shadow:0 0 44px rgba(169,140,240,.42)}
+.voice-overlay[data-state="thinking"] .voice-overlay__ring{border-color:rgba(143,227,194,.45);animation:voice-overlay-turn 2.4s linear infinite}
+.voice-overlay[data-state="speaking"] .voice-overlay__ring{border-color:rgba(169,140,240,.45);animation:voice-overlay-turn 1.6s linear infinite}
+@keyframes voice-overlay-turn{0%{transform:scale(.72);opacity:.25}50%{transform:scale(1);opacity:.7}100%{transform:scale(.72);opacity:.25}}
+
+.voice-overlay__state{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase}
+.voice-overlay[data-state="speaking"] .voice-overlay__state{color:#c9b3ff}
+
+/* The words. What is being heard while it listens and what is being said
+   while it answers. The text does not go away between listening and
+   thinking: the words are carried over, so the screen reads as one
+   conversation rather than three screens. */
+.voice-overlay__text{min-height:1.3em;color:#f2f6fa;font-size:clamp(19px,2.6vw,34px);font-weight:500;line-height:1.35;letter-spacing:-.01em;max-width:100%}
+.voice-overlay__text:empty{display:none}
+
+/* What was heard is above, in the quieter colour, and what is being said
+   is below, in the brighter one. The two are apart so the screen reads
+   as a question and an answer rather than as one block of text. */
+.voice-overlay__text--heard{color:#9fb0c4;font-size:clamp(15px,1.9vw,25px);font-weight:500}
+.voice-overlay__text--said{color:#fff}
+
+/* The overlay is swiped away in any direction. It follows the finger and
+   fades as it goes, so the gesture reads as the gesture rather than as a
+   button press. */
+.voice-overlay.is-dismissing{transition:opacity .2s ease,transform .2s ease}
+
+/* Which music the panel is showing. The music server's is the default
+   because it is the one that knows what it is playing, and the panel's
+   own music is a tap away. */
+.media-panel__sources{grid-column:1 / -1;display:flex;gap:6px}
+.media-source{flex:1;padding:6px 8px;border:0;border-radius:9px;background:rgba(255,255,255,.05);color:#8d99a8;font:600 10px 'DM Sans',sans-serif;letter-spacing:.02em;cursor:pointer;transition:background .15s ease,color .15s ease}
+.media-source:hover{background:rgba(255,255,255,.1);color:#d5dce5}
+.media-source.is-selected{background:rgba(143,227,194,.16);color:var(--accent)}
+.media-source:disabled{opacity:.35;cursor:default}
+.media-source:disabled:hover{background:rgba(255,255,255,.05);color:#8d99a8}

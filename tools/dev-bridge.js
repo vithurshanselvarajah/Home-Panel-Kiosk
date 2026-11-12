@@ -229,6 +229,13 @@ wss.on("connection", (socket) => {
       return;
     }
     if (channel === "app:overlay-expanded" || channel === "app:activity") { reply(true); return; }
+    if (channel === "app:transport") {
+      // The transport belongs to the music server, and the development
+      // bridge has no music server, so the press is answered and
+      // dropped rather than pretended about.
+      reply(true);
+      return;
+    }
     if (channel === "app:keyboard-key") { reply(true); return; }
     if (channel === "app:test-sound") {
       // The counter is what tells the device a new tone was asked for.

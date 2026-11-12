@@ -83,9 +83,9 @@ func TestAMediaPlayerCommandSetsTheMute(t *testing.T) {
 	player.OnMute(func(muted bool) { got = muted })
 
 	player.HandleCommand(1, &MediaPlayerCommandRequest{
-		Key:       1,
+		Key:        1,
 		HasCommand: true,
-		Command:   MediaPlayerCommand_MEDIA_PLAYER_COMMAND_MUTE,
+		Command:    MediaPlayerCommand_MEDIA_PLAYER_COMMAND_MUTE,
 	})
 
 	if !got {
@@ -118,5 +118,59 @@ func TestAMediaPlayerCommandHandsOnTheURL(t *testing.T) {
 	}
 	if !announcement {
 		t.Error("the announcement was not marked as one")
+	}
+}
+
+// TestTheSpeakerCanBeBrowsed checks that Home Assistant offers its media
+// browser for the speaker.
+//
+// Without the flag the speaker shows up with no way of choosing anything
+// to play on it: the service works, but there is nothing to pick from.
+func TestTheSpeakerCanBeBrowsed(t *testing.T) {
+	player := NewMediaPlayer(nil)
+	message, err := player.Message(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, ok := message.Body.(*ListEntitiesMediaPlayerResponse)
+	if !ok {
+		t.Fatalf("the speaker's listing was a %T", message.Body)
+	}
+
+	// The value is the one Home Assistant reads. It is the same bit
+	// ESPHome uses, and the two are the same bit.
+	if body.GetFeatureFlags()&(1<<17) == 0 {
+		t.Errorf("the speaker's flags were %d, which do not include browsing",
+			body.GetFeatureFlags())
+	}
+}
+
+// TestTheSpeakerOffersTheFormatsHomeAssistantAsks checks that the
+// announcement format is there.
+//
+// Home Assistant reads the announcement format to know what to convert
+// the audio to, and without it the announcement is sent at whatever rate
+// the source happened to be at.
+func TestTheSpeakerOffersTheFormatsHomeAssistantAsks(t *testing.T) {
+	player := NewMediaPlayer(nil)
+	message, err := player.Message(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	body, ok := message.Body.(*ListEntitiesMediaPlayerResponse)
+	if !ok {
+		t.Fatalf("the speaker's listing was a %T", message.Body)
+	}
+
+	var announcement bool
+	for _, format := range body.GetSupportedFormats() {
+		if format.GetPurpose() == MediaPlayerFormatPurpose_MEDIA_PLAYER_FORMAT_PURPOSE_ANNOUNCEMENT {
+			announcement = true
+		}
+	}
+	if !announcement {
+		t.Error("the speaker offered no announcement format")
 	}
 }

@@ -155,6 +155,25 @@ func (w *wakeWord) Push(pcm []byte, at time.Time) {
 	w.scorer.PushBytesAt(pcm, at)
 }
 
+// Reset forgets what the wake word has heard.
+//
+// The detector's score is computed from the last two seconds of audio, so
+// the audio of the turn that just finished is still in it. Without a
+// reset the reply is scored as part of the next wake word, and the reply
+// is loud — it is the panel talking — so the panel can hear itself.
+//
+// It is called when the microphone is opened again, because a gap in the
+// audio is a gap in what the detector saw.
+func (w *wakeWord) Reset() {
+	if w == nil {
+		return
+	}
+	w.gate.Reset()
+	if w.scorer != nil {
+		w.scorer.Reset()
+	}
+}
+
 // crossed is called when the scorer sees the wake word.
 func (w *wakeWord) crossed(score, threshold float32, at time.Time) {
 	if w == nil {
@@ -188,6 +207,13 @@ func (w *wakeWord) SetEnabled(enabled bool) {
 }
 
 // SetThreshold sets the score the wake word has to reach.
+// Threshold is the score the wake word has to reach.
+func (w *wakeWord) Threshold() float64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.threshold
+}
+
 func (w *wakeWord) SetThreshold(threshold float64) {
 	if w == nil || w.scorer == nil {
 		return
@@ -199,6 +225,25 @@ func (w *wakeWord) SetThreshold(threshold float64) {
 	w.threshold = threshold
 	w.mu.Unlock()
 	w.scorer.SetThreshold(float32(threshold))
+}
+
+// SetBargeThreshold sets the score the wake word has to reach while the
+// speaker is playing.
+//
+// The echo of the panel's own voice is about twenty-five decibels louder
+// at the microphone than the person talking over it, so a person who
+// interrupts is heard far more quietly than they would be in a quiet
+// room. The bar is dropped while the panel is speaking so that a person
+// can interrupt it.
+//
+// It is dropped and not removed: the bar still has to be cleared twice
+// in a row, so a click or a consonant in passing speech does not cut
+// the reply off.
+func (w *wakeWord) SetBargeThreshold(threshold float64, active func() bool) {
+	if w == nil || w.scorer == nil {
+		return
+	}
+	w.scorer.SetBargeThreshold(float32(threshold), active)
 }
 
 // Enabled says whether the wake word is switched on.

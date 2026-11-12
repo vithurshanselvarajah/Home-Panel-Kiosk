@@ -54,6 +54,21 @@ type ControlPlane struct {
 	// to send the audio, and there is nowhere to send it when Home
 	// Assistant is not listening.
 	client *esphome.Client
+	// onWakeThreshold is called when the wake word's sensitivity is
+	// changed.
+	onWakeThreshold func(threshold float64)
+	// onWakeEnabled is called when the wake word is switched.
+	onWakeEnabled func(enabled bool)
+	// onDucking is called when the ducking is changed.
+	onDucking func(db float64)
+	// onMuted is called when the panel's mute switch is changed.
+	onMuted func(muted bool)
+	// onLink is called when the link to Home Assistant comes up or goes
+	// down.
+	//
+	// It is what the drawer shows as the connection, and nothing else
+	// sets it.
+	onLink func(connected bool)
 	// log is where the messages go.
 	log *slog.Logger
 	// closeOnce makes the closing happen once.
@@ -87,6 +102,9 @@ func startControlPlane(
 		HasBacklight:     true,
 		HasSlideshow:     true,
 	})
+	// The voice settings are entities too, so Home Assistant can read
+	// them and change them.
+	voiceEntities(registry)
 
 	api := esphome.NewServer(esphome.ServerOptions{
 		Name:          name,
@@ -182,6 +200,12 @@ func startControlPlane(
 		if server != nil {
 			server.SetConnected(connected)
 		}
+		// The drawer says whether the panel can reach Home Assistant, and
+		// the link is what says. Nothing else sets it, so without this the
+		// drawer says "Disconnected" for ever.
+		if plane.onLink != nil {
+			plane.onLink(connected)
+		}
 	})
 
 	// The panel's own volume is the speaker's volume.
@@ -218,7 +242,7 @@ func startControlPlane(
 		}
 	})
 	api.SetServices(services)
-	wireEntities(registry, server, log)
+	wireEntities(registry, server, plane, log)
 
 	return plane
 }
@@ -230,7 +254,7 @@ func startControlPlane(
 // screen, a number for the brightness, a select for the view. The
 // command is the thing the panel understands. This is where the two
 // meet.
-func wireEntities(registry *esphome.Registry, server *ControlServer, log *slog.Logger) {
+func wireEntities(registry *esphome.Registry, server *ControlServer, plane *ControlPlane, log *slog.Logger) {
 	send := func(command ControlCommand) {
 		if server == nil {
 			return
@@ -264,6 +288,16 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, log *slog.L
 				send(ControlCommand{Action: "display_mode", Mode: value.Text})
 			case "exit":
 				send(ControlCommand{Action: "exit"})
+			case "wake_word_threshold":
+				// The sensitivity is a percentage and the wake word
+				// wants a fraction.
+				plane.setWakeThreshold(value.Number / 100)
+			case "wake_word_enabled":
+				plane.setWakeEnabled(value.Bool)
+			case "music_ducking_db":
+				plane.setDucking(value.Number)
+			case "muted":
+				plane.setMuted(value.Bool)
 			default:
 				log.Debug("an entity was changed and nothing knows what to do", "entity", entity.ObjectID)
 			}
@@ -523,6 +557,30 @@ func (p *ControlPlane) SetMediaPlayerState(state esphome.MediaPlayerState) {
 	p.api.PushMediaPlayerState()
 }
 
+// SetSendspin gives the server the music player.
+//
+// The music player's identity is in the device's capabilities, because
+// that is how a music server tells that the player it found is the
+// player Home Assistant already knows about.
+func (p *ControlPlane) SetSendspin(player *esphome.Sendspin) {
+	if p.api == nil {
+		return
+	}
+	p.api.SetSendspin(player)
+}
+
+// AnnounceFinished tells Home Assistant that an announcement has been
+// played out.
+//
+// It is what Home Assistant waits for after it has asked the panel to
+// speak. Without it the wait times out and the connection is dropped.
+func (p *ControlPlane) AnnounceFinished() {
+	if p.api == nil {
+		return
+	}
+	p.api.SendAnnounceFinished()
+}
+
 // OnMediaPlayer wires the speaker's callbacks.
 //
 // The panel holds the sound card, so it is the one that plays the audio
@@ -550,6 +608,69 @@ type MediaPlayerHooks struct {
 	OnMute func(muted bool)
 	// OnState is called when the player changes what it is doing.
 	OnState func(state esphome.MediaPlayerState)
+}
+
+// Transcript says what Home Assistant heard.
+//
+// The panel shows it while the assistant is thinking about it, so the
+// person can see that it heard what they said.
+func (p *ControlPlane) Transcript() string {
+	if p.voice == nil {
+		return ""
+	}
+	return p.voice.Transcript()
+}
+
+// ReplyPlayedOut says the reply has been played out.
+//
+// The reply is over when the speaker has drained it, and the speaker is
+// the one that knows.
+func (p *ControlPlane) ReplyPlayedOut() {
+	if p.voice == nil {
+		return
+	}
+	p.voice.ReplyPlayedOut()
+}
+
+// Spoken says what Home Assistant is saying.
+//
+// The panel shows it while the reply is being played.
+func (p *ControlPlane) Spoken() string {
+	if p.voice == nil {
+		return ""
+	}
+	return p.voice.Spoken()
+}
+
+// SpokenProgress says how much of the reply has been played.
+//
+// It is between zero and one, and the panel shows the answer's words
+// as far along as it is.
+func (p *ControlPlane) SpokenProgress() float64 {
+	if p.audio == nil {
+		return 0
+	}
+	return p.audio.spokenProgress()
+}
+
+// OnLink sets the callback for the link to Home Assistant.
+//
+// It is called when the link comes up and when it goes down, and it is
+// what the drawer shows as the connection.
+func (p *ControlPlane) OnLink(fn func(connected bool)) {
+	p.onLink = fn
+}
+
+// OnTransport sets the handler for the music transport.
+//
+// The panel has the transport buttons and the music server has the
+// transport, so the button is pressed on the panel and the command
+// travels through here to the server.
+func (p *ControlPlane) OnTransport(fn func(command TransportCommand)) {
+	if p.server == nil {
+		return
+	}
+	p.server.SetTransportHandler(fn)
 }
 
 // OnVoice wires the voice assistant's callbacks.
@@ -588,6 +709,103 @@ func (p *ControlPlane) SendVoiceAudio(pcm []byte, end bool) error {
 		return esphome.ErrNoClient
 	}
 	return p.api.SendVoiceAudio(pcm, end)
+}
+
+// SendVoiceEnd says the utterance is over.
+//
+// It is an empty block of audio with the end flag on it, and it is how
+// the device tells home assistant that it has stopped talking.
+//
+// Without it the pipeline is left open on the device's side, and a turn
+// that ends badly can sit there until something times out.
+func (p *ControlPlane) SendVoiceEnd() error {
+	if p.api == nil {
+		return esphome.ErrNoClient
+	}
+	return p.api.SendVoiceEnd()
+}
+
+// setWakeThreshold sets how sensitive the wake word is.
+//
+// It is the score the wake word has to reach, as a fraction of the
+// scale. A panel in a noisy room wants a higher one.
+func (p *ControlPlane) setWakeThreshold(threshold float64) {
+	if p.onWakeThreshold != nil {
+		p.onWakeThreshold(threshold)
+	}
+	p.publishVoiceSettings()
+}
+
+// PublishVoiceSettings puts the voice settings into the entities.
+//
+// It is called once the configuration has been read, so Home Assistant
+// reads the values the device is really using rather than the ones it
+// was built with.
+func (p *ControlPlane) PublishVoiceSettings() {
+	p.publishVoiceSettings()
+}
+
+// publishVoiceSettings puts the voice settings into the entities, so
+// Home Assistant can read them.
+func (p *ControlPlane) publishVoiceSettings() {
+	if p.server == nil || p.audio == nil {
+		return
+	}
+	p.server.SetVoiceSettings(
+		p.audio.wakeThreshold(),
+		p.audio.wakeEnabled(),
+		p.audio.duckLevel(),
+		p.audio.mutedNow(),
+	)
+}
+
+// setWakeEnabled switches the wake word on or off.
+func (p *ControlPlane) setWakeEnabled(enabled bool) {
+	if p.onWakeEnabled != nil {
+		p.onWakeEnabled(enabled)
+	}
+	p.publishVoiceSettings()
+}
+
+// setDucking sets how far the music is turned down under a reply.
+//
+// It is in decibels and it is negative, so the music is quieter than it
+// would be rather than louder.
+func (p *ControlPlane) setDucking(db float64) {
+	if p.onDucking != nil {
+		p.onDucking(db)
+	}
+	p.publishVoiceSettings()
+}
+
+// setMuted turns the panel's own mute switch on or off.
+func (p *ControlPlane) setMuted(muted bool) {
+	if p.onMuted != nil {
+		p.onMuted(muted)
+	}
+	p.publishVoiceSettings()
+}
+
+// OnWakeThreshold sets what happens when the wake word's sensitivity
+// is changed.
+func (p *ControlPlane) OnWakeThreshold(fn func(threshold float64)) {
+	p.onWakeThreshold = fn
+}
+
+// OnWakeEnabled sets what happens when the wake word is switched on or
+// off.
+func (p *ControlPlane) OnWakeEnabled(fn func(enabled bool)) {
+	p.onWakeEnabled = fn
+}
+
+// OnDucking sets what happens when the ducking is changed.
+func (p *ControlPlane) OnDucking(fn func(db float64)) {
+	p.onDucking = fn
+}
+
+// OnMuted sets what happens when the panel's mute switch is changed.
+func (p *ControlPlane) OnMuted(fn func(muted bool)) {
+	p.onMuted = fn
 }
 
 // OnWakeWord sets the callback for the wake word being switched.

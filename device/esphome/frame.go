@@ -30,27 +30,27 @@ import (
 // These are part of the wire format and cannot change: Home Assistant
 // looks a message up by number, not by name.
 const (
-	TypeHelloRequest                    uint32 = 1
-	TypeHelloResponse                   uint32 = 2
-	TypeDisconnectRequest               uint32 = 5
-	TypeDisconnectResponse              uint32 = 6
-	TypePingRequest                     uint32 = 7
-	TypePingResponse                    uint32 = 8
-	TypeDeviceInfoRequest               uint32 = 9
-	TypeDeviceInfoResponse              uint32 = 10
-	TypeListEntitiesRequest             uint32 = 11
-	TypeListEntitiesDoneResponse        uint32 = 19
-	TypeSubscribeStatesRequest          uint32 = 20
-	TypeHomeassistantActionRequest      uint32 = 35
-	TypeSubscribeHomeassistantServices  uint32 = 34
-	TypeSubscribeHomeAssistantStates    uint32 = 38
-	TypeSubscribeHomeAssistantState     uint32 = 39
-	TypeHomeAssistantStateResponse      uint32 = 40
-	TypeListEntitiesServicesResponse    uint32 = 41
-	TypeExecuteServiceRequest           uint32 = 42
-	TypeDeviceCapabilitiesRequest       uint32 = 149
-	TypeDeviceCapabilitiesResponse      uint32 = 150
-	TypeHomeassistantActionResponse     uint32 = 130
+	TypeHelloRequest                   uint32 = 1
+	TypeHelloResponse                  uint32 = 2
+	TypeDisconnectRequest              uint32 = 5
+	TypeDisconnectResponse             uint32 = 6
+	TypePingRequest                    uint32 = 7
+	TypePingResponse                   uint32 = 8
+	TypeDeviceInfoRequest              uint32 = 9
+	TypeDeviceInfoResponse             uint32 = 10
+	TypeListEntitiesRequest            uint32 = 11
+	TypeListEntitiesDoneResponse       uint32 = 19
+	TypeSubscribeStatesRequest         uint32 = 20
+	TypeHomeassistantActionRequest     uint32 = 35
+	TypeSubscribeHomeassistantServices uint32 = 34
+	TypeSubscribeHomeAssistantStates   uint32 = 38
+	TypeSubscribeHomeAssistantState    uint32 = 39
+	TypeHomeAssistantStateResponse     uint32 = 40
+	TypeListEntitiesServicesResponse   uint32 = 41
+	TypeExecuteServiceRequest          uint32 = 42
+	TypeDeviceCapabilitiesRequest      uint32 = 149
+	TypeDeviceCapabilitiesResponse     uint32 = 150
+	TypeHomeassistantActionResponse    uint32 = 130
 
 	TypeBinarySensorStateResponse uint32 = 21
 	TypeSensorStateResponse       uint32 = 25
