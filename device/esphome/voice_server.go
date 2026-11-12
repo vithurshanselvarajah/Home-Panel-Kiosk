@@ -129,16 +129,20 @@ func (s *Server) handleVoiceMessage(client *Client, messageType uint32, payload 
 
 // pushReplyAudio hands the reply audio to whoever is playing it.
 //
-// The audio arrives in chunks, and the last chunk of a reply has the end
-// flag set. The chunks are handed on as they arrive so the reply starts
-// playing before it has all arrived.
+// The audio arrives in chunks and the chunks are handed on as they arrive,
+// so the reply starts playing before it has all arrived.
+//
+// The end flag is not what ends a reply. Home Assistant sends the audio
+// with the flag clear and says the reply is over with an event, so the
+// flag only ever marks a reply that was cut short.
 func (s *Server) pushReplyAudio(audio *VoiceAssistantAudio) {
 	data := audio.GetData()
 	if len(data) == 0 && !audio.GetEnd() {
 		return
 	}
-	if s.onReplyAudio != nil {
-		s.onReplyAudio(data, audio.GetEnd())
+	s.log.Debug("the reply audio arrived", "bytes", len(data), "end", audio.GetEnd())
+	if s.voice != nil {
+		s.voice.handleReplyAudio(data, audio.GetEnd())
 	}
 }
 

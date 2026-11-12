@@ -21,11 +21,24 @@ const (
 	// silent link for this long is a dead one.
 	idleTimeout = 30 * time.Second
 
-	rolePlayer   = "player@v1"
-	actPlayback  = "playback"
-	actPairing   = "pairing"
-	methodPSK    = "pairing_psk"
-	maxReadBytes = 4 << 20
+	rolePlayer = "player@v1"
+	// roleMetadata is the role that carries what is playing.
+	//
+	// A client that declares it is sent the metadata: the title, the
+	// artist, the album, the artwork and where the track has got to.
+	// Without it the server has no way of telling the device what it is
+	// playing, because the audio itself says nothing about that.
+	roleMetadata = "metadata@v1"
+	// roleController is the role that drives the transport.
+	//
+	// A client that declares it is sent the list of commands the server
+	// will accept, and may send commands of its own: play, pause, the
+	// next track and the one after it, and seeking.
+	roleController = "controller@v1"
+	actPlayback    = "playback"
+	actPairing     = "pairing"
+	methodPSK      = "pairing_psk"
+	maxReadBytes   = 4 << 20
 )
 
 // session is one server's WebSocket. The read loop owns almost everything;
@@ -69,6 +82,17 @@ type session struct {
 	stateDue   bool // one is owed, held until the clock converges
 	group      groupUpdate
 	lastAudio  time.Time
+	// metadata is what the server says is playing.
+	//
+	// It is separate from the group and the player: this is the music
+	// itself — the title, the artist, the album, the artwork and where
+	// the track has got to.
+	metadata streamMetadata
+	// controller is what the server says the transport can do.
+	//
+	// It is nil until the server says, and the panel only offers the
+	// controls it has been told are there.
+	controller *controllerState
 }
 
 func newSession(c *Client, ws *websocket.Conn) *session {
@@ -193,6 +217,11 @@ func (s *session) dispatch(env envelope) error {
 			s.group = g
 			s.mu.Unlock()
 			s.c.changed()
+		}
+	case "server/state":
+		var st serverState
+		if json.Unmarshal(env.Payload, &st) == nil {
+			s.onServerState(st)
 		}
 	case "server/command":
 		var cmd serverCommand
@@ -446,6 +475,46 @@ func (s *session) onTime(t serverTime) {
 	if due && s.filter.synchronized() {
 		s.sendState()
 	}
+}
+
+// onServerState records what the server says is playing.
+//
+// The metadata is what the panel shows in its drawer: the title, the
+// artist, the album, the artwork and where the track has got to.
+//
+// It is separate from the player's own state, because the player is
+// about the sound and this is about the music.
+//
+// A null metadata means the music has stopped, and the panel is told
+// so by being told there is nothing.
+func (s *session) onServerState(st serverState) {
+	s.mu.Lock()
+	switch {
+	case st.MetadataNull:
+		s.metadata = streamMetadata{}
+	case st.Metadata != nil:
+		s.metadata = *st.Metadata
+	}
+	if st.Controller != nil {
+		s.controller = st.Controller
+	}
+	s.mu.Unlock()
+	s.c.changed()
+}
+
+// Controller says what the transport can do.
+//
+// It is nil until the server says, and the panel only offers the
+// controls that have been told to it.
+func (s *session) Controller() *controllerState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.controller == nil {
+		return nil
+	}
+	out := *s.controller
+	out.SupportedCommands = append([]string(nil), s.controller.SupportedCommands...)
+	return &out
 }
 
 // timeSync keeps the filter fed for as long as the session lives.

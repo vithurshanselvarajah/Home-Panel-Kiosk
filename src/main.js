@@ -9,6 +9,7 @@ const { generateEncryptionKey } = require("./encryption");
 const { createHealthChecker, probeHttp } = require("./health");
 const { DeviceClient, findSidecar } = require("./device");
 const { ControlClient, findControlSocket } = require("./control");
+const { moveCachesToMemory } = require("./caches");
 const { systemVolumePercent, setSystemVolume } = require("./volume");
 
 const DEFAULTS = {
@@ -27,8 +28,6 @@ const DEFAULTS = {
   // the panel and home assistant only hears the turn.
   voiceEnabled: false,
   voiceDeviceId: "home-panel",
-  voiceWakeWordEnabled: true,
-  voiceWakeThreshold: 0.5,
   voiceAudioInput: "",
   voiceAudioOutput: "",
   voiceStartupVolume: 50,
@@ -64,14 +63,15 @@ let notificationTimer;
 let urlTimer;
 let overlayAttached = false;
 let overlayExpanded = false;
-// voiceOverlay is whether the voice indicator wants the overlay.
+// voiceOverlayFull is whether the wake word overlay is covering the
+// screen.
 //
-// The indicator is shown over whatever the panel is showing, so the
-// overlay has to be attached for it. It is kept apart from the other
-// reasons the overlay is needed, because it is the one that comes and
-// goes on its own: the device starts listening and the indicator has to
-// appear, and it stops and the indicator has to go.
-let voiceOverlay = false;
+// It is separate from the voice indicator: the indicator is a strip
+// along the bottom of the view, and the wake word overlay covers
+// everything. The overlay view is sized to whichever of the two is
+// showing.
+let voiceOverlayFull = false;
+
 let sidePanelOpen = false;
 let keyboardVisible = false;
 let inputBlurTimer;
@@ -239,20 +239,6 @@ function sendDeviceState() {
   if (!deviceClient) return;
   const state = deviceClient.state;
   sendToOverlay("app:device", state);
-  // The voice indicator is shown over whatever the panel is showing, so
-  // the overlay has to be there for it. It is not only there when the
-  // settings page is open: the point of the indicator is that somebody
-  // can see the assistant is listening from across the room.
-  setVoiceOverlay(voiceOverlayNeeded(state));
-}
-
-// voiceOverlayNeeded says whether the voice indicator wants the overlay.
-//
-// The indicator is on while the device is listening or speaking, and off
-// the rest of the time. It is not on while the settings page is open
-// either: the page has its own row that says the same thing.
-function voiceOverlayNeeded(state) {
-  return Boolean(state.listening || state.speaking);
 }
 
 // publishState tells the device program what the panel is doing.
@@ -283,8 +269,27 @@ function publishState(state) {
   controlClient.sendState(payload);
 }
 
-function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {
-  const safeDuration = Math.max(1000, Math.min(Number(duration) || 8000, 120000));
+// sendTransport asks the device program to drive the music transport.
+//
+// The transport belongs to the music server and the panel has the
+// buttons, so the request goes over the control socket. The device
+// program knows which commands the server accepts and drops the rest.
+function sendTransport(command) {
+  if (!command || typeof command.action !== "string") return false;
+  if (!controlClient?.connected) return false;
+  const payload = { action: command.action };
+  // Which music the command is for: the music server's or the panel's
+  // own. They are different things and each has its own transport.
+  if (command.source === "home" || command.source === "server") {
+    payload.source = command.source;
+  }
+  if (Number.isFinite(Number(command.positionMs))) {
+    payload.positionMs = Math.max(0, Math.round(Number(command.positionMs)));
+  }
+  return controlClient.sendTransport(payload);
+}
+
+function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {  const safeDuration = Math.max(1000, Math.min(Number(duration) || 8000, 120000));
   ensureOverlayView();
   sendToOverlay("app:notification", {
     title: String(title).slice(0, 100),
@@ -402,7 +407,12 @@ function scheduleViewRetry(delay = VIEW_RETRY_INTERVAL_MS) {
 }
 
 function setSidePanel(open) {
-  sidePanelOpen = Boolean(open);
+  // The drawer is only told about a change. Resizing the overlay view
+  // when nothing has changed makes the drawer jump, and the drawer is
+  // told about itself every time somebody presses a button in it.
+  const next = Boolean(open);
+  if (sidePanelOpen === next) return;
+  sidePanelOpen = next;
   if (open) ensureOverlayView();
   resizeOverlay();
   sendState();
@@ -412,7 +422,7 @@ function resizeOverlay() {
   if (!win || win.isDestroyed() || !overlayView) return;
   const { width, height } = win.getContentBounds();
   const homeButtonVisible = mode === "url";
-  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlay;
+  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlayFull;
   if (!needsOverlay) {
     if (overlayAttached) {
       win.contentView.removeChildView(overlayView);
@@ -427,27 +437,24 @@ function resizeOverlay() {
     win.contentView.addChildView(overlayView);
     overlayAttached = true;
   }
-  if (overlayExpanded || sidePanelOpen) overlayView.setBounds({ x: 0, y: 0, width, height });
-  else if (voiceOverlay) {
-    // The indicator is along the bottom of the view, over whatever the
-    // panel is showing.
-    overlayView.setBounds({ x: 0, y: Math.max(0, height - 90), width, height: 90 });
+  if (overlayExpanded || sidePanelOpen || voiceOverlayFull) {
+    // The wake word overlay covers the whole screen, and so does the
+    // drawer and the settings page.
+    overlayView.setBounds({ x: 0, y: 0, width, height });
   } else if (keyboardVisible) {
     const keyboardHeight = Math.min(300, height);
     overlayView.setBounds({ x: 0, y: height - keyboardHeight, width, height: keyboardHeight });
   } else overlayView.setBounds({ x: Math.max(0, width - 210), y: 0, width: Math.min(210, width), height: Math.min(58, height) });
 }
 
-// setVoiceOverlay says whether the voice indicator wants the overlay, and
-// attaches it if it does.
+// setVoiceOverlayFull says whether the wake word overlay is covering the
+// screen.
 //
-// The overlay is a whole renderer process, so it is only kept while
-// something needs it. The voice indicator is the one thing that needs it
-// on the dashboard, where nothing else does.
-function setVoiceOverlay(needed) {
-  if (voiceOverlay === needed) return;
-  voiceOverlay = needed;
-  if (needed) ensureOverlayView();
+// The renderer knows when it is up: the overlay is drawn there. The view
+// has to be sized to match, and the view is the main process's.
+function setVoiceOverlayFull(needed) {
+  if (voiceOverlayFull === Boolean(needed)) return;
+  voiceOverlayFull = Boolean(needed);
   resizeOverlay();
 }
 
@@ -458,7 +465,7 @@ function scheduleOverlayRecycle() {
   if (overlayRecycleTimer) return;
   overlayRecycleTimer = setTimeout(() => {
     overlayRecycleTimer = undefined;
-    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url" || voiceOverlay) return;
+    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url" || voiceOverlayFull) return;
     destroyOverlayView();
   }, OVERLAY_RECYCLE_DELAY_MS);
 }
@@ -724,8 +731,6 @@ async function saveSettings(next) {
   // what make it one.
   clean.voiceEnabled = Boolean(clean.voiceEnabled);
   clean.voiceDeviceId = String(clean.voiceDeviceId || DEFAULTS.voiceDeviceId).trim() || DEFAULTS.voiceDeviceId;
-  clean.voiceWakeWordEnabled = Boolean(clean.voiceWakeWordEnabled);
-  clean.voiceWakeThreshold = settingNumber(clean.voiceWakeThreshold) ?? DEFAULTS.voiceWakeThreshold;
   clean.voiceStartupVolume = settingNumber(clean.voiceStartupVolume) ?? DEFAULTS.voiceStartupVolume;
   clean.voiceVolume = settingNumber(clean.voiceVolume) ?? DEFAULTS.voiceVolume;
   clean.voiceDuckDb = settingNumber(clean.voiceDuckDb) ?? DEFAULTS.voiceDuckDb;
@@ -799,12 +804,12 @@ async function saveSettings(next) {
 // being handed a default that was not the user's.
 function sendDeviceConfig() {
   if (!deviceClient) return;
+  // The wake word's settings are not here: they are entities on the
+  // panel, so Home Assistant owns them. Writing them from here would
+  // undo whatever Home Assistant had set.
   deviceClient.sendConfig({
-    wakeThreshold: settingNumber(settings.voiceWakeThreshold),
-    wakeWordEnabled: settingBoolean(settings.voiceWakeWordEnabled),
     startupVolume: settingNumber(settings.voiceStartupVolume),
     volume: settingNumber(settings.voiceVolume),
-    duckDb: settingNumber(settings.voiceDuckDb),
     muteButton: settingBoolean(settings.voiceMuteButton),
     sendspinEnabled: settingBoolean(settings.musicEnabled),
     sendspinName: settings.musicName || "",
@@ -1141,6 +1146,14 @@ function registerIpc() {
     assertOverlaySender(event);
     return setDisplayMode(mode);
   });
+  ipcMain.on("app:voice-overlay", (event, full) => {
+    assertOverlaySender(event);
+    setVoiceOverlayFull(Boolean(full));
+  });
+  ipcMain.handle("app:transport", (event, command) => {
+    assertOverlaySender(event);
+    return sendTransport(command);
+  });
   ipcMain.handle("app:quit", (event) => {
     assertOverlaySender(event);
     quitApp();
@@ -1215,86 +1228,9 @@ function registerIpc() {
 const hasLock = app.requestSingleInstanceLock();
 if (!hasLock) app.quit();
 
-// cacheDirectories are the parts of Chromium's profile that are caches.
-//
-// They are moved into memory. The names are the ones Chromium uses for
-// them under the profile directory.
-const cacheDirectories = [
-  "Cache",
-  "Code Cache",
-  "GPUCache",
-  "GPUPersistentCache",
-  "DawnGraphiteCache",
-  "DawnWebGPUCache",
-  "GrShaderCache",
-  "ShaderCache",
-  // The spellchecker writes its dictionary here, whether or not the
-  // spellchecker is turned off: the dictionary is downloaded by the
-  // browser process before the session is asked to do anything.
-  "Dictionaries",
-  // The shared dictionary is downloaded the same way.
-  "Shared Dictionary",
-];
-
-/**
- * Puts Chromium's caches in memory.
- *
- * They are rewritten on every page load, and they are worth nothing once
- * the device is off. On a device whose storage is eMMC they are the main
- * source of write wear.
- *
- * The move is a bind, not a copy: the directory is a link to a directory
- * in memory, so Chromium writes through it and the memory is given back
- * when the link is removed.
- *
- * The link has to be made before Chromium starts. Chromium makes the
- * cache directories itself when it runs and keeps them open, so a link
- * made afterwards is a link to a directory Chromium is already writing
- * to: the name changes but the writes still land on the disk. That is why
- * this is called while the module is loading and not after the app is
- * ready.
- */
-function moveCachesToMemory() {
-  const profile = app.getPath("userData");
-  const memory = runtimeDirectory("chromium");
-  let moved = 0;
-  try {
-    // Chromium makes the profile when it starts. It has to be there first,
-    // or the link has nothing to hang from.
-    fsSync.mkdirSync(profile, { recursive: true, mode: 0o700 });
-  } catch (error) {
-    console.warn("the Chromium profile could not be prepared:", error.message);
-    return 0;
-  }
-  for (const name of cacheDirectories) {
-    const source = path.join(profile, name);
-    // A link that is already there is done.
-    try {
-      if (fsSync.lstatSync(source).isSymbolicLink()) {
-        moved += 1;
-        continue;
-      }
-    } catch { /* it is not there yet, which is the usual case */ }
-    const target = path.join(memory, name);
-    try {
-      fsSync.mkdirSync(target, { recursive: true, mode: 0o700 });
-      // What is in the directory is a cache from a previous run. It is
-      // worth nothing, so it goes to make room for the link.
-      fsSync.rmSync(source, { recursive: true, force: true });
-      fsSync.symlinkSync(target, source, "dir");
-      moved += 1;
-    } catch (error) {
-      // A cache that stays on the disk is worse than one in memory, but it
-      // is not a failure.
-      console.warn("the cache could not be moved into memory:", error.message);
-    }
-  }
-  return moved;
-}
-
 // Chromium's caches are put in memory while the module is loading, before
 // Chromium has made its cache directories and opened them.
-moveCachesToMemory();
+moveCachesToMemory(app.getPath("userData"), runtimeDirectory("chromium"));
 
 // The spellchecker downloads a dictionary of half a megabyte into the
 // profile on every start, and a kiosk never corrects a spelling.

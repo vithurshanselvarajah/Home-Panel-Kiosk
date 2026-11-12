@@ -55,6 +55,13 @@ type deviceAudio struct {
 	// decides whether a turn starts, so it has to hear the room all the
 	// time. The gate inside the wake word is what keeps that cheap.
 	onWakeAudio func(pcm []byte)
+	// onWakeReset is called when the microphone is opened, so the wake
+	// word can forget the audio of the turn that just finished.
+	//
+	// The detector's score is computed from the last two seconds of
+	// audio, and the reply is the panel talking. Without a reset the
+	// panel can hear itself.
+	onWakeReset func()
 	// onSendspinStatus is called when the music player's status changes.
 	onSendspinStatus func(status sendspin.Status)
 	// onVolume is called when the panel's volume changes, so the speaker's
@@ -67,8 +74,34 @@ type deviceAudio struct {
 	// means by the volume — so the panel asks for it rather than
 	// reaching for it itself.
 	onSystemVolume func(level int)
+	// onReplyEnded is called when the reply has been played out.
+	//
+	// The reply is over when the speaker has drained it, which is the
+	// only moment that is true: the last frame arriving is not the end,
+	// because the speaker still has the words in it.
+	onReplyEnded func()
 	// onMediaState is called when the speaker changes what it is doing.
 	onMediaState func(state esphome.MediaPlayerState)
+	// onMusicStarted is called when one of the music sources starts.
+	//
+	// It says which: "home-assistant" for the music Home Assistant is
+	// playing and "server" for the music a music server is playing.
+	//
+	// The two take turns, and this is how they tell each other.
+	onMusicStarted func(source string)
+	// mediaState is what the music Home Assistant is playing is doing.
+	//
+	// It is kept so the panel can show it, and it is the panel's own
+	// music as opposed to the music server's.
+	mediaState esphome.MediaPlayerState
+	// sendspinPlaying is whether the music server's music is playing.
+	//
+	// It is kept so the turn is only handed over once, when the music
+	// starts and not on every reading of the status.
+	sendspinPlaying bool
+	// onAnnounceFinished is called when an announcement has been played
+	// out, so that Home Assistant can be told.
+	onAnnounceFinished func()
 	// credentialsDir is where the music player keeps its identity.
 	credentialsDir string
 
@@ -156,12 +189,77 @@ type deviceAudio struct {
 	voiceStreaming bool
 	// voiceMixed is whether the music is playing under the reply.
 	voiceMixed bool
+	// voiceAnnouncement is whether the voice is an announcement rather
+	// than a reply.
+	//
+	// Home Assistant waits for the announcement to be finished before it
+	// goes on, so the end of an announcement is reported to it and the
+	// end of a reply is not.
+	voiceAnnouncement bool
 	// voiceEnded is called when the reply has been played out.
 	//
 	// The end of the stream is not the end of the reply: the last of the
 	// words is said after the last frame has arrived. The mixer is what
 	// knows when the reply is really over.
 	voiceEnded func()
+	// spokenTotal is how many bytes of reply have arrived.
+	//
+	// It is what the spoken progress is measured against: the audio
+	// that has arrived less the audio that has been played is how far
+	// along the reply is.
+	spokenTotal int64
+	// spokenComplete says the reply has been played out.
+	//
+	// It is the last word on the reply's progress: once the speaker has
+	// drained the reply, the reply has been said, whatever the count of
+	// the bytes says. The count is of the audio that arrived, and the
+	// last of that is held by the converter, so the count runs a little
+	// short of the reply and the progress never quite reaches the end.
+	spokenComplete bool
+	// voiceResampler converts the reply to the rate the speaker plays at.
+	//
+	// The reply arrives at the rate Home Assistant speaks at, which is
+	// not the rate the speaker runs at, and the mixer takes the reply out
+	// of the queue at the speaker's rate. Without the conversion the
+	// reply is played three times too fast, which is a chipmunk rather
+	// than a voice.
+	voiceResampler *audio.Resampler
+
+	// media is the music Home Assistant is playing, and the mixer takes
+	// it out of here.
+	//
+	// The music is a stream that is fetched while it is played, so it
+	// has its own queue: a reply must not be able to take the music
+	// out of the speaker's hands.
+	media []byte
+	// mediaPaused is whether the music is paused.
+	//
+	// A paused track is not playing, so the mixer takes nothing out of
+	// the queue and the fetch stops as well: the audio that has already
+	// arrived stays where it is until the track is played again.
+	mediaPaused bool
+	// mediaActive is whether there is music to play.
+	//
+	// It stays true until the track is stopped or the queue is empty,
+	// which is after the fetch has finished: the end of the fetch is
+	// not the end of the music, because the speaker has not played it
+	// all yet.
+	mediaActive bool
+	// mediaPlaying is whether the speaker has been opened for the music.
+	//
+	// The speaker is not opened until the queue has a buffer's worth of
+	// music in it, so the fetch knows to keep filling rather than
+	// waiting for room.
+	mediaPlaying bool
+	// mediaStop tells the fetch to give up.
+	//
+	// It is closed when the track is stopped, and the fetch returns.
+	mediaStop chan struct{}
+	// mediaResumedCh is closed while the music is not paused.
+	//
+	// The fetch waits on it, so a paused track stops being read. It is
+	// closed and made again when the pause changes.
+	mediaResumedCh chan struct{}
 
 	// volume is the device's volume, 0 to 100.
 	volume int
@@ -169,10 +267,17 @@ type deviceAudio struct {
 	level int
 	// muted is whether the device's own mute switch is on.
 	muted bool
-	// ducked is whether the controller asked for the music to duck.
+	// ducked is whether the music is ducked under a reply.
+	//
+	// It is turned on while a reply is playing and off when the reply is
+	// over, so the music comes back up afterwards.
 	ducked bool
 	// duckDB is how far the music ducks, in decibels.
 	duckDB float64
+	// wakeThresholdValue is how sensitive the wake word is.
+	wakeThresholdValue float64
+	// wakeWordEnabled is whether the wake word is listening.
+	wakeWordEnabled bool
 
 	// sendspin is the music player.
 	sendspin *sendspin.Client
@@ -200,6 +305,13 @@ const (
 	captureRate  = audio.CaptureRate
 	playbackRate = audio.PlaybackRate
 )
+
+// voiceRate is the rate the reply arrives at.
+//
+// Home Assistant speaks to a speaker at 16 kHz, whatever the speaker
+// itself runs at, and the reply has to be converted before it is played
+// or it is heard at the wrong speed.
+const voiceRate = 16000
 
 // periodBytes is the size of one playback period.
 //
@@ -232,16 +344,34 @@ func (a *deviceAudio) fillState(s *State) {
 	s.Monitoring = a.monitoring
 	s.Muted = a.muted
 	// The music player's own state. It says whether a server is
-	// connected, whether the player is in step with it, and how much
-	// music is queued.
+	// connected, whether the player is in step with it, how much music
+	// is queued, and what is playing.
 	//
 	// It is the first thing to look at when the music is not playing: a
 	// player that is connected but not in step has the music and
 	// cannot play it.
-	s.MusicState = a.sendspinStatus.State
-	s.MusicPaired = a.sendspinStatus.PairedWith
-	s.MusicBuffered = a.sendspinStatus.BufferedMs
-	s.MusicSynced = a.sendspinStatus.Synced
+	//
+	// The metadata is the music itself: the title, the artist, the
+	// album, the artwork and where the track has got to. The panel's
+	// drawer shows it, so it is part of the state.
+	music := a.sendspinStatus
+	s.MusicState = music.State
+	s.MusicPaired = music.PairedWith
+	s.MusicBuffered = music.BufferedMs
+	s.MusicSynced = music.Synced
+	s.MusicTitle = music.Metadata.Title
+	s.MusicArtist = music.Metadata.Artist
+	s.MusicAlbum = music.Metadata.Album
+	s.MusicArtwork = music.Metadata.ArtworkURL
+	s.MusicPosition = music.Metadata.ProgressMs
+	s.MusicDuration = music.Metadata.DurationMs
+	// The speed is a multiplier of a thousand, so a thousand is playing
+	// and anything else is not.
+	s.MusicPlaying = music.Metadata.Speed >= 1000
+	s.MusicTransport = music.Transport
+	// The music Home Assistant is playing is the panel's own, and the
+	// panel shows it beside the music server's.
+	s.MediaState = mediaStateName(a.mediaState)
 	// The volume is the panel's own, and it is reported so that Home
 	// Assistant shows the right level on the speaker's card.
 	//
@@ -573,11 +703,72 @@ func (a *deviceAudio) setVolume(level int) {
 	}
 }
 
-// musicStatus returns the music player's own account of what it is doing.
-func (a *deviceAudio) musicStatus() sendspin.Status {
+// sendspinPlayer returns the music player, when there is one.
+//
+// It is what the device's capabilities describe, so that a music server
+// can tell that this player is the one Home Assistant already knows.
+func (a *deviceAudio) sendspinPlayer() *sendspin.Client {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.sendspinStatus
+	return a.sendspin
+}
+
+// mediaStateName is what the panel's own music is doing, in words.
+//
+// The protocol's own names are long and they are the protocol's, and
+// the panel draws them rather than reading them.
+func mediaStateName(state esphome.MediaPlayerState) string {
+	switch state {
+	case esphome.MediaPlayerState_MEDIA_PLAYER_STATE_PLAYING:
+		return "playing"
+	case esphome.MediaPlayerState_MEDIA_PLAYER_STATE_PAUSED:
+		return "paused"
+	case esphome.MediaPlayerState_MEDIA_PLAYER_STATE_ANNOUNCING:
+		return "announcing"
+	default:
+		return "idle"
+	}
+}
+
+// wakeThreshold is how sensitive the wake word is.
+//
+// It is the score the wake word has to reach, as a fraction of the
+// scale.
+func (a *deviceAudio) wakeThreshold() float64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.wakeThresholdValue
+}
+
+// wakeEnabled is whether the wake word is listening.
+func (a *deviceAudio) wakeEnabled() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.wakeWordEnabled
+}
+
+// duckLevel is how far the music is turned down under a reply.
+func (a *deviceAudio) duckLevel() float64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.duckDB
+}
+
+// mutedNow is whether the panel's own mute switch is on.
+func (a *deviceAudio) mutedNow() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.muted
+}
+
+// speaking says whether the panel is playing a reply.
+//
+// It is what the wake word's bar follows: while the panel is speaking,
+// the bar is dropped so that a person can interrupt it.
+func (a *deviceAudio) speaking() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.voiceActive
 }
 
 // currentVolume returns the panel's volume level.
@@ -594,6 +785,20 @@ func (a *deviceAudio) currentVolume() int {
 func (a *deviceAudio) setDuckDb(db float64) {
 	a.mu.Lock()
 	a.duckDB = db
+	a.mu.Unlock()
+}
+
+// setWakeThreshold sets how sensitive the wake word is.
+func (a *deviceAudio) setWakeThreshold(threshold float64) {
+	a.mu.Lock()
+	a.wakeThresholdValue = threshold
+	a.mu.Unlock()
+}
+
+// setWakeEnabled switches the wake word on or off.
+func (a *deviceAudio) setWakeEnabled(enabled bool) {
+	a.mu.Lock()
+	a.wakeWordEnabled = enabled
 	a.mu.Unlock()
 }
 
@@ -643,11 +848,6 @@ func (a *deviceAudio) applyConfig(c Config) {
 // The stream begins when the controller asks for it and stops when it says
 // to stop, which is the order the protocol expects: a device that streams
 // before it is asked is a device streaming to nobody.
-// startCapture opens the microphone and streams it to the controller.
-//
-// The stream begins when the controller asks for it and stops when it says
-// to stop, which is the order the protocol expects: a device that streams
-// before it is asked is a device streaming to nobody.
 //
 // The microphone is opened once. The level meter reads the same frames
 // rather than opening a second capture, because a sound card cannot be
@@ -672,6 +872,13 @@ func (a *deviceAudio) startCapture() {
 	a.captureCancel = cancel
 	a.mu.Unlock()
 
+	// The wake word forgets what it heard before the microphone was
+	// opened, because the audio of the turn that just finished is still
+	// in its window and the reply is the panel talking.
+	if a.onWakeReset != nil {
+		a.onWakeReset()
+	}
+
 	a.log.Info("the microphone is opening")
 
 	// The microphone is opened before this returns, so a failure is
@@ -692,6 +899,9 @@ func (a *deviceAudio) startCapture() {
 	a.mu.Unlock()
 
 	go func() {
+		// restart says the microphone stopped on its own rather than
+		// being closed by whoever wanted it closed.
+		restart := false
 		defer func() {
 			a.mu.Lock()
 			a.capturing = false
@@ -705,6 +915,12 @@ func (a *deviceAudio) startCapture() {
 			// and there is nothing else to do with it.
 			if wantMonitor {
 				a.startMonitor()
+			}
+			// The microphone is opened again after the capture has been
+			// cleaned up, because the capture has to be closed before
+			// the sound card can be opened again.
+			if restart {
+				a.restartCapture()
 			}
 		}()
 
@@ -727,11 +943,39 @@ func (a *deviceAudio) startCapture() {
 			if err != nil {
 				if ctx.Err() == nil {
 					a.log.Warn("the microphone stopped", "error", err)
+					restart = true
 				}
 				return
 			}
 		}
 	}()
+}
+
+// restartCapture opens the microphone again after it has stopped.
+//
+// The capture is what the wake word hears through, so a microphone that
+// has stopped is a panel that has gone deaf for ever: the wake word
+// never fires again and the only way out is to restart the application.
+//
+// A microphone that stops on its own is not unusual — the card can be
+// taken by another program, or the sound server can restart — and the
+// panel should not need restarting for it. So the capture is opened
+// again, and the wake word is told, so it forgets the audio from
+// before the gap.
+//
+// It is only reopened when something still wants it. A panel whose wake
+// word has been switched off does not hold the microphone open.
+func (a *deviceAudio) restartCapture() {
+	a.mu.Lock()
+	wanted := a.listening || a.monitoring || a.streaming
+	a.mu.Unlock()
+
+	if !wanted {
+		return
+	}
+
+	a.log.Info("the microphone is opening again")
+	a.startCapture()
 }
 
 // setLevel records the level of the last block of audio.
@@ -888,21 +1132,186 @@ func (a *deviceAudio) sendMicAudio(pcm []byte) {
 	}
 }
 
+// announce plays what Home Assistant asked the panel to say.
+//
+// The request carries a URL, not the audio, so the panel fetches it and
+// plays it. The audio is at the format the player said it takes, because
+// Home Assistant runs it through its own proxy first.
+//
+// Home Assistant waits for the panel to say the announcement is finished,
+// and that answer has to come after the speaker has drained it — the
+// announcement is not over when the last byte arrives, but when the last
+// of the words has been said.
+func (a *deviceAudio) announce(mediaID, text string) {
+	a.log.Info("the panel was asked to speak", "text", text, "media", mediaID)
+
+	if mediaID == "" {
+		// There is nothing to play, so the announcement is over.
+		if a.onAnnounceFinished != nil {
+			a.onAnnounceFinished()
+		}
+		return
+	}
+
+	// The announcement ends when the speaker has drained it. The reply's
+	// own end is reported through the voiceEnded hook, and the
+	// announcement is finished as well.
+	//
+	// It is a flag rather than a wrapped hook, so an announcement does
+	// not leave the hook wrapped around for ever: a panel that has asked
+	// for a hundred announcements would otherwise report a hundred ends
+	// for each of them.
+	a.mu.Lock()
+	a.voiceAnnouncement = true
+	a.voiceActive = true
+	a.voiceStreaming = true
+	a.mu.Unlock()
+
+	a.ensureOutput()
+
+	go a.playAnnouncement(mediaID)
+}
+
+// playAnnouncement fetches the announcement and plays it.
+//
+// The fetch is on its own goroutine, because the announcement is played
+// while the fetch happens and the speaker must not wait for the network.
+func (a *deviceAudio) playAnnouncement(mediaID string) {
+	stream, rate, err := openMedia(context.Background(), mediaID)
+	if err != nil {
+		a.log.Error("the announcement could not be fetched", "error", err)
+		a.mu.Lock()
+		a.voiceStreaming = false
+		a.voiceActive = false
+		a.mu.Unlock()
+		a.endVoice()
+		return
+	}
+	defer stream.Close()
+
+	a.streamVoice(stream, rate)
+	a.finishVoice()
+}
+
+// endVoice says the voice has been played out.
+//
+// It is the reply's end, and the announcement's end when the voice was
+// an announcement. Home Assistant waits for the announcement to be
+// finished before it goes on, so the announcement is reported here and
+// not when the last byte arrived.
+func (a *deviceAudio) endVoice() {
+	a.mu.Lock()
+	ended := a.voiceEnded
+	announcement := a.voiceAnnouncement
+	a.voiceAnnouncement = false
+	a.mu.Unlock()
+
+	if ended != nil {
+		ended()
+	}
+	if announcement && a.onAnnounceFinished != nil {
+		a.onAnnounceFinished()
+	}
+}
+
 // playReply plays the reply that came back from home assistant.
 //
-// The reply arrives over the ESPHome connection as a stream of chunks,
-// and the last chunk says the reply is complete. The chunks are queued
-// rather than written straight to the speaker, because the music is
-// playing on the same speaker and the two have to be mixed.
+// The reply arrives over the ESPHome connection as a stream of chunks.
+// The chunks are queued rather than written straight to the speaker,
+// because the music is playing on the same speaker and the two have to
+// be mixed.
+//
+// The reply arrives at the rate Home Assistant speaks at, which is not
+// the rate the speaker runs at, so it is converted before it is queued.
+// The final flag is only ever set for a reply that was cut short: Home
+// Assistant says the reply is over with an event, and that is what ends
+// a reply that was sent the ordinary way.
+// playReply plays the reply that came back from home assistant.
+//
+// The reply arrives over the ESPHome connection as a stream of chunks.
+// The chunks are queued rather than written straight to the speaker,
+// because the music is playing on the same speaker and the two have to
+// be mixed.
+//
+// The reply arrives at the rate Home Assistant speaks at, which is not
+// the rate the speaker runs at, so it is converted before it is queued.
+// The final flag is only ever set for a reply that was cut short: Home
+// Assistant says the reply is over with an event, and that is what ends
+// a reply that was sent the ordinary way.
 func (a *deviceAudio) playReply(pcm []byte, final bool) {
 	if len(pcm) > 0 {
 		a.setMediaState(esphome.MediaPlayerState_MEDIA_PLAYER_STATE_PLAYING)
 	}
-	a.playVoice(pcm)
+	// The music is turned down under the reply, so the words can be
+	// heard over it.
+	a.setDucked(true)
+
+	// The reply is converted before it is queued, and it is the
+	// converted audio that is counted.
+	//
+	// The two have to be counted in the same units: the reply arrives
+	// at sixteen kilohertz and is played at forty-eight, so counting
+	// the arrival and comparing it with the queue would compare sixteen
+	// kilohertz's worth of bytes with forty-eight's, and the progress
+	// would always come out as nothing played.
+	converted := a.resampleVoice(pcm)
+
+	a.mu.Lock()
+	a.spokenTotal += int64(len(converted))
+	a.mu.Unlock()
+
+	a.playVoice(converted)
 	if final {
 		a.finishVoice()
 		a.setMediaState(esphome.MediaPlayerState_MEDIA_PLAYER_STATE_IDLE)
 	}
+}
+
+// resampleVoice converts the reply to the rate the speaker plays at.
+//
+// The reply comes from Home Assistant at the rate it speaks at, and the
+// speaker plays at its own rate. The reply is queued and taken out of
+// the queue at the speaker's rate, so a reply that was not converted
+// would be played at the wrong speed: three times too fast, and a
+// chipmunk rather than a voice.
+//
+// The converter is kept between the chunks, because a reply that is
+// converted one chunk at a time has to be interpolated across the chunk
+// boundaries or every boundary is a click.
+func (a *deviceAudio) resampleVoice(pcm []byte) []byte {
+	if len(pcm) == 0 {
+		return nil
+	}
+
+	a.mu.Lock()
+	if a.voiceResampler == nil {
+		a.voiceResampler = audio.NewResampler(voiceRate, playbackRate)
+		// A new reply starts its count again.
+		a.spokenTotal = 0
+		// And the last reply's completion is not this one's.
+		a.spokenComplete = false
+	}
+	resampler := a.voiceResampler
+	a.mu.Unlock()
+
+	return resampler.Convert(pcm)
+}
+
+// flushVoice finishes the reply's conversion.
+//
+// The last of the reply is held rather than interpolated, because there
+// is no next sample to interpolate towards. Without this the reply
+// loses the fraction of a millisecond at the end that the conversion
+// was holding.
+func (a *deviceAudio) flushVoice() []byte {
+	a.mu.Lock()
+	resampler := a.voiceResampler
+	a.mu.Unlock()
+
+	if resampler == nil {
+		return nil
+	}
+	return resampler.Flush()
 }
 
 // playVoice plays a reply.
@@ -919,6 +1328,106 @@ func (a *deviceAudio) playVoice(pcm []byte) {
 	a.mu.Unlock()
 
 	a.ensureOutput()
+}
+
+// spokenProgress says how much of the reply has been played, as a
+// fraction between zero and one.
+//
+// The panel shows the answer's words as they are spoken, and this is
+// what tells it how far along to show them: the audio arrives as it is
+// generated and is played as it arrives, so the words are shown in step
+// with the voice rather than all at once.
+//
+// It is the fraction of the reply's *audio* that has been played, and
+// the words are a rough match for it: the text and the audio are the
+// same reply, but they are not the same length.
+func (a *deviceAudio) spokenProgress() float64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.spokenComplete {
+		// The reply has been played out, so all of it has been said.
+		return 1
+	}
+	if a.spokenTotal <= 0 {
+		return 0
+	}
+	played := a.spokenTotal - int64(len(a.voice))
+	if played < 0 {
+		played = 0
+	}
+	progress := float64(played) / float64(a.spokenTotal)
+	if progress > 1 {
+		return 1
+	}
+	return progress
+}
+
+// PauseMedia pauses the music Home Assistant is playing.
+//
+// The audio that has already arrived stays where it is, so the track
+// picks up where it left off rather than from the beginning.
+//
+// The fetch is left alone: the proxy is still sending, and the audio it
+// sends is put in the queue. A pause that threw the audio away would be
+// a stop.
+func (a *deviceAudio) PauseMedia() {
+	a.mu.Lock()
+	if !a.mediaActive || a.mediaPaused {
+		a.mu.Unlock()
+		return
+	}
+	a.mediaPaused = true
+	a.mu.Unlock()
+
+	// The fetch stops reading, so the music that has arrived stays where
+	// it is and the track picks up where it left off.
+	a.pauseMediaFetch()
+
+	a.log.Info("the music was paused")
+	a.setMediaState(esphome.MediaPlayerState_MEDIA_PLAYER_STATE_PAUSED)
+}
+
+// ResumeMedia plays the music again after a pause.
+func (a *deviceAudio) ResumeMedia() {
+	a.mu.Lock()
+	if !a.mediaActive || !a.mediaPaused {
+		a.mu.Unlock()
+		return
+	}
+	a.mediaPaused = false
+	a.mu.Unlock()
+
+	// The fetch goes on.
+	a.resumeMediaFetch()
+
+	a.log.Info("the music was played again")
+	a.setMediaState(esphome.MediaPlayerState_MEDIA_PLAYER_STATE_PLAYING)
+	a.ensureOutput()
+}
+
+// StopMedia stops the music Home Assistant is playing.
+//
+// The fetch is told to give up and the audio that has arrived is
+// thrown away, so the track is not picked up again.
+func (a *deviceAudio) StopMedia() {
+	a.mu.Lock()
+	if !a.mediaActive {
+		a.mu.Unlock()
+		return
+	}
+	a.mediaActive = false
+	a.mediaPaused = false
+	a.media = nil
+	stop := a.mediaStop
+	a.mediaStop = nil
+	a.mu.Unlock()
+
+	if stop != nil {
+		close(stop)
+	}
+
+	a.log.Info("the music was stopped")
+	a.setMediaState(esphome.MediaPlayerState_MEDIA_PLAYER_STATE_IDLE)
 }
 
 // finishVoice is called when the reply's last frame arrives.
@@ -941,15 +1450,54 @@ func (a *deviceAudio) finishVoice() {
 	over := a.voiceActive && empty
 	if over {
 		a.voiceActive = false
+		// The converter is for one reply. The next reply starts at the
+		// beginning of its own audio, and a converter carried over from
+		// the last reply would interpolate across the two.
+		a.voiceResampler = nil
 	}
-	ended := a.voiceEnded
 	a.mu.Unlock()
 	if over {
 		a.finishPlayback()
-		if ended != nil {
-			ended()
-		}
+		// The music comes back up now the words have been said.
+		a.setDucked(false)
+		a.endVoice()
 	}
+}
+
+// finishReply is called when the reply's audio has all arrived.
+//
+// It is the reply's end. The reply is not over when the last of the words
+// has been spoken — the speaker still has them in it — so the reply is
+// ended when the speaker has drained them, which is what the mixer does.
+//
+// Home Assistant sends the end of a reply as an event rather than as a
+// flag on the last chunk of audio, so this is what ends a reply that was
+// sent the ordinary way.
+func (a *deviceAudio) finishReply() {
+	// The tail of the reply is held by the converter, because there is
+	// no next sample to interpolate towards. It is queued here so that
+	// it is played with the rest of it.
+	//
+	// The queue is appended to directly rather than through playVoice,
+	// because playVoice says the reply's frames are still arriving and
+	// the reply has already been said to have ended.
+	if tail := a.flushVoice(); len(tail) > 0 {
+		a.mu.Lock()
+		a.voice = append(a.voice, tail...)
+		a.voiceActive = true
+		// The tail is counted as part of the reply.
+		//
+		// The progress of the reply is measured against the audio that
+		// has arrived, so everything that is played has to be counted.
+		// The tail was not, so the progress was measured against less
+		// audio than there was, and it could never reach the end: the
+		// panel showed the answer's words as the audio was played, and
+		// the last of the words never appeared.
+		a.spokenTotal += int64(len(tail))
+		a.mu.Unlock()
+		a.ensureOutput()
+	}
+	a.finishVoice()
 }
 
 // flush drops whatever is queued.
@@ -962,11 +1510,46 @@ func (a *deviceAudio) flush() {
 	a.voiceActive = false
 	a.voiceStreaming = false
 	a.voiceMixed = false
-	ended := a.voiceEnded
+	a.voiceResampler = nil
 	a.mu.Unlock()
 	a.closeOutput()
-	if ended != nil {
-		ended()
+	a.endVoice()
+}
+
+// markReplyPlayedOut says the reply has been played out.
+//
+// It is the moment the reply is really over: the speaker has drained
+// it, so the words have been said. The last frame arriving is not the
+// end, because the speaker still has the words in it.
+//
+// The speaker is idle now, and Home Assistant shows that on the player
+// card: a player left on "playing" is a player that looks busy for
+// ever.
+func (a *deviceAudio) markReplyPlayedOut() {
+	a.mu.Lock()
+	a.voiceActive = false
+	a.voiceResampler = nil
+	// The reply is all played, so the progress of the reply is all of it.
+	//
+	// The panel shows the answer's words as the audio is played, and it
+	// needs to be told that the reply is over. The progress is measured
+	// against the audio that arrived, and the last of that is held by the
+	// converter, so the progress could stop a little short of the end.
+	// The words would then be missing their last one.
+	//
+	// So the reply that has been played out is the reply that has been
+	// said, and the progress says so.
+	a.spokenComplete = true
+	a.mu.Unlock()
+
+	a.finishPlayback()
+	// The music comes back up now the words have been said.
+	a.setDucked(false)
+	a.setMediaState(esphome.MediaPlayerState_MEDIA_PLAYER_STATE_IDLE)
+	a.endVoice()
+	// The reply has been played out.
+	if a.onReplyEnded != nil {
+		a.onReplyEnded()
 	}
 }
 
@@ -1135,6 +1718,20 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		// over the periods that follow rather than played all at once.
 		voice := a.takeAudio(&a.voice, periodBytes)
 		test := a.takeAudio(&a.test, periodBytes)
+		// The music Home Assistant is playing is taken from its own
+		// queue. A paused track is not taken from, so the audio that
+		// has arrived stays where it is and the track picks up where
+		// it left off.
+		var media []byte
+		if !a.mediaPaused {
+			media = a.takeAudio(&a.media, periodBytes)
+			// The track is over when there is nothing left to play and
+			// nothing more is coming.
+			if len(media) == 0 && a.mediaActive && a.mediaStop == nil {
+				a.mediaActive = false
+				a.mediaPlaying = false
+			}
+		}
 		a.mu.Unlock()
 
 		// The music is mixed in first, and the reply is mixed over it.
@@ -1156,6 +1753,20 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 			}
 			player.Fill(stereo, playAt, uncertainty)
 			applySendspinGain(stereo, volume, muted, ducked, duckDB)
+		}
+
+		// The music Home Assistant is playing is laid into the stereo
+		// after the music server's music, because the server's music is
+		// written into the whole buffer and would wipe anything that was
+		// already there.
+		//
+		// It is scaled by the volume first, so it is played at the level
+		// the speaker says, and ducked like the other music so a reply
+		// can be heard over it.
+		if len(media) > 0 {
+			applyGain(media, volume)
+			applyDuck(media, ducked, duckDB)
+			a.mixVoiceIntoStereo(stereo, media)
 		}
 
 		// The reply is mono and the music is stereo, so the reply is
@@ -1209,7 +1820,13 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		// empties between tracks, and releasing the card then would cut
 		// the music off and make the next track start late.
 		a.mu.Lock()
-		empty := len(a.voice) == 0 && len(a.test) == 0 && (player == nil || !musicConnected(player))
+		// The music Home Assistant is playing is something to play for too.
+		// Without it the speaker would be released in the gap between two
+		// periods of the track, and the next period would be played late and
+		// out of order: a ticking instead of the music.
+		hasMedia := len(a.media) > 0 || a.mediaActive
+		empty := len(a.voice) == 0 && len(a.test) == 0 && !hasMedia &&
+			(player == nil || !musicConnected(player))
 		// The reply is over when its frames have stopped arriving and the
 		// speaker has played them all. The end of the stream is not that:
 		// the speaker still has the words in it, and the display would go
@@ -1221,14 +1838,7 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		replyDone := a.voiceActive && !a.voiceStreaming && len(a.voice) == 0
 		a.mu.Unlock()
 		if replyDone {
-			a.mu.Lock()
-			a.voiceActive = false
-			ended := a.voiceEnded
-			a.mu.Unlock()
-			a.finishPlayback()
-			if ended != nil {
-				ended()
-			}
+			a.markReplyPlayedOut()
 		}
 		if empty {
 			// The speaker is drained rather than dropped, so the last
@@ -1364,6 +1974,34 @@ func applySendspinGain(pcm []byte, volume int, muted, ducked bool, duckDB float6
 		} else {
 			v = v * float64(volume) / 100 * duckGain
 		}
+		if v > 32767 {
+			v = 32767
+		}
+		if v < -32768 {
+			v = -32768
+		}
+		sample := int16(v)
+		pcm[i], pcm[i+1] = byte(sample), byte(uint16(sample)>>8)
+	}
+}
+
+// applyDuck turns the music down under a reply.
+//
+// The level is in decibels and it is negative, so the music is quieter
+// than it would be rather than louder. A level of zero leaves the
+// music alone.
+//
+// It is separate from the volume because the two are different things:
+// the volume is how loud the music is and the duck is how much quieter
+// it is while somebody is speaking.
+func applyDuck(pcm []byte, ducked bool, duckDB float64) {
+	if !ducked || duckDB == 0 {
+		return
+	}
+	gain := math.Pow(10, duckDB/20)
+	for i := 0; i+1 < len(pcm); i += 2 {
+		v := float64(int16(uint16(pcm[i]) | uint16(pcm[i+1])<<8))
+		v *= gain
 		if v > 32767 {
 			v = 32767
 		}

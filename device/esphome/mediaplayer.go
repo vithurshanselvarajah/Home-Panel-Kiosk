@@ -38,6 +38,12 @@ const (
 	// mediaPlayerAnnounce says the player can make an announcement, which
 	// is what interrupts the music and speaks over it.
 	mediaPlayerAnnounce uint32 = 1 << 20
+	// mediaPlayerBrowseMedia says the player can be sent something to
+	// play from Home Assistant's own media browser.
+	//
+	// Without it, the player shows up with no way to choose anything to
+	// play on it: the service works, but there is nothing to pick from.
+	mediaPlayerBrowseMedia uint32 = 1 << 17
 )
 
 // The formats the speaker takes.
@@ -128,7 +134,8 @@ func (m *MediaPlayer) Message(key uint32) (entityMessage, error) {
 			Icon:          "mdi:account-box",
 			SupportsPause: true,
 			FeatureFlags: mediaPlayerPause | mediaPlayerVolumeSet | mediaPlayerVolumeMute |
-				mediaPlayerPlayMedia | mediaPlayerStop | mediaPlayerPlay | mediaPlayerAnnounce,
+				mediaPlayerPlayMedia | mediaPlayerStop | mediaPlayerPlay |
+				mediaPlayerAnnounce | mediaPlayerBrowseMedia,
 			SupportedFormats: []*MediaPlayerSupportedFormat{
 				{
 					Purpose:     MediaPlayerFormatPurpose_MEDIA_PLAYER_FORMAT_PURPOSE_DEFAULT,

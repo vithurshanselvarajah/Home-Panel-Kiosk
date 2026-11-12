@@ -108,6 +108,8 @@
     setKeyboard: (visible) => notify("app:keyboard", visible),
     setBrightness: (value) => send("app:set-brightness", value),
     setVolume: (value) => send("app:set-volume", value),
+    voiceOverlay: (full) => notify("app:voice-overlay", full),
+    transport: (command) => send("app:transport", command),
     keyboardKey: (key) => notify("app:keyboard-key", key),
     editFieldValue: (field, key) => window.__editFieldValue(field, key),
     onState: (callback) => on("app:state", callback),

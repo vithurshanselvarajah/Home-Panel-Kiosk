@@ -207,3 +207,39 @@ test("the client sends the state when the connection is made", async () => {
   server.close();
   fs.rmSync(socket, { force: true });
 });
+
+test("the client asks the peer to drive the transport", async () => {
+  const socket = socketPath();
+  const received = [];
+  const server = net.createServer((conn) => {
+    conn.on("data", (chunk) => {
+      for (const line of chunk.toString("utf8").split("\n")) {
+        if (line.trim()) received.push(JSON.parse(line));
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(socket, resolve));
+
+  const client = new ControlClient({ socket });
+  client.start();
+  await waitFor(() => client.connected);
+
+  // The transport buttons are on the panel and the transport is on the
+  // music server, so the request goes over the socket.
+  client.sendTransport({ action: "play" });
+  await waitFor(() => received.some((message) => message.action === "transport"));
+
+  const sent = received.find((message) => message.action === "transport");
+  assert.equal(sent.command.action, "play");
+
+  client.sendTransport({ action: "seek", positionMs: 45000 });
+  await waitFor(() => received.filter((message) => message.action === "transport").length > 1);
+
+  const seek = received.filter((message) => message.action === "transport")[1];
+  assert.equal(seek.command.action, "seek");
+  assert.equal(seek.command.positionMs, 45000);
+
+  client.stop();
+  server.close();
+  fs.rmSync(socket, { force: true });
+});

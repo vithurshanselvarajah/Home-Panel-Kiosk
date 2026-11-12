@@ -86,6 +86,17 @@ The audio format is fixed: **16 kHz, mono, signed 16-bit little endian**. That
 matches `protocol.MicSampleRate = 16000` on the SDK side, so the existing
 capture path is already right — no resampling needed.
 
+It is the *reply* that needs converting. HA speaks to a speaker at 16 kHz
+whatever the speaker runs at, and the mixer takes the reply out of its queue
+at the speaker's own rate, so the reply is converted from 16 kHz to 48 kHz
+before it is queued. A reply that is not converted is played three times too
+fast.
+
+**The reply's end is an event, not a flag.** HA sends the reply's audio with
+`VoiceAssistantAudio.end` clear and says the reply is over with
+`VOICE_ASSISTANT_TTS_STREAM_END`. The flag is only ever true for a reply that
+was cut short, so a device that waits for the flag waits for ever.
+
 ### 2.2 Media player
 
 ```
@@ -208,6 +219,25 @@ Bounded to one turn.
 
 Without it, every barge-in ends with zero audio captured — measured 5 of 5 in
 the controller's own testing.
+
+**As built.** The barrier is armed when the running turn is interrupted
+(`Voice.cutOff`) and every event is discarded until the next `RUN_START`
+(`device/esphome/voice.go`). A turn that starts while another is running
+interrupts it rather than being refused, so saying the wake word during a
+reply cuts the reply off and starts a new turn.
+
+**The threshold, and why it is not lower.** The controller's threshold sits
+*below* the wake word's own, which is what makes interrupting easy — but only
+once the device has **echo cancellation**. The controller's own journal says
+so: *"Enable AEC first — without it the watcher scores raw echo and the raised
+threshold is the only defence."*
+
+This panel has no AEC, so the barge bar sits **above** the wake word's own
+(`bargeInThreshold = 0.85`). The echo of the reply is about 25 dB louder at
+the microphone than a person talking over it, and a lower bar would make the
+panel interrupt itself. The two-frame rule at the low bar is already in the
+scorer (`device/wakeword/scorer/scorer.go`); only the threshold's position
+depends on the AEC.
 
 ### 3.4 Wake word
 
@@ -728,6 +758,119 @@ reached HA from hanging.
 
 ## 8. What changed while building it
 
+### Two kinds of music, and they take turns
+
+There are two musics: the one Home Assistant plays, which arrives as a
+stream from its proxy, and the one a music server plays, which arrives over
+SendSpin. They are both music, and playing both at once is neither of them.
+
+So they take turns. When Home Assistant's music starts, the music server's is
+paused; when the music server's starts, Home Assistant's is stopped. The
+microphone and the reply are never stopped — they are the point of the panel.
+
+The ducking follows from the same arrangement: the reply turns the music
+down under it and the music comes back up when the reply is over. The duck
+was *set* and never *applied* — `setDucked` existed and nothing called it,
+so a duck of twenty decibels did nothing at all.
+
+### The music had to be buffered, and it was not
+
+The first version of the streaming played the music as the network delivered
+it. The speaker takes a period every ten milliseconds and the network is
+slower than that, so the speaker outran the network and the queue ran dry:
+the music arrived in bursts with silence between them, which is a tick
+rather than music.
+
+The fetch now keeps a second of music queued ahead of the speaker and waits
+when it is four seconds ahead, so it neither starves nor runs away and
+buffers the whole thirty-megabyte track. The controller's own pacing module
+describes the same problem: *"The voice path used to send every period as
+fast as the socket would take it, and that cut long responses off
+mid-sentence."*
+
+### The end of the run is not the end of the reply
+
+When home assistant streams the answer, it ends the *run* when the agent
+has written the answer, and then keeps sending the audio. The run's end
+and the reply's end are different moments.
+
+The device used to end the reply on the run's end, which cut the answer
+off in the middle and left the overlay thinking for ever. The reply now
+ends when the speaker has drained it, which is the only moment it is
+really over — the last frame arriving is not the end, because the speaker
+still has the words in it.
+
+ESPHome's own firmware says the same thing: the reply's end is the end of
+the audio stream (`TTS_STREAM_END`), and the run's end only stops the
+microphone.
+
+### Where the answer's words come from
+
+Home Assistant sends the answer's text in two places, and they are not
+equally good.
+
+The **start of the text-to-speech** carries the text going into the
+engine, and it is there whatever the answer is and whatever kind of
+markup it is in. It is the reliable one.
+
+The **end of the intent** carries the answer too, but only the plain
+kind of it: an answer written as ssml or as something else is empty
+there. It is kept as a fallback, for when the text-to-speech does not
+carry the words either.
+
+The device takes the text-to-speech's and falls back to the intent's.
+
+### The reply's progress is counted in one set of units
+
+The reply arrives at sixteen kilohertz and is played at forty-eight, so
+the audio that has arrived and the audio in the queue are three times
+different sizes.
+
+Counting the arrival and comparing it with the queue gave a progress
+that was always nothing played, so the answer's words never appeared
+and the screen sat there with the question and no answer.
+
+Both are counted after the conversion now, so they are the same bytes.
+
+### The player goes back to idle when the reply has been said
+
+The media player card in Home Assistant shows the speaker's state, and a
+player left on "playing" is a player that looks busy for ever.
+
+The reply is over when the speaker has drained it, so that is where the
+state goes back to idle — not where the last frame arrives, because the
+speaker still has the words in it then.
+
+The EchoMuse controller has the same rule, and says why: *"while a voice
+turn owns the speaker our internal state is PAUSED but HA must keep
+seeing PLAYING, or a spoken 'pause' is answered with 'already paused'
+and never sent."*
+
+### The words are part of the state
+
+The panel shows what was heard and what is being said. The state is only
+written when it has *changed*, and the words were not part of that
+comparison, so the state was not rewritten when they changed and the
+panel was never told. The words and the progress of the reply are now
+compared like everything else.
+
+### The wake word overlay
+
+The panel now shows a full-screen overlay while the assistant is working,
+in the way a smart display does. It covers the screen and closes the
+drawer, the keyboard and the settings page. It shows the words being heard
+while it listens and the words being said while it answers, and the text
+is carried from one state to the next: the words that were heard stay on
+the screen while the assistant thinks about them.
+
+### The voice settings belong to Home Assistant
+
+The wake word's sensitivity, the ducking and the mute were in the device's
+own configuration file, which meant Home Assistant could neither read them
+nor change them — the person had to edit a file on the machine. They are
+entities on the panel now, so Home Assistant reads and changes them the way
+it changes everything else. The panel no longer writes them, so it cannot
+undo what Home Assistant has set.
 Three things turned out differently from the plan, and each one was worth
 finding out.
 
@@ -767,9 +910,109 @@ that can be missing.
 The cost is a cross-compiler on the machine that builds the arm64 binary,
 and the runtime travels beside the binary in the package.
 
+### The music metadata comes from Sendspin, not from ESPHome
+
+The drawer's now-playing panel says what is playing: the title, the
+artist, the album, the album art and where the track has got to. The
+ESPHome media player protocol carries none of that — `MediaPlayerStateResponse`
+has only the state, the volume, the mute and the device id.
+
+Sendspin does carry it, in the `metadata@v1` role. The server sends a
+`server/state` message with a metadata object in it, and the client has
+to ask for the role in its `client/hello`:
+
+```
+client/hello  supported_roles: ["player@v1", "metadata@v1", "controller@v1"]
+server/state  {"metadata": {"title": ..., "artist": ..., "artwork_url": ...,
+                            "progress": {"track_progress": ..., "track_duration": ...,
+                                         "playback_speed": 1000}}}
+```
+
+The progress's `playback_speed` is a multiplier of a thousand: a thousand
+is playing and zero is paused. The server clears the metadata by sending
+it as `null`, which is a different answer from the object simply not
+being there — one says the music has stopped and the other says nothing
+changed.
+
+The `controller@v1` role is what makes the transport work. The server
+says which commands it will take (`play`, `pause`, `next`, `previous`,
+`seek`), and the panel only offers the ones it has been told about: a
+button that does nothing is worse than no button.
+
+The music panel is drawn by the panel from the device program's state
+file, and the buttons travel the other way over the control socket. The
+transport belongs to the music server and the panel has the buttons, so
+the request goes to the device program, which passes it on.
+
+This is checked against the real server: `device/sendspin/peer_test.go`
+drives `aiosendspin` — the library Music Assistant speaks the protocol
+with — against the panel over the wire, and the panel's own metadata is
+read back out of it.
+
 ---
 
-## 9. The immediate next step
+## 9. The answer's words are shown whole
+
+The overlay shows the answer's words as they are spoken. The text
+arrives all at once and the audio arrives as it is generated, so the
+text is revealed in step with the audio.
+
+Getting that wrong truncates the answer, and it truncated it in a way
+that looked like a speech-recognition fault. The panel showed:
+
+```
+Sorry, I am not aware of any device called a jo
+10:14 P
+```
+
+and the answer Home Assistant had actually given was:
+
+```
+Sorry, I am not aware of any device called a joke
+10:24 PM
+```
+
+Both were the same bug, and it was not in the microphone. Home
+Assistant heard "joke" in full — it matched it against a device called
+"joke" and said so. The panel's own microphone path is byte-exact: the
+recording is played into it and the audio that goes on the wire is
+compared with the recording, byte for byte
+(`device/recording_test.go`).
+
+### Three things had to be true
+
+**The word boundary.** The reveal walked forward to the next space and
+stopped *at* it. That cuts the last word in half, and it loses the last
+word entirely when the answer is over — "10:18 PM" was shown as
+"10:18 ". The walk now goes on to the end of the word and then past the
+space, so a word is always whole.
+
+**The progress has to reach the end.** The progress of the reply is
+measured against the audio that arrived, and the last of that is held
+by the converter until the reply ends. So the count ran short and the
+progress never quite reached the end: at 88% the answer stopped at
+"...called a jo". Two things fix it: the tail is counted as part of
+the reply, and the reply that has been played out is reported as
+complete whatever the count says — the speaker has drained it, so it
+has been said.
+
+**The words have to arrive before the mode goes off.** The reply ends
+and the speaking stops at the same moment, so the state that says the
+answer is complete arrives with the state that says the assistant has
+finished. The words are given to the overlay first and the mode after,
+or the answer stops a word short every time.
+
+### The pattern
+
+Each of these is the same mistake in a different place: the panel was
+showing the answer as the audio was played, and every part of that had
+to be right — the boundary, the count, and the order the state arrived
+in. A part that was wrong did not fail loudly. It showed an answer
+that was nearly right, which is the hardest kind of wrong to notice.
+
+---
+
+## 10. The immediate next step
 
 **Done:** the protocol extension, the voice satellite, the wake word with its
 gate, the music player and the SDK removal. The wire check covers 41

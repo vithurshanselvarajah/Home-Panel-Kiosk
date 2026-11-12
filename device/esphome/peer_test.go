@@ -55,7 +55,7 @@ func splitLines(text string) []string {
 const apiPeerSource = `
 import asyncio, base64, sys
 
-from aioesphomeapi import APIClient
+from aioesphomeapi import APIClient, VoiceAssistantEventType
 
 async def main():
     mode = sys.argv[1]
@@ -121,6 +121,78 @@ async def main():
             print("entity:" + entity.name + ":" + type(entity).__name__)
         for service in services:
             print("service:" + service.name)
+    elif mode == "capabilities":
+        # The capabilities are what Home Assistant reads the voice
+        # assistant's flags from, from API 1.15 onwards. An empty answer
+        # says the device has no voice assistant at all.
+        caps = await client.device_capabilities()
+        print("voice_flags:" + str(caps.voice_assistant.feature_flags))
+        print("sendspin_flags:" + str(caps.sendspin.feature_flags))
+        print("sendspin_client:" + str(caps.sendspin.client_id))
+    elif mode == "reply_audio":
+        # Home Assistant sends the reply's audio over the connection and
+        # says the reply is over with an event. The audio itself carries
+        # no end marker, which is what the device has to understand.
+        client.subscribe_voice_assistant(
+            handle_start=lambda *a: asyncio.sleep(0),
+            handle_stop=lambda *a: asyncio.sleep(0),
+            handle_audio=lambda data, data2: asyncio.sleep(0),
+        )
+        await asyncio.sleep(0.3)
+        # The reply, as Home Assistant sends it: the audio with the end
+        # flag clear.
+        client.send_voice_assistant_audio(bytes(range(0, 64)))
+        client.send_voice_assistant_audio(bytes(range(64, 128)))
+        # And the end of it, as an event.
+        client.send_voice_assistant_event(
+            VoiceAssistantEventType.VOICE_ASSISTANT_TTS_STREAM_END, {})
+        await asyncio.sleep(0.8)
+    elif mode == "utterance_end":
+        # The end of the utterance is told to Home Assistant with the end
+        # flag on the audio. The peer checks that the flag arrives.
+        client.subscribe_voice_assistant(
+            handle_start=lambda *a: asyncio.sleep(0),
+            handle_stop=lambda *a: asyncio.sleep(0),
+            handle_audio=lambda data, data2: asyncio.sleep(0),
+        )
+        await asyncio.sleep(0.3)
+        # The device sends the end of the utterance.
+        client.send_voice_assistant_event(
+            VoiceAssistantEventType.VOICE_ASSISTANT_STT_VAD_END, {})
+        await asyncio.sleep(0.8)
+    elif mode == "listen":
+        # The peer plays a recording into the device as the microphone
+        # and prints what Home Assistant said it heard.
+        #
+        # The recording is played in pieces, the way the microphone
+        # delivers it, so the device sees the same thing it would see
+        # from a real microphone.
+        import wave, struct
+        path = sys.argv[4]
+        with wave.open(path, "rb") as w:
+            frames = w.getnframes()
+            width = w.getsampwidth()
+            rate = w.getframerate()
+            data = w.readframes(frames)
+        client.subscribe_voice_assistant(
+            handle_start=lambda *a: asyncio.sleep(0),
+            handle_stop=lambda *a: asyncio.sleep(0),
+            handle_audio=lambda data, data2: asyncio.sleep(0),
+        )
+        await asyncio.sleep(0.3)
+        # The turn starts.
+        client.send_voice_assistant_request("hey jarvis", start=True, flags=0, conversation_id="test-1")
+        await asyncio.sleep(0.2)
+        # The microphone, in pieces.
+        chunk = rate // 10 * width
+        offset = 0
+        while offset < len(data):
+            piece = data[offset:offset + chunk]
+            client.send_voice_assistant_audio(piece)
+            offset += chunk
+            await asyncio.sleep(0.05)
+        await asyncio.sleep(6.0)
+        print("done")
     elif mode == "states":
         # Subscribe to the state and read what the device sends.
         states = []
