@@ -226,6 +226,8 @@ func main() {
 		configFile    = flag.String("config-file", "", "read the device configuration from here")
 		mic           = flag.String("mic", "", "the microphone to use; empty is the system default")
 		speaker       = flag.String("speaker", "", "the speaker to use; empty is the system default")
+		micFile       = flag.String("mic-file", "", "play this recording as the microphone instead of using a sound card")
+		speakerFile   = flag.String("speaker-file", "", "write the speaker's audio to this file instead of using a sound card")
 		verbose       = flag.Bool("verbose", false, "log at debug level")
 		esphomePort   = flag.Int("esphome-port", 0, "the port the Home Assistant API is on; zero picks one")
 		esphomeKey    = flag.String("esphome-key", "", "the base64 encryption key for the Home Assistant API")
@@ -246,7 +248,17 @@ func main() {
 		os.Exit(2)
 	}
 
-	backend := audio.New(*mic, *speaker)
+	// The sound card, or the files that stand in for it.
+	//
+	// A recording played as the microphone is how the panel is tested
+	// without a room and without a card: the microphone really is the
+	// recording, so what goes to Home Assistant is what the recording
+	// says, and the whole pipeline is exercised.
+	backend := audioBackend(audio.New(*mic, *speaker))
+	if *micFile != "" || *speakerFile != "" {
+		backend = newFileBackend(*micFile, *speakerFile)
+		log.Info("the sound card is replaced by files", "microphone", *micFile, "speaker", *speakerFile)
+	}
 
 	// The identity the credentials belong to wins over the one that was
 	// asked for. The controller issues a link credential to one device,
@@ -658,14 +670,18 @@ func main() {
 	// The wake word fires, the turn starts. The panel opens the
 	// microphone for the turn and closes it when home assistant says the
 	// utterance is over.
-	if wake != nil {
-		wake.onCross = func(phrase string) {
-			log.Info("the wake word fired", "phrase", phrase)
-			if err := control.StartTurn(phrase); err != nil {
-				log.Warn("the turn could not be started", "error", err)
-			}
+	startTurn := func(phrase string) {
+		log.Info("the wake word fired", "phrase", phrase)
+		if err := control.StartTurn(phrase); err != nil {
+			log.Warn("the turn could not be started", "error", err)
 		}
 	}
+	if wake != nil {
+		wake.onCross = startTurn
+	}
+	// Something else can start a turn too: an automation, or a person
+	// pressing a button on the screen. It is the same turn.
+	control.OnListen(startTurn)
 
 	go reporter.run(ctx)
 	go watchConfig(ctx, *configFile, reporter, speaker_, wake, control, log)
