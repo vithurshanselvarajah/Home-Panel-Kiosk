@@ -34,13 +34,15 @@ import (
 
 // device is the running device program.
 type device struct {
-	t         *testing.T
-	cmd       *exec.Cmd
-	statePath string
-	mu        sync.Mutex
-	states    []deviceState
-	lines     []string
-	stopped   bool
+	t           *testing.T
+	cmd         *exec.Cmd
+	statePath   string
+	controlPath string
+	speakerPath string
+	mu          sync.Mutex
+	states      []deviceState
+	lines       []string
+	stopped     bool
 }
 
 // deviceState is the state the device program publishes.
@@ -77,7 +79,7 @@ type deviceState struct {
 //
 // The name it is announced under is the one Home Assistant knows it by,
 // so the test exercises the device that is really there.
-func startDevice(t *testing.T) *device {
+func startDevice(t *testing.T, recording string) *device {
 	t.Helper()
 
 	binary := liveDeviceBinary()
@@ -88,13 +90,25 @@ func startDevice(t *testing.T) *device {
 		t.Fatalf("the device binary is not there: %v", err)
 	}
 
+	name := liveName()
+
 	dir := t.TempDir()
 	creds := filepath.Join(dir, "credentials")
 	if err := os.MkdirAll(creds, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// The control socket is how the panel talks to the device program,
+	// and it is in memory because it carries what is happening right
+	// now.
+	controlSocket := filepath.Join("/dev/shm/homepanel", name, "control.sock")
+	if err := os.MkdirAll(filepath.Dir(controlSocket), 0o700); err != nil {
+		t.Fatal(err)
+	}
 
-	name := liveName()
+	// The recording is the microphone, and the speaker's audio is
+	// written to a file, so the whole audio path is exercised without a
+	// sound card.
+	speakerFile := filepath.Join(dir, "speaker.wav")
 
 	// The state is written where the device program puts it.
 	//
@@ -119,6 +133,10 @@ func startDevice(t *testing.T) *device {
 		"--esphome-name", name,
 		"--board", "Home Panel",
 		"--state-file", statePath,
+		"--control-socket", controlSocket,
+	}
+	if recording != "" {
+		args = append(args, "--mic-file", recording, "--speaker-file", speakerFile)
 	}
 	if key := os.Getenv("LIVE_HA_ESPHOME_KEY"); key != "" {
 		args = append(args, "--esphome-key", key)
@@ -134,7 +152,13 @@ func startDevice(t *testing.T) *device {
 		t.Fatal(err)
 	}
 
-	d := &device{t: t, cmd: cmd, statePath: statePath}
+	d := &device{
+		t:           t,
+		cmd:         cmd,
+		statePath:   statePath,
+		controlPath: controlSocket,
+		speakerPath: speakerFile,
+	}
 
 	// The device's own words, which are how a failure is seen.
 	go func() {
@@ -197,6 +221,11 @@ func (d *device) stop() {
 	}
 }
 
+// controlSocket is where the panel talks to the device program.
+func (d *device) controlSocket() string {
+	return d.controlPath
+}
+
 // logs gives back what the device said.
 func (d *device) logs() []string {
 	d.mu.Lock()
@@ -253,7 +282,7 @@ func readState(path string) (deviceState, error) {
 func TestTheDeviceConnectsToLiveHomeAssistant(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
-	d := startDevice(t)
+	d := startDevice(t, "")
 	state := d.waitFor("connected to Home Assistant", 90*time.Second, func(s deviceState) bool {
 		return s.Connection == "connected"
 	})

@@ -122,8 +122,8 @@ type Scorer struct {
 	// closer releases the inference engine, when one owns resources (the ORT
 	// sessions). Nil for an injected Inferer, e.g. in tests.
 	closer io.Closer
-// Info describes the loaded engine for logging: runtime version, model,
-// whether XNNPACK attached. Set once at construction, never mutated.
+	// Info describes the loaded engine for logging: runtime version, model,
+	// whether XNNPACK attached. Set once at construction, never mutated.
 	info string
 	// phrase is the name of the wake word, as a person says it.
 	//

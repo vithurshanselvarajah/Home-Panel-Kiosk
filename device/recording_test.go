@@ -36,11 +36,6 @@ func (b *recordingBackend) SelectedAudioDevices() (string, string) { return "", 
 
 func (b *recordingBackend) SelectAudioDevices(input, output string) error { return nil }
 
-type nopWriteCloser struct{}
-
-func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
-func (nopWriteCloser) Close() error                { return nil }
-
 type errNoClocked struct{}
 
 func (errNoClocked) Error() string { return "no clocked output" }

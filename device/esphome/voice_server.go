@@ -169,6 +169,16 @@ func (s *Server) sendVoiceRequest(client *Client, conversationID, phrase string)
 // The audio is signed 16-bit little-endian mono at 16 kHz, which is what
 // home assistant expects.
 func (s *Server) sendVoiceAudio(client *Client, pcm []byte, end bool) error {
+	// The microphone's audio is the biggest thing on the connection, and
+	// it is the thing that goes wrong quietly: a chunk that is dropped
+	// is a word that is never heard, and nothing says so.
+	//
+	// So the size of every chunk is said at the debug level, and the
+	// first one after a turn starts is said at the info level, because
+	// that is the one that tells whether the question was heard whole.
+	if len(pcm) > 0 {
+		client.log("the microphone is going to home assistant", "bytes", len(pcm))
+	}
 	return client.write(TypeVoiceAssistantAudio, &VoiceAssistantAudio{
 		Data: pcm,
 		End:  end,

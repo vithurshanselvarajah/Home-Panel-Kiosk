@@ -124,6 +124,14 @@ type ControlServer struct {
 	// The transport belongs to the music server and the panel has the
 	// buttons, so the request goes here and is passed on to the server.
 	onTransport func(command TransportCommand)
+	// onListen is called when something asks the device to start a
+	// turn.
+	//
+	// The wake word normally starts one, and the wake word is local.
+	// But a panel can be asked to start one by something else — an
+	// automation, or a person pressing a button on the screen — and the
+	// turn is the same either way.
+	onListen func(phrase string)
 	// mu guards the state and the listener.
 	mu sync.Mutex
 	// listener is the socket, when it is listening.
@@ -261,6 +269,19 @@ func (s *ControlServer) handle(message ControlMessage) {
 		if handler != nil {
 			handler(message.Command)
 		}
+	case "listen":
+		// The panel is asking the device to start listening.
+		//
+		// It is the wake word that normally starts a turn, and the wake
+		// word is local. But a panel can be asked to start one by
+		// something else — an automation, or a person pressing a
+		// button on the screen — and the turn is the same either way.
+		s.mu.Lock()
+		handler := s.onListen
+		s.mu.Unlock()
+		if handler != nil {
+			handler(message.Phrase)
+		}
 	default:
 		s.log.Debug("the panel sent something unexpected", "action", message.Action)
 	}
@@ -277,6 +298,9 @@ type ControlMessage struct {
 	State ControlState `json:"value"`
 	// Command is the transport command, for the transport message.
 	Command TransportCommand `json:"command"`
+	// Phrase is the wake word that started the turn, for the listen
+	// message.
+	Phrase string `json:"phrase,omitempty"`
 	// Connected says whether Home Assistant is talking to the device
 	// program, for the link message.
 	//
@@ -347,6 +371,14 @@ func (s *ControlServer) writeMessage(conn net.Conn, message ControlMessage) erro
 //
 // This is how the panel's own state reaches Home Assistant: the
 // entities are changed here, and the change is pushed.
+// SetListenHandler sets what is called when something asks the device
+// to start a turn.
+func (s *ControlServer) SetListenHandler(fn func(phrase string)) {
+	s.mu.Lock()
+	s.onListen = fn
+	s.mu.Unlock()
+}
+
 // SetTransportHandler sets what is called when the panel asks for the
 // music transport to be driven.
 func (s *ControlServer) SetTransportHandler(fn func(command TransportCommand)) {

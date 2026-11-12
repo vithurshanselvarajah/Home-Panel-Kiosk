@@ -673,6 +673,20 @@ func (p *ControlPlane) OnTransport(fn func(command TransportCommand)) {
 	p.server.SetTransportHandler(fn)
 }
 
+// OnListen sets what is called when something asks for a turn to
+// start.
+//
+// The wake word normally starts one, and the wake word is local. But a
+// panel can be asked to start one by something else — an automation, or
+// a person pressing a button on the screen — and the turn is the same
+// either way.
+func (p *ControlPlane) OnListen(fn func(phrase string)) {
+	if p.server == nil {
+		return
+	}
+	p.server.SetListenHandler(fn)
+}
+
 // OnVoice wires the voice assistant's callbacks.
 //
 // The device program owns the microphone and the speaker, so it is the

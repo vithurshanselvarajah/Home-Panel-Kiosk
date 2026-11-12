@@ -1115,6 +1115,20 @@ func (a *deviceAudio) setStreaming(streaming bool) {
 	a.mu.Lock()
 	a.streaming = streaming
 	a.mu.Unlock()
+
+	// The sound card is told that the turn has started.
+	//
+	// A card made of files needs to know: the recording is the
+	// microphone, and the microphone has to start at the beginning of
+	// the turn. Started any earlier, the frames would be read and
+	// thrown away, because the frames read before the turn are not
+	// sent to home assistant — the room is the room's until somebody
+	// says something.
+	if streaming {
+		if turn, ok := a.backend.(interface{ TurnStarted() }); ok {
+			turn.TurnStarted()
+		}
+	}
 }
 
 // sendMicAudio sends a block of the microphone to home assistant.
