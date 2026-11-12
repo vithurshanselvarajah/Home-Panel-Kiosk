@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self' ws://localhost:* ws://127.0.0.1:*;" />
+    <!-- The album art comes from the music server, which is somewhere else
+         on the network, so images are allowed from anywhere. Nothing else
+         is: the scripts and the styles are the panel's own, and the only
+         connection is to the development bridge. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: http: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:*;" />
     <title>Home Panel</title>
     <link rel="stylesheet" href="./style.css" />
     <script src="./dev-bridge.js"></script>
@@ -37,11 +41,34 @@
           <input class="slider" id="volume-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Volume" />
         </div>
       </section>
-      <section class="service-status" aria-label="Service status">
-        <div class="service-row"><i class="service-led" data-service="control"></i><span>ESPHome</span><b id="control-state">Checking</b></div>
-        <div class="service-row"><i class="service-led" data-service="immich"></i><span>Immich Kiosk</span><b id="immich-state">Checking</b></div>
-        <div class="service-row"><i class="service-led" data-service="dashboard"></i><span>Dashboard</span><b id="dashboard-state">Checking</b></div>
-        <div class="service-row" id="voice-row" hidden><i class="service-led" data-service="voice"></i><span>Voice assistant</span><b id="voice-state">Unknown</b></div>
+      <!-- The music. It is here rather than in the settings because it is
+           what the drawer is for: the thing that is playing, and the
+           buttons for it. -->
+      <section class="media-panel" id="media-panel" aria-label="Now playing" hidden>
+        <!-- Which music is shown. The music server's takes priority,
+             because it is the one that knows what it is playing, and
+             the panel's own music is one tap away. -->
+        <div class="media-panel__sources" id="media-sources" role="group" aria-label="Music source">
+          <button class="media-source is-selected" id="media-source-server" data-source="server">Music server</button>
+          <button class="media-source" id="media-source-home" data-source="home">Home Assistant</button>
+        </div>
+        <div class="media-panel__art">
+          <img id="media-artwork" class="media-panel__image" alt="" hidden />
+          <span id="media-artwork-fallback" class="media-panel__fallback" aria-hidden="true">♪</span>
+        </div>
+        <div class="media-panel__details">
+          <span id="media-title" class="media-panel__title">Nothing playing</span>
+          <span id="media-artist" class="media-panel__artist"></span>
+        </div>
+        <div class="media-panel__scrub">
+          <input id="media-position" class="slider slider--slim" type="range" min="0" max="1000" step="1" value="0" aria-label="Position in track" disabled />
+          <div class="media-panel__times"><span id="media-elapsed">0:00</span><span id="media-duration">0:00</span></div>
+        </div>
+        <div class="media-panel__transport" role="group" aria-label="Playback">
+          <button class="media-button" id="media-previous" data-transport="previous" aria-label="Previous track">⏮</button>
+          <button class="media-button media-button--play" id="media-play" data-transport="play" aria-label="Play">▶</button>
+          <button class="media-button" id="media-next" data-transport="next" aria-label="Next track">⏭</button>
+        </div>
       </section>
       <div class="drawer-actions">
         <button class="drawer-button" data-action="dashboard"><span>⌂</span><span id="dashboard-action-label" class="button-label">Dashboard</span></button>
@@ -51,16 +78,37 @@
         <button class="drawer-button" id="display-mode-button"><span>⛶</span><span id="display-mode-label" class="button-label">Window mode</span></button>
         <button class="drawer-button drawer-button--exit" id="exit-button"><span>⏻</span>Exit</button>
       </div>
+      <!-- The status is at the bottom of the drawer because it is the
+           thing that is looked at least: it says whether the panel is
+           working, and it is not something that is pressed. -->
+      <section class="service-status" aria-label="Service status">
+        <div class="service-row"><i class="service-led" data-service="control"></i><span>ESPHome</span><b id="control-state">Checking</b></div>
+        <div class="service-row"><i class="service-led" data-service="immich"></i><span>Immich Kiosk</span><b id="immich-state">Checking</b></div>
+        <div class="service-row"><i class="service-led" data-service="dashboard"></i><span>Dashboard</span><b id="dashboard-state">Checking</b></div>
+        <div class="service-row" id="voice-row" hidden><i class="service-led" data-service="voice"></i><span>Voice assistant</span><b id="voice-state">Unknown</b></div>
+      </section>
       <footer class="drawer-footer">
         <span id="mode-label">Dashboard</span>
         <span id="version-label" class="version-label"></span>
       </footer>
     </aside>
     <section id="keyboard" class="keyboard" aria-label="Touch keyboard" hidden></section>
-    <div id="voice-dim" class="voice-dim" hidden></div>
-    <div id="voice-indicator" class="voice-indicator" hidden>
-      <span class="voice-indicator__label" id="voice-indicator-label" role="status"></span>
-      <canvas id="voice-indicator-canvas" class="voice-indicator__canvas" aria-hidden="true"></canvas>
+    <!-- The wake word overlay. It covers the screen while the assistant is
+         working, in the way a smart display does, and it is where the
+         words are shown: what is being heard while it listens and what
+         is being said while it answers. -->
+    <div id="voice-overlay" class="voice-overlay" hidden>
+      <div class="voice-overlay__inner">
+        <div class="voice-overlay__orb" id="voice-overlay-orb" aria-hidden="true">
+          <div class="voice-overlay__ring"></div>
+          <div class="voice-overlay__core"></div>
+        </div>
+        <div class="voice-overlay__state" id="voice-overlay-state">Listening</div>
+        <!-- What was heard, above. -->
+        <div class="voice-overlay__text voice-overlay__text--heard" id="voice-overlay-heard" aria-live="polite"></div>
+        <!-- What is being said, below. -->
+        <div class="voice-overlay__text voice-overlay__text--said" id="voice-overlay-said" aria-live="polite"></div>
+      </div>
     </div>
     <section id="settings-panel" class="settings-panel" hidden>
       <div class="panel-heading"><div><span class="eyebrow">DEVICE SETUP</span><h1>Home Panel</h1></div><button id="close-settings" class="close-button" aria-label="Close">×</button></div>
@@ -102,8 +150,7 @@
         <label class="setting-toggle"><input name="voiceEnabled" type="checkbox" /> Be a voice satellite</label>
         <label>Device ID <span class="field-unit">must stay stable</span><input name="voiceDeviceId" type="text" placeholder="home-panel" /></label>
           <div class="section-label"><span>WAKE WORD</span><span class="line"></span></div>
-          <label class="setting-toggle"><input name="voiceWakeWordEnabled" type="checkbox" checked /> Wake word enabled</label>
-          <label>Wake threshold <span class="field-unit">0 to 1</span><input name="voiceWakeThreshold" type="number" min="0" max="1" step="0.01" placeholder="0.5" /></label>
+          <p class="field-note">The wake word is set in Home Assistant. It is an entity on the panel, so Home Assistant can read it and change it: the sensitivity, whether the wake word is listening, the ducking and the mute.</p>
           <p class="field-note">The model and the ONNX runtime are installed on the device, outside the application. Without them the panel still works, but Home Assistant does the listening instead.</p>
           <div class="section-label"><span>MICROPHONE</span><span class="line"></span></div>
           <label>Microphone<select name="voiceAudioInput" id="voice-audio-input"><option value="">System default</option></select></label>
@@ -120,7 +167,7 @@
             <div class="audio-meter" role="meter" aria-label="Speaker level" aria-valuemin="0" aria-valuemax="100" id="speaker-meter"><i id="speaker-meter-fill"></i></div>
             <span class="audio-test__value" id="speaker-level-value">—</span>
           </div>
-          <div class="two-col"><label>Output volume <span class="field-unit">0 to 100</span><input name="voiceVolume" type="number" min="0" max="100" placeholder="50" /></label><label>Ducking <span class="field-unit">dB under a response</span><input name="voiceDuckDb" type="number" min="-30" max="0" step="0.5" placeholder="-6" /></label></div>
+          <div class="two-col"><label>Output volume <span class="field-unit">0 to 100</span><input name="voiceVolume" type="number" min="0" max="100" placeholder="50" /></label><label>Ducking <span class="field-unit">dB under a response</span><input name="voiceDuckDb" type="number" min="-60" max="0" step="0.5" placeholder="-6" /></label></div>
           <label class="setting-toggle"><input name="voiceMuteButton" type="checkbox" checked /> The device has its own mute switch</label>
           <div class="section-label"><span>MUSIC</span><span class="line"></span></div>
           <label class="setting-toggle"><input name="musicEnabled" type="checkbox" checked /> Play music from Music Assistant</label>

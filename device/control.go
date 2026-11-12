@@ -118,6 +118,12 @@ type ControlServer struct {
 	// and the speaker sends its volume when it changes, and a change
 	// settles rather than going round for ever.
 	onVolume func(level int)
+	// onTransport is called when the panel asks for the music transport
+	// to be driven.
+	//
+	// The transport belongs to the music server and the panel has the
+	// buttons, so the request goes here and is passed on to the server.
+	onTransport func(command TransportCommand)
 	// mu guards the state and the listener.
 	mu sync.Mutex
 	// listener is the socket, when it is listening.
@@ -240,14 +246,24 @@ func (s *ControlServer) serve(conn net.Conn) {
 // handle acts on a message from the panel.
 //
 // The panel sends its state, and the device program turns it into the
-// entities Home Assistant sees. A command from the panel is not
-// expected: the panel does what it is told.
+// entities Home Assistant sees. It also asks for the music transport to
+// be driven, which is the one thing the panel asks for: the transport
+// belongs to the music server, and the panel is the one with the
+// buttons.
 func (s *ControlServer) handle(message ControlMessage) {
-	if message.Action == "state" {
+	switch message.Action {
+	case "state":
 		s.SetState(message.State)
-		return
+	case "transport":
+		s.mu.Lock()
+		handler := s.onTransport
+		s.mu.Unlock()
+		if handler != nil {
+			handler(message.Command)
+		}
+	default:
+		s.log.Debug("the panel sent something unexpected", "action", message.Action)
 	}
-	s.log.Debug("the panel sent something unexpected", "action", message.Action)
 }
 
 // ControlMessage is what the panel sends.
@@ -259,12 +275,34 @@ type ControlMessage struct {
 	Action string `json:"action"`
 	// State is the state of the panel, for the state message.
 	State ControlState `json:"value"`
+	// Command is the transport command, for the transport message.
+	Command TransportCommand `json:"command"`
 	// Connected says whether Home Assistant is talking to the device
 	// program, for the link message.
 	//
 	// It is always sent, even when it is false, because "not connected"
 	// is the answer half the time.
 	Connected bool `json:"connected"`
+}
+
+// TransportCommand is what the panel asks of the music transport.
+//
+// The names are the ones the panel uses for its buttons, and they are
+// turned into the server's own names on the way through.
+type TransportCommand struct {
+	// Action is what to do.
+	//
+	// It is "play", "pause", "next", "previous" or "seek".
+	Action string `json:"action"`
+	// Source says which music the command is for.
+	//
+	// It is "server" for the music a music server is playing and
+	// "home" for the music Home Assistant is playing. The two are
+	// different things and each has its own transport.
+	Source string `json:"source,omitempty"`
+	// PositionMs is where to seek to, in milliseconds. It is only used
+	// by a seek.
+	PositionMs int64 `json:"positionMs,omitempty"`
 }
 
 // SetConnected records whether Home Assistant is talking to the device
@@ -309,6 +347,14 @@ func (s *ControlServer) writeMessage(conn net.Conn, message ControlMessage) erro
 //
 // This is how the panel's own state reaches Home Assistant: the
 // entities are changed here, and the change is pushed.
+// SetTransportHandler sets what is called when the panel asks for the
+// music transport to be driven.
+func (s *ControlServer) SetTransportHandler(fn func(command TransportCommand)) {
+	s.mu.Lock()
+	s.onTransport = fn
+	s.mu.Unlock()
+}
+
 // SetVolumeFollower sets what is called when the panel reports a volume.
 //
 // The panel's volume is the speaker's volume, and the speaker is what
@@ -356,6 +402,38 @@ func (s *ControlServer) State() ControlState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.state
+}
+
+// SetVoiceSettings puts the voice settings into the entities.
+//
+// The voice settings are the device's own rather than the panel's, so
+// they are not in the panel's state. They are pushed into the entities
+// so Home Assistant can read them, and so a change made in Home
+// Assistant is not undone by the next state the panel sends.
+func (s *ControlServer) SetVoiceSettings(threshold float64, wakeEnabled bool, duckDB float64, muted bool) {
+	if s.registry == nil {
+		return
+	}
+	for _, entity := range s.registry.All() {
+		switch entity.ObjectID {
+		case "wake_word_threshold":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindNumber, Number: threshold * 100,
+			})
+		case "wake_word_enabled":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: wakeEnabled,
+			})
+		case "music_ducking_db":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindNumber, Number: duckDB,
+			})
+		case "muted":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: muted,
+			})
+		}
+	}
 }
 
 // applyEntities changes the entities to match the state of the panel.

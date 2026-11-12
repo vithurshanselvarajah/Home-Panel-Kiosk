@@ -69,6 +69,21 @@ type State struct {
 	Speaking bool `json:"speaking"`
 	// Thinking is true while the controller waits for Home Assistant.
 	Thinking bool `json:"thinking"`
+	// Transcript is what Home Assistant heard.
+	//
+	// The panel shows it while the assistant is thinking about it, so
+	// the person can see that it heard what they said.
+	Transcript string `json:"transcript"`
+	// Spoken is what Home Assistant is saying.
+	//
+	// The panel shows it while the reply is being played.
+	Spoken string `json:"spoken"`
+	// SpokenProgress is how much of the reply has been played, between
+	// zero and one.
+	//
+	// The panel shows the answer's words as they are spoken, and this
+	// is what says how far along to show them.
+	SpokenProgress float64 `json:"spoken_progress"`
 	// Muted is the device's own mute switch.
 	Muted bool `json:"muted"`
 
@@ -102,12 +117,38 @@ type State struct {
 
 	// MusicState is what the music player is doing.
 	MusicState string `json:"music_state"`
+	// MediaState is what the media Home Assistant is playing is doing.
+	//
+	// It is the panel's own music, as opposed to the music server's,
+	// and the two take turns.
+	MediaState string `json:"media_state"`
 	// MusicPaired is how many servers the player is paired with.
 	MusicPaired int `json:"music_paired"`
 	// MusicBuffered is how much music is queued, in milliseconds.
 	MusicBuffered int64 `json:"music_buffered"`
 	// MusicSynced says the player is in step with its server.
 	MusicSynced bool `json:"music_synced"`
+	// MusicTitle is what is playing.
+	MusicTitle string `json:"music_title"`
+	// MusicArtist is who is playing it.
+	MusicArtist string `json:"music_artist"`
+	// MusicAlbum is the album it is from.
+	MusicAlbum string `json:"music_album"`
+	// MusicArtwork is the picture of the album, if there is one.
+	MusicArtwork string `json:"music_artwork"`
+	// MusicPosition is how far into the track the music has got, in
+	// milliseconds.
+	MusicPosition int64 `json:"music_position"`
+	// MusicDuration is how long the track is, in milliseconds. It is zero
+	// for a live stream, which has no end.
+	MusicDuration int64 `json:"music_duration"`
+	// MusicPlaying says whether the music is playing or paused.
+	MusicPlaying bool `json:"music_playing"`
+	// MusicTransport is what the transport can do.
+	//
+	// It is empty when there is no music server, and the panel shows no
+	// buttons rather than buttons that do nothing.
+	MusicTransport []string `json:"music_transport,omitempty"`
 
 	// LastError is the most recent error, if any.
 	LastError string `json:"last_error"`
@@ -162,6 +203,18 @@ func readConfig(path string) (Config, error) {
 	}
 	return c, nil
 }
+
+// bargeInThreshold is the score the wake word has to reach while the
+// panel is speaking.
+//
+// It is above the wake word's own threshold because the panel has no
+// echo cancellation: the echo of the reply is louder at the microphone
+// than a person talking over it, and a lower bar would make the panel
+// interrupt itself.
+//
+// With echo cancellation the bar goes below the wake word's own, which
+// is what makes interrupting easy.
+const bargeInThreshold = 0.85
 
 func main() {
 	var (
@@ -233,10 +286,10 @@ func main() {
 	// callbacks tell it when a reply starts and ends and it is what
 	// publishes that.
 	reporter := &stateReporter{
-		log:    log,
-		state:  tracker,
-		audio:  speaker_,
-		wake:   wake,
+		log:   log,
+		state: tracker,
+		audio: speaker_,
+		wake:  wake,
 	}
 	// The live state and the live level are written into memory.
 	//
@@ -280,6 +333,15 @@ func main() {
 	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket, speaker_)
 	defer control.Close()
 
+	// The drawer says whether the panel can reach Home Assistant, and
+	// the link is what says. Nothing else knows it.
+	control.OnLink(reporter.setLink)
+	// The transcript comes from the voice assistant, which the control
+	// plane owns.
+	reporter.transcript = control.Transcript
+	reporter.spoken = control.Spoken
+	reporter.spokenProgress = control.SpokenProgress
+
 	// The voice assistant is the control plane's. The panel asks it to
 	// start a turn when the wake word fires, and it streams the
 	// microphone to home assistant for the length of the turn.
@@ -288,12 +350,47 @@ func main() {
 		OnEnd:      reporter.turnEnded,
 		OnThinking: reporter.setThinking,
 		OnSpeaking: reporter.setSpeaking,
-		OnAudio:    speaker_.playReply,
+		// The reply's audio comes back on the connection, and the speaker
+		// is what plays it.
+		OnAudio: speaker_.playReply,
+		// The reply's end is said with an event, not with the audio, so
+		// the speaker is told separately that there will be no more.
+		OnReplyEnd: speaker_.finishReply,
+		// The reply is over when the speaker has drained it, and the
+		// speaker is the one that knows.
+		OnPlayedOut: control.ReplyPlayedOut,
+		// A reply that was interrupted is dropped rather than waited
+		// for: the person said the wake word again and meant it.
+		OnFlush: speaker_.flush,
+		// Home Assistant asking the panel to speak is answered by playing
+		// the audio that follows, and by telling it the announcement is
+		// finished when the speaker has drained it.
+		//
+		// Without the answer, Home Assistant waits for it, the wait
+		// times out, and the connection is dropped.
+		OnAnnounce: speaker_.announce,
 		// The microphone's frames go to home assistant while the turn is
 		// running. They are sent from the capture goroutine, which is
 		// where they are captured, so nothing is buffered on the way.
 		OnMicAudio: speaker_.sendMicAudio,
+		// The end of the utterance goes to home assistant as well, with
+		// the end flag on the audio. It is what closes the pipeline on
+		// the device's side.
+		OnUtteranceEnd: func() {
+			if err := control.SendVoiceEnd(); err != nil {
+				log.Debug("the end of the utterance could not be sent", "error", err)
+			}
+		},
 	})
+
+	// The music player's identity goes in the device's capabilities.
+	//
+	// It is how a music server tells that the player it found on the
+	// network is the player Home Assistant already knows about, and so
+	// does not make one of its own.
+	if player := speaker_.sendspinPlayer(); player != nil {
+		control.SetSendspin(esphome.NewSendspin(player.ClientID(), player.PairingToken()))
+	}
 
 	// The speaker. It is the entity the reply to a voice turn comes back
 	// on, and the one Music Assistant plays music through.
@@ -304,6 +401,34 @@ func main() {
 	control.OnMediaPlayer(MediaPlayerHooks{
 		OnPlay: func(url string, announcement bool) {
 			go speaker_.playMediaURL(ctx, url, announcement)
+		},
+		OnCommand: func(command esphome.MediaPlayerCommand) {
+			// There are two kinds of music, and the command goes to
+			// whichever is playing.
+			//
+			// The music Home Assistant is playing is the device's own
+			// stream, and the device holds the audio, so it can pause
+			// it and play it again.
+			//
+			// The music a music server is playing is the server's, and
+			// the server has the transport. The command goes to it.
+			switch command {
+			case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PLAY:
+				speaker_.ResumeMedia()
+				if player := speaker_.sendspinPlayer(); player != nil {
+					player.Transport("play")
+				}
+			case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PAUSE:
+				speaker_.PauseMedia()
+				if player := speaker_.sendspinPlayer(); player != nil {
+					player.Transport("pause")
+				}
+			case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_STOP:
+				speaker_.StopMedia()
+				if player := speaker_.sendspinPlayer(); player != nil {
+					player.Transport("stop")
+				}
+			}
 		},
 		OnVolume: func(volume float32) {
 			// Home Assistant asked for a level. The speaker owns the
@@ -324,11 +449,101 @@ func main() {
 		control.SetMediaPlayerState(state)
 	}
 
+	// The two music sources take turns.
+	//
+	// Home Assistant's music and a music server's music are both music,
+	// and playing both at once is neither of them. So when one starts,
+	// the other is stopped.
+	//
+	// The microphone and the reply are never stopped: they are the point
+	// of the panel.
+	speaker_.onMusicStarted = func(source string) {
+		switch source {
+		case "home-assistant":
+			// Home Assistant's music is playing, so the music server's
+			// music is paused rather than stopped: the server is still
+			// playing it and will say so again.
+			if player := speaker_.sendspinPlayer(); player != nil {
+				player.Transport("pause")
+			}
+		case "server":
+			// A music server is playing, so Home Assistant's music stops.
+			speaker_.StopMedia()
+		}
+	}
+
 	// The music player's status is part of the state, so a change in it
 	// has to reach the panel.
+	// The speaker says when the reply has been played out, because it
+	// is the speaker that knows: the reply is over when the speaker has
+	// drained it and not when the last frame arrived.
+	speaker_.onReplyEnded = func() {
+		control.ReplyPlayedOut()
+	}
+
 	speaker_.onSendspinStatus = func(status sendspin.Status) {
+		// A music server that starts playing takes the turn from Home
+		// Assistant's music.
+		//
+		// It is said once, when the music starts and not while it
+		// plays: the status is read many times a second and the music
+		// server's music does not keep starting.
+		if status.State == "playing" {
+			speaker_.mu.Lock()
+			playing := speaker_.sendspinPlaying
+			speaker_.sendspinPlaying = true
+			speaker_.mu.Unlock()
+			if !playing && speaker_.onMusicStarted != nil {
+				speaker_.onMusicStarted("server")
+			}
+		} else {
+			speaker_.mu.Lock()
+			speaker_.sendspinPlaying = false
+			speaker_.mu.Unlock()
+		}
 		reporter.publish(reporter.state.Snapshot())
 	}
+
+	// The transport buttons are on the panel and the transport is on the
+	// music server, so a press travels through here.
+	//
+	// The server decides which commands it will accept, and the panel is
+	// told the list, so a command it does not want is never sent.
+	control.OnTransport(func(command TransportCommand) {
+		// The command goes to whichever music it is for.
+		//
+		// The panel's own music is the audio the device holds, so it can
+		// be paused and played again. The music server's music is the
+		// server's, and the server has the transport.
+		if command.Source == "home" {
+			switch command.Action {
+			case "play":
+				speaker_.ResumeMedia()
+			case "pause":
+				speaker_.PauseMedia()
+			case "stop":
+				speaker_.StopMedia()
+			}
+			return
+		}
+
+		player := speaker_.sendspinPlayer()
+		if player == nil {
+			return
+		}
+		switch command.Action {
+		case "play":
+			player.Transport("play")
+		case "pause":
+			player.Transport("pause")
+		case "next":
+			player.Transport("next")
+		case "previous":
+			player.Transport("previous")
+		case "seek":
+			player.SeekTo(command.PositionMs)
+		}
+	})
 
 	// The speaker's entity follows the panel's volume.
 	//
@@ -353,8 +568,22 @@ func main() {
 	// The microphone is open for as long as the wake word is listening,
 	// which is as long as the panel is switched on — so this is where the
 	// level comes from too.
+	// The announcement is finished when the speaker has drained it, and
+	// Home Assistant has to be told.
+	speaker_.onAnnounceFinished = func() {
+		control.AnnounceFinished()
+	}
+
 	speaker_.onWakeAudio = func(pcm []byte) {
 		wake.Push(pcm, time.Now())
+	}
+
+	// The microphone is opened again after every turn, and the wake
+	// word forgets what it heard before that. The reply is the panel
+	// talking, and the detector's window is two seconds long, so without
+	// this the panel can hear itself.
+	speaker_.onWakeReset = func() {
+		wake.Reset()
 	}
 
 	// The wake word needs the microphone, so it is opened for as long as
@@ -383,6 +612,38 @@ func main() {
 	control.OnWakeWord(func(enabled bool) {
 		wake.SetEnabled(enabled)
 		speaker_.setListening(enabled && wake.Ready())
+	})
+
+	// The voice settings, as Home Assistant sees them.
+	//
+	// They used to live in the device's own configuration file, which
+	// meant Home Assistant could neither read them nor change them.
+	// The wake word's bar is dropped while the panel is speaking, so
+	// that a person can interrupt a reply.
+	//
+	// The echo of the panel's own voice is about twenty-five decibels
+	// louder at the microphone than the person talking over it, so
+	// without this a person who interrupts is not heard at all.
+	wake.SetBargeThreshold(bargeInThreshold, speaker_.speaking)
+
+	control.OnWakeThreshold(func(threshold float64) {
+		wake.SetThreshold(threshold)
+		speaker_.setWakeThreshold(threshold)
+		log.Info("the wake word sensitivity was set", "threshold", threshold)
+	})
+	control.OnWakeEnabled(func(enabled bool) {
+		wake.SetEnabled(enabled)
+		speaker_.setListening(enabled && wake.Ready())
+		speaker_.setWakeEnabled(enabled)
+		log.Info("the wake word was switched", "enabled", enabled)
+	})
+	control.OnDucking(func(db float64) {
+		speaker_.setDuckDb(db)
+		log.Info("the ducking was set", "decibels", db)
+	})
+	control.OnMuted(func(muted bool) {
+		speaker_.setMuted(muted)
+		log.Info("the mute was switched", "muted", muted)
 	})
 
 	// The microphone's frames go to home assistant over the ESPHome
@@ -430,6 +691,15 @@ type stateReporter struct {
 	audio *deviceAudio
 	// wake is the local wake word, when there is one.
 	wake *wakeWord
+	// transcript says what Home Assistant heard.
+	//
+	// It is a function because the voice assistant belongs to the
+	// control plane, which is made after this.
+	transcript func() string
+	// spoken says what Home Assistant is saying.
+	spoken func() string
+	// spokenProgress says how much of the reply has been played.
+	spokenProgress func() float64
 
 	// file is where the state is written, if anywhere.
 	file string
@@ -441,6 +711,13 @@ type stateReporter struct {
 	levelFile string
 
 	mu sync.Mutex
+	// writeMu guards the writes to the state file.
+	//
+	// The state is published from several places at once, and they all
+	// write the same file. Without this they would write through the
+	// same temporary file, and one of them would rename it away from
+	// under the other.
+	writeMu sync.Mutex
 	// last is the state that was published, so a change is not published
 	// twice.
 	last State
@@ -525,8 +802,10 @@ func (r *stateReporter) turnStarted(phrase string) {
 
 // turnEnded records that a turn finished.
 //
-// The microphone is closed, because home assistant has heard what it
-// needed and the room is the panel's own again.
+// The microphone stays open, because the wake word is what decides
+// whether the next turn happens, and a closed microphone is a deaf
+// panel. What stops is the sending: the room goes to home assistant
+// while a turn is running and nowhere else.
 func (r *stateReporter) turnEnded(transcript string, failed bool) {
 	r.mu.Lock()
 	r.listening = false
@@ -538,10 +817,18 @@ func (r *stateReporter) turnEnded(transcript string, failed bool) {
 	} else {
 		r.state.SetPhase(state.PhaseIdle, "")
 	}
-	// The audio is finished with, so the last block carries the end flag
-	// and the microphone can be given back.
-	r.audio.setStreaming(false)
-	r.audio.stopCapture()
+	// The sending stops, and the microphone is left to the wake word.
+	audio := r.audio
+	audio.setStreaming(false)
+	audio.maybeStopCapture()
+}
+
+// setLink records whether the link to Home Assistant is up.
+//
+// It is the connection the drawer shows. Without it the drawer says
+// "Disconnected" for ever, because nothing else sets it.
+func (r *stateReporter) setLink(up bool) {
+	r.state.SetLink(up)
 }
 
 // setThinking records that Home Assistant is working on the reply.
@@ -628,6 +915,19 @@ func (r *stateReporter) publish(s state.Snapshot) {
 	listening := r.listening && s.LinkUp
 	r.mu.Unlock()
 
+	transcript := ""
+	if r.transcript != nil {
+		transcript = r.transcript()
+	}
+	spoken := ""
+	if r.spoken != nil {
+		spoken = r.spoken()
+	}
+	progress := 0.0
+	if r.spokenProgress != nil {
+		progress = r.spokenProgress()
+	}
+
 	next := State{
 		Connection:       conn,
 		ConnectionReason: reason,
@@ -637,19 +937,21 @@ func (r *stateReporter) publish(s state.Snapshot) {
 		// The device is listening while a turn is running. The
 		// microphone is open for the turn and no longer, and the level
 		// meter opens it too, so the meter is left out of it.
-		Listening: listening && !r.audio.monitoringMic(),
-		Speaking:  speaking,
-		Thinking:  s.Thinking,
-		Muted:     s.Muted,
-		Volume:    s.Volume,
-		MusicState:     r.audio.musicStatus().State,
-		MusicPaired:    r.audio.musicStatus().PairedWith,
-		MusicBuffered:  r.audio.musicStatus().BufferedMs,
-		MusicSynced:    r.audio.musicStatus().Synced,
-		Level:     r.wakeLevel(),
-		LastError: s.LastError,
-		UpdatedAt: time.Now().UTC(),
+		Listening:      listening && !r.audio.monitoringMic(),
+		Speaking:       speaking,
+		Thinking:       s.Thinking,
+		Transcript:     transcript,
+		Spoken:         spoken,
+		SpokenProgress: progress,
+		Muted:          s.Muted,
+		Volume:         s.Volume,
+		Level:          r.wakeLevel(),
+		LastError:      s.LastError,
+		UpdatedAt:      time.Now().UTC(),
 	}
+
+	// The music player's own state, and what it is playing, is filled in
+	// by the speaker, which owns the player.
 
 	r.audio.fillState(&next)
 
@@ -754,6 +1056,18 @@ func same(a, b State) bool {
 	if a.Listening != b.Listening || a.Speaking != b.Speaking || a.Thinking != b.Thinking || a.Muted != b.Muted {
 		return false
 	}
+	// The words are part of the state, because the panel shows them.
+	//
+	// Without this the state is not rewritten when the words change,
+	// and the panel is never told what was heard or what is being said.
+	if a.Transcript != b.Transcript || a.Spoken != b.Spoken {
+		return false
+	}
+	// The progress of the reply moves as it is spoken, and the panel
+	// shows the words in step with it.
+	if a.SpokenProgress != b.SpokenProgress {
+		return false
+	}
 	if a.Monitoring != b.Monitoring {
 		return false
 	}
@@ -766,6 +1080,24 @@ func same(a, b State) bool {
 	if a.MusicState != b.MusicState || a.MusicPaired != b.MusicPaired ||
 		a.MusicBuffered != b.MusicBuffered || a.MusicSynced != b.MusicSynced {
 		return false
+	}
+	// What is playing is part of the state too, so the panel's drawer
+	// shows the track, and the position moves with it.
+	if a.MusicTitle != b.MusicTitle || a.MusicArtist != b.MusicArtist ||
+		a.MusicAlbum != b.MusicAlbum || a.MusicArtwork != b.MusicArtwork ||
+		a.MusicPlaying != b.MusicPlaying {
+		return false
+	}
+	if a.MusicPosition != b.MusicPosition || a.MusicDuration != b.MusicDuration {
+		return false
+	}
+	if len(a.MusicTransport) != len(b.MusicTransport) {
+		return false
+	}
+	for i := range a.MusicTransport {
+		if a.MusicTransport[i] != b.MusicTransport[i] {
+			return false
+		}
 	}
 	if a.SelectedAudioInput != b.SelectedAudioInput || a.SelectedAudioOutput != b.SelectedAudioOutput {
 		return false
@@ -795,6 +1127,16 @@ func same(a, b State) bool {
 }
 
 // writeFile writes the state atomically, so a reader never sees half of it.
+//
+// The state is published from three places at once: the tracker, when
+// something changes; the ticker, every hundredth of a second; and the
+// music player's status, as often as it changes. They all write the same
+// file.
+//
+// A shared temporary file does not work: one writer renames it away and
+// the next one finds nothing there and the rename fails. So the writes
+// are done one at a time, under a lock of their own, and each one writes
+// through a temporary file named after the writer.
 func (r *stateReporter) writeFile(s State) {
 	data, err := json.Marshal(s)
 	if err != nil {
@@ -805,12 +1147,17 @@ func (r *stateReporter) writeFile(s State) {
 		r.log.Error("the state directory could not be created", "error", err)
 		return
 	}
-	temporary := r.file + ".tmp"
+
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
+
+	temporary := fmt.Sprintf("%s.%d.tmp", r.file, os.Getpid())
 	if err := os.WriteFile(temporary, data, 0o644); err != nil {
 		r.log.Error("the state could not be written", "error", err)
 		return
 	}
 	if err := os.Rename(temporary, r.file); err != nil {
+		os.Remove(temporary)
 		r.log.Error("the state could not be published", "error", err)
 	}
 }
@@ -834,6 +1181,7 @@ func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wa
 	}
 	if c.WakeWordEnabled != nil {
 		wake.SetEnabled(*c.WakeWordEnabled)
+		audio.setWakeEnabled(*c.WakeWordEnabled)
 		log.Info("the wake word was switched", "enabled", *c.WakeWordEnabled)
 		// The microphone follows the wake word: it is open for as long as
 		// the wake word is listening, and closed when it is not.
@@ -841,6 +1189,7 @@ func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wa
 	}
 	if c.WakeThreshold != nil {
 		wake.SetThreshold(*c.WakeThreshold)
+		audio.setWakeThreshold(*c.WakeThreshold)
 		log.Info("the wake word threshold was set", "threshold", *c.WakeThreshold)
 	}
 	if c.AudioInput != nil {

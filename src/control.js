@@ -161,6 +161,27 @@ class ControlClient {
   }
 
   /**
+   * Asks the device program to drive the music transport.
+   *
+   * The transport belongs to the music server and the panel has the
+   * buttons, so the request goes over the socket and the device program
+   * passes it on.
+   *
+   * @param {object} command the command
+   * @returns {boolean} whether it was sent
+   */
+  sendTransport(command) {
+    if (!this.connection || !this.connected) return false;
+    try {
+      this.connection.write(`${JSON.stringify({ action: "transport", command })}\n`);
+      return true;
+    } catch (error) {
+      this.onLog(`the transport command could not be sent: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
    * Stops the connection.
    */
   stop() {

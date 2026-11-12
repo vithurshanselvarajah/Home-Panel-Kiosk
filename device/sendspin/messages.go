@@ -80,6 +80,75 @@ type clientHello struct {
 	UnpairedAccess       unpairedAccess `json:"unpaired_access"`
 }
 
+// serverState is the state the server sends.
+//
+// It carries the metadata role's object when the server has one, and the
+// metadata is what says what is playing: the title, the artist, the
+// album, the artwork and where the track has got to.
+//
+// The metadata is a pointer because the server sends it as null when
+// nothing is playing, and null is a different answer from an object
+// with nothing in it.
+type serverState struct {
+	Metadata *streamMetadata `json:"metadata,omitempty"`
+	// Controller is what the transport can do, when the server sends it.
+	Controller *controllerState `json:"controller,omitempty"`
+	// MetadataNull says the metadata role's object came as null.
+	//
+	// A JSON null and an absent key both leave the pointer nil, and
+	// they mean different things: null says the music has stopped, and
+	// absent says nothing changed. The raw payload is kept so the two
+	// can be told apart.
+	MetadataNull bool `json:"-"`
+}
+
+// UnmarshalJSON reads a server/state message.
+//
+// The metadata role's object is cleared by the server sending it as
+// null, and that has to be told apart from the object simply not
+// being there, because one means the music has stopped and the other
+// means nothing changed.
+func (s *serverState) UnmarshalJSON(data []byte) error {
+	type plain serverState
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*s = serverState(p)
+
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return err
+	}
+	if raw, ok := probe["metadata"]; ok {
+		s.MetadataNull = string(raw) == "null"
+	}
+	return nil
+}
+
+// streamMetadata is what is playing.
+//
+// The progress is in milliseconds, and the speed is a multiplier of a
+// thousand, so a thousand is normal and zero is paused.
+type streamMetadata struct {
+	Timestamp   int64           `json:"timestamp,omitempty"`
+	Title       string          `json:"title,omitempty"`
+	Artist      string          `json:"artist,omitempty"`
+	Album       string          `json:"album,omitempty"`
+	AlbumArtist string          `json:"album_artist,omitempty"`
+	ArtworkURL  string          `json:"artwork_url,omitempty"`
+	Year        int             `json:"year,omitempty"`
+	Track       int             `json:"track,omitempty"`
+	Progress    *streamProgress `json:"progress,omitempty"`
+}
+
+// streamProgress is where the track has got to.
+type streamProgress struct {
+	TrackProgress int `json:"track_progress"`
+	TrackDuration int `json:"track_duration"`
+	PlaybackSpeed int `json:"playback_speed"`
+}
+
 type playerState struct {
 	Volume            int      `json:"volume"`
 	Muted             bool     `json:"muted"`
@@ -172,4 +241,41 @@ type playerCommand struct {
 
 type serverCommand struct {
 	Player *playerCommand `json:"player"`
+}
+
+// controllerState is what the server says the transport can do.
+//
+// The commands in it are the ones the server will accept, so the panel
+// only offers what the server has said it can do.
+type controllerState struct {
+	SupportedCommands []string `json:"supported_commands"`
+	Volume            int      `json:"volume"`
+	Muted             bool     `json:"muted"`
+	Repeat            string   `json:"repeat"`
+	Shuffle           bool     `json:"shuffle"`
+	// SeekMaxMs is the furthest a seek may go. It is only there when the
+	// server knows how long the track is, and without it a seek to an
+	// absolute position is refused.
+	SeekMaxMs *int64 `json:"seek_max_ms,omitempty"`
+}
+
+// controllerCommand is a command for the transport.
+//
+// The fields are only used by the commands that take them, and the
+// server checks that: a volume with a play command is refused.
+type controllerCommand struct {
+	Command    string `json:"command"`
+	Volume     *int   `json:"volume,omitempty"`
+	Mute       *bool  `json:"mute,omitempty"`
+	PositionMs *int64 `json:"position_ms,omitempty"`
+	OffsetMs   *int64 `json:"offset_ms,omitempty"`
+}
+
+// clientCommand is what the panel asks the transport to do.
+//
+// It is the controller role's message. The player role's message is the
+// volume and the mute, which this device already handles, so only the
+// controller's is here.
+type clientCommand struct {
+	Controller *controllerCommand `json:"controller,omitempty"`
 }
