@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -39,6 +41,7 @@ type device struct {
 	statePath   string
 	controlPath string
 	speakerPath string
+	address     string
 	mu          sync.Mutex
 	states      []deviceState
 	lines       []string
@@ -64,6 +67,10 @@ type deviceState struct {
 	Volume           int     `json:"volume"`
 	Level            int     `json:"level"`
 	MediaState       string  `json:"media_state"`
+	MusicState       string  `json:"music_state"`
+	MusicPaired      int     `json:"music_paired"`
+	MusicSynced      bool    `json:"music_synced"`
+	MusicBuffered    int     `json:"music_buffered"`
 	MusicTitle       string  `json:"music_title"`
 	MusicArtist      string  `json:"music_artist"`
 	MusicAlbum       string  `json:"music_album"`
@@ -71,7 +78,6 @@ type deviceState struct {
 	MusicPosition    int     `json:"music_position"`
 	MusicDuration    int     `json:"music_duration"`
 	MusicPlaying     bool    `json:"music_playing"`
-	MusicPaired      int     `json:"music_paired"`
 	LastError        string  `json:"last_error"`
 }
 
@@ -127,6 +133,19 @@ func startDevice(t *testing.T, recording string) *device {
 	// An old state file would be read as the new one's first state.
 	_ = os.Remove(statePath)
 
+	// The port is the panel's own, so Home Assistant finds the device
+	// where it expects to find it.
+	//
+	// The port has to be fixed rather than chosen by the operating
+	// system: Home Assistant finds the device by the announcement, and
+	// the announcement carries the port. A device on a port nobody
+	// announced is a device nobody connects to.
+	port := 6053
+	if listener, err := net.Listen("tcp", ":0"); err == nil {
+		port = listener.Addr().(*net.TCPAddr).Port
+		_ = listener.Close()
+	}
+
 	args := []string{
 		"--credentials-dir", creds,
 		"--device-id", name,
@@ -134,6 +153,7 @@ func startDevice(t *testing.T, recording string) *device {
 		"--board", "Home Panel",
 		"--state-file", statePath,
 		"--control-socket", controlSocket,
+		"--esphome-port", strconv.Itoa(port),
 	}
 	// The speaker's audio is always written to a file, so the tests can
 	// see what the panel played. The recording is the microphone when
@@ -141,6 +161,12 @@ func startDevice(t *testing.T, recording string) *device {
 	args = append(args, "--speaker-file", speakerFile)
 	if recording != "" {
 		args = append(args, "--mic-file", recording)
+	}
+	// The configuration is read, so the music player is started. It is
+	// what the panel is a player to, and it has to be running for the
+	// capabilities to say so.
+	if config := liveConfigFile(); config != "" {
+		args = append(args, "--config-file", config)
 	}
 	if key := os.Getenv("LIVE_HA_ESPHOME_KEY"); key != "" {
 		args = append(args, "--esphome-key", key)
@@ -162,6 +188,7 @@ func startDevice(t *testing.T, recording string) *device {
 		statePath:   statePath,
 		controlPath: controlSocket,
 		speakerPath: speakerFile,
+		address:     "127.0.0.1:" + strconv.Itoa(port),
 	}
 
 	// The device's own words, which are how a failure is seen.
@@ -240,6 +267,72 @@ func (d *device) speakerBytes() int64 {
 	}
 	return info.Size()
 }
+
+// peer asks the running device something, over the Home Assistant
+// connection.
+//
+// It is the python peer that drives aioesphomeapi, the library Home
+// Assistant speaks the protocol with, so the question is asked the way
+// Home Assistant asks it.
+func (d *device) peer(mode string, extra string) ([]string, error) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		return nil, fmt.Errorf("python3 is not there: %w", err)
+	}
+	if err := exec.Command(python, "-c", "import aioesphomeapi").Run(); err != nil {
+		return nil, fmt.Errorf("aioesphomeapi is not there: %w", err)
+	}
+	out, err := exec.Command(python, "-c", esphomePeer, mode, d.esphomeAddress()).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%s: %s", err, strings.TrimSpace(string(out)))
+	}
+	var lines []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines, nil
+}
+
+// esphomeAddress is where the device is on the Home Assistant
+// connection.
+func (d *device) esphomeAddress() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.address
+}
+
+// esphomePeer is the peer that asks the device questions.
+//
+// It uses aioesphomeapi's own client, so the handshake, the framing and
+// the messages are all the ones Home Assistant uses.
+const esphomePeer = `
+import asyncio, sys
+
+from aioesphomeapi import APIClient
+
+MODE = sys.argv[1]
+ADDRESS = sys.argv[2]
+
+async def main():
+    host, port = ADDRESS.rsplit(":", 1)
+    client = APIClient(host, int(port), noise_psk=None, password=None)
+    await client.connect(login=True)
+
+    if MODE == "capabilities":
+        caps = await client.device_capabilities()
+        print("sendspin_flags:" + str(caps.sendspin.feature_flags))
+        print("sendspin_client:" + str(caps.sendspin.client_id))
+    elif MODE == "pairing_token":
+        resp = await client.sendspin_pairing_token()
+        print("status:" + str(resp.status))
+        print("token:" + str(resp.token))
+
+    await client.disconnect()
+
+asyncio.run(main())
+`
 
 // controlSocket is where the panel talks to the device program.
 func (d *device) controlSocket() string {

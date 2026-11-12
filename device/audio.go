@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,6 +67,13 @@ type deviceAudio struct {
 	onWakeReset func()
 	// onSendspinStatus is called when the music player's status changes.
 	onSendspinStatus func(status sendspin.Status)
+	// onSendspinStarted is called when the music player has started.
+	//
+	// The player's identity goes in the device's capabilities, and it
+	// is not known until the player has started. Home Assistant reads it
+	// from there and passes it to the music server, which pairs with
+	// the player using the token the device hands out.
+	onSendspinStarted func()
 	// onVolume is called when the panel's volume changes, so the speaker's
 	// entity can report it.
 	onVolume func(volume float32)
@@ -2130,10 +2140,17 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 		player, err := sendspin.New(sendspin.Config{
 			StorePath: a.sendspinStore(),
 			Name:      name,
-			Instance:  "echomuse-home-panel",
-			Product:   "Home Panel",
-			Version:   "0.1.0",
-			Unpaired:  unpaired,
+			// The instance is the player's name on the network, and it
+			// has to be unique there: two players with the same
+			// instance name are the same player as far as a music
+			// server is concerned, and one of them is never found.
+			//
+			// It is the panel's own name with the machine's identity
+			// mixed in, so two panels on one network are two players.
+			Instance: sendspinInstance(name),
+			Product:  "Home Panel",
+			Version:  "0.1.0",
+			Unpaired: unpaired,
 			// The lead and the jitter buffer are the Echo firmware's
 			// own figures. The server holds back the audio it sends by
 			// this much and more, and the buffer is what the group is
@@ -2171,6 +2188,11 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 		a.sendspinName = name
 		a.mu.Unlock()
 		a.setSendspinStatus(player.Status())
+		// The player's identity is known now, so the device's
+		// capabilities can say so.
+		if a.onSendspinStarted != nil {
+			a.onSendspinStarted()
+		}
 		current = player
 		// The speaker is opened when the music starts playing, not when
 		// the player does. A player that is listening for a server is
@@ -2285,4 +2307,53 @@ func (a *deviceAudio) stop() {
 // dB converts a decibel figure into a gain.
 func dB(db float64) float64 {
 	return math.Pow(10, db/20)
+}
+
+// sendspinInstance is the player's name on the network.
+//
+// It has to be unique on the network: two players with the same
+// instance name are the same player as far as a music server is
+// concerned, and one of them is never found.
+//
+// It is the panel's own name with the machine's identity mixed in, so
+// two panels on one network are two players and the same panel is the
+// same player every time.
+func sendspinInstance(name string) string {
+	sum := uint32(2166136261)
+	for i := 0; i < len(name); i++ {
+		sum = (sum ^ uint32(name[i])) * 16777619
+	}
+	// The machine's address is mixed in too, so two panels with the
+	// same name on one network are still two players.
+	if machine := machineAddress(); machine != "" {
+		for i := 0; i < len(machine); i++ {
+			sum = (sum ^ uint32(machine[i])) * 16777619
+		}
+	}
+	return fmt.Sprintf("%s-%02x%02x", name, (sum>>8)&0xFF, sum&0xFF)
+}
+
+// machineAddress is the machine's own hardware address.
+//
+// It is read from the network interfaces, which is where the panel's
+// own identity comes from too.
+func machineAddress() string {
+	entries, err := os.ReadDir("/sys/class/net")
+	if err != nil {
+		return ""
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		address, err := os.ReadFile(filepath.Join("/sys/class/net", entry.Name(), "address"))
+		if err != nil {
+			continue
+		}
+		candidate := strings.TrimSpace(string(address))
+		if len(candidate) == 17 && candidate[2] == ':' {
+			return candidate
+		}
+	}
+	return ""
 }

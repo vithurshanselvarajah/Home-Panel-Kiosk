@@ -167,6 +167,35 @@ func (s *Server) SetSendspin(player *Sendspin) {
 	s.sendspin = player
 }
 
+// PushCapabilities tells the clients what the device can do.
+//
+// The capabilities are asked for when a client connects, and they can
+// change afterwards: the music player's identity is in them, and the
+// player is not running until the configuration has been read.
+//
+// So they are pushed when they change, or a client that connected
+// before the player started would never learn about it.
+func (s *Server) PushCapabilities() {
+	s.connections.Range(func(_, value any) bool {
+		client, ok := value.(*Client)
+		if !ok {
+			return true
+		}
+		if err := client.write(TypeDeviceCapabilitiesResponse, &DeviceCapabilitiesResponse{
+			VoiceAssistant: &VoiceAssistantCapabilities{
+				FeatureFlags: s.voiceAssistantFlags(),
+			},
+			Sendspin: &SendspinCapabilities{
+				FeatureFlags: s.sendspinFlags(),
+				ClientId:     s.sendspinClientID(),
+			},
+		}); err != nil {
+			s.log.Debug("the capabilities could not be sent", "error", err)
+		}
+		return true
+	})
+}
+
 // SetMediaPlayer gives the server its speaker.
 //
 // It is set after the server is made, because whether the device has a
@@ -395,6 +424,15 @@ func (s *Server) handle(client *Client, frame Frame) error {
 				ClientId:     s.sendspinClientID(),
 			},
 		})
+
+	case TypeSendspinPairingTokenRequest:
+		// The music server wants the token it pairs with.
+		//
+		// Home Assistant fetches it from the device and passes it on to
+		// the music server, which pairs with the player using it. A
+		// device that says it hands out a token and then does not is a
+		// device a music server never pairs with.
+		return client.write(TypeSendspinPairingTokenResponse, s.sendspinPairingToken())
 
 	case TypeListEntitiesRequest:
 		return s.listEntities(client)
@@ -662,10 +700,20 @@ func (s *Server) SendAnnounceFinished() {
 // the token that a music server pairs with, and Home Assistant passes it
 // on to the server.
 func (s *Server) sendspinFlags() uint32 {
-	if !s.sendspin.Enabled() {
+	if !s.sendspinPlayer().Enabled() {
 		return 0
 	}
 	return 1 << 0
+}
+
+// sendspinPlayer is the music player, if the device has one.
+//
+// It is read under the lock, because it is set after the server is made
+// and read from the goroutines that answer the clients.
+func (s *Server) sendspinPlayer() *Sendspin {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sendspin
 }
 
 // sendspinClientID is the music player's own identity.
@@ -673,7 +721,35 @@ func (s *Server) sendspinFlags() uint32 {
 // It is empty until the player has started once, and Home Assistant reads
 // an empty one as "not started yet" rather than as a broken device.
 func (s *Server) sendspinClientID() string {
-	return s.sendspin.ClientID()
+	return s.sendspinPlayer().ClientID()
+}
+
+// sendspinPairingToken is the answer to a request for the token a
+// music server pairs with.
+//
+// The status says what happened. The token is only given when there is
+// one: a player that has not started has no token, and saying so is
+// better than saying "not ready" for ever, because the music server
+// asks again later.
+func (s *Server) sendspinPairingToken() *SendspinPairingTokenResponse {
+	player := s.sendspinPlayer()
+	if player == nil || !player.Enabled() {
+		return &SendspinPairingTokenResponse{
+			Status: SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_DISABLED,
+		}
+	}
+	token := player.PairingToken()
+	if token == "" {
+		// The player has not started yet, so the token does not exist
+		// yet. The music server asks again later.
+		return &SendspinPairingTokenResponse{
+			Status: SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_NOT_READY,
+		}
+	}
+	return &SendspinPairingTokenResponse{
+		Status: SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_OK,
+		Token:  token,
+	}
 }
 
 // PushMediaPlayerState sends the speaker's state to every client.

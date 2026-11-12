@@ -50,6 +50,8 @@ const (
 	TypeExecuteServiceRequest          uint32 = 42
 	TypeDeviceCapabilitiesRequest      uint32 = 149
 	TypeDeviceCapabilitiesResponse     uint32 = 150
+	TypeSendspinPairingTokenRequest    uint32 = 159
+	TypeSendspinPairingTokenResponse   uint32 = 160
 	TypeHomeassistantActionResponse    uint32 = 130
 
 	TypeBinarySensorStateResponse uint32 = 21

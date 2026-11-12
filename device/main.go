@@ -340,6 +340,26 @@ func main() {
 	// first state the application reads already carries them.
 	reporter.discoverAudio()
 
+	// The configuration is read before the control plane starts.
+	//
+	// The music player is started by the configuration, and the player's
+	// identity goes in the device's capabilities. Home Assistant reads
+	// the capabilities when it connects, and a music server pairs with
+	// the player using the token Home Assistant reads from there. So
+	// the player has to be running before Home Assistant connects, and
+	// the capabilities have to be right the first time they are asked
+	// for.
+	//
+	// The configuration is read again by the watcher, which applies any
+	// change to it.
+	if *configFile != "" {
+		if c, err := readConfig(*configFile); err == nil {
+			applySendspinOnly(c, speaker_, log)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			log.Warn("the device configuration could not be read", "error", err)
+		}
+	}
+
 	// The control plane: the Home Assistant connection and the socket
 	// the panel talks over.
 	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket, speaker_)
@@ -399,10 +419,31 @@ func main() {
 	//
 	// It is how a music server tells that the player it found on the
 	// network is the player Home Assistant already knows about, and so
-	// does not make one of its own.
-	if player := speaker_.sendspinPlayer(); player != nil {
+	// does not make one of its own. It is also how the music server gets
+	// the token it pairs with, which Home Assistant reads from here.
+	//
+	// The player is not running yet: it is started when the
+	// configuration is read, and the configuration is read after this.
+	// So the capabilities are filled in when the player starts, and the
+	// capabilities are sent again when they have changed.
+	publishSendspin := func() {
+		player := speaker_.sendspinPlayer()
+		if player == nil {
+			return
+		}
 		control.SetSendspin(esphome.NewSendspin(player.ClientID(), player.PairingToken()))
 	}
+	publishSendspin()
+	speaker_.onSendspinStarted = publishSendspin
+	control.OnSendspinStarted(publishSendspin)
+
+	// The capabilities are asked for when Home Assistant connects, and
+	// the music player's identity is in them. So the capabilities are
+	// asked for again when they have changed, or Home Assistant would
+	// be told about a player that was not there yet.
+	control.OnSendspinStarted(func() {
+		control.PushCapabilities()
+	})
 
 	// The speaker. It is the entity the reply to a voice turn comes back
 	// on, and the one Music Assistant plays music through.
@@ -1184,6 +1225,20 @@ func (r *stateReporter) writeFile(s State) {
 		os.Remove(temporary)
 		r.log.Error("the state could not be published", "error", err)
 	}
+}
+
+// applySendspinOnly applies the music player's part of the
+// configuration.
+//
+// It is done before the control plane starts, because the player's
+// identity goes in the device's capabilities and Home Assistant reads
+// those when it connects.
+func applySendspinOnly(c Config, audio *deviceAudio, log *slog.Logger) {
+	if c.SendspinEnabled == nil && c.SendspinName == nil && c.SendspinUnpaired == nil {
+		return
+	}
+	audio.applySendspinConfig(c)
+	log.Info("the music player was configured")
 }
 
 // applyConfig applies the configuration to the panel's settings.
