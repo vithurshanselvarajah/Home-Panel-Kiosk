@@ -441,18 +441,19 @@ func openMedia(ctx context.Context, url string) (io.ReadCloser, int, error) {
 	}
 
 	if string(head[0:4]) != "RIFF" || string(head[8:12]) != "WAVE" {
-		// It is not a WAV file, so it is read whole. It is FLAC, or it
-		// is PCM that the proxy handed over as it is.
-		body, err := io.ReadAll(io.MultiReader(bytes.NewReader(head), response.Body))
-		response.Body.Close()
+		// It is not a WAV file, so it is FLAC or raw samples. Both are
+		// read as they arrive.
+		//
+		// They used to be read whole, which worked for a file and not
+		// for a radio station: a station never ends, so the read never
+		// finished and the panel sat there saying it was playing and
+		// playing nothing.
+		decoder, err := newMediaDecoder(head, response.Body)
 		if err != nil {
+			response.Body.Close()
 			return nil, 0, err
 		}
-		pcm, rate, err := decodeMedia(body)
-		if err != nil {
-			return nil, 0, err
-		}
-		return io.NopCloser(bytes.NewReader(pcm)), rate, nil
+		return &mediaStream{reader: decoder, body: response.Body}, decoder.rate, nil
 	}
 
 	// It is a WAV file. The rest of its header is read, and then the
@@ -473,7 +474,7 @@ func openMedia(ctx context.Context, url string) (io.ReadCloser, int, error) {
 // The body has to be closed when the audio is done with, and the audio
 // has to be closed when the body is, so the two are held together.
 type mediaStream struct {
-	reader *wavStream
+	reader io.Reader
 	body   io.ReadCloser
 }
 

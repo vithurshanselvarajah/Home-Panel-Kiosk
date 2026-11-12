@@ -1107,6 +1107,14 @@ func same(a, b State) bool {
 	if a.MusicPosition != b.MusicPosition || a.MusicDuration != b.MusicDuration {
 		return false
 	}
+	// The music Home Assistant is playing is part of the state too.
+	//
+	// The panel's drawer shows it beside the music server's music, and
+	// without this the state is not rewritten when the music starts or
+	// stops, and the panel is never told.
+	if a.MediaState != b.MediaState {
+		return false
+	}
 	if len(a.MusicTransport) != len(b.MusicTransport) {
 		return false
 	}
