@@ -34,6 +34,8 @@ type fileBackend struct {
 	mu sync.Mutex
 	// inputOffset is how far into the recording the microphone is.
 	inputOffset int
+	// outputFile is the speaker's file, when it is open.
+	outputFile *os.File
 	// armed says the recording is to be played.
 	//
 	// The microphone is quiet until the recording is armed, which is
@@ -96,14 +98,30 @@ func (b *fileBackend) Capture(ctx context.Context, rate int) (io.ReadCloser, err
 }
 
 // Playback opens the speaker.
+//
+// The file is opened for writing and kept open, so the speaker's audio
+// is one file rather than one file per opening. The speaker is opened
+// and closed as the music comes and goes, and a file that was truncated
+// every time would only ever hold the last thing played.
 func (b *fileBackend) Playback(ctx context.Context, rate int) (io.WriteCloser, error) {
 	if b.output == "" {
 		return nopWriteCloser{}, nil
 	}
+	b.mu.Lock()
+	if b.outputFile != nil {
+		file := b.outputFile
+		b.mu.Unlock()
+		return &fileWriter{file: file}, nil
+	}
+	b.mu.Unlock()
+
 	file, err := os.OpenFile(b.output, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return nil, err
 	}
+	b.mu.Lock()
+	b.outputFile = file
+	b.mu.Unlock()
 	return &fileWriter{file: file}, nil
 }
 
@@ -226,9 +244,13 @@ func (w *fileWriter) Write(p []byte) (int, error) {
 	return w.file.Write(p)
 }
 
-// Close closes the file.
+// Close flushes the file but leaves it open.
+//
+// The speaker is opened and closed as the music comes and goes, and the
+// file is one file for the whole run: a file that was closed and
+// truncated each time would only ever hold the last thing played.
 func (w *fileWriter) Close() error {
-	return w.file.Close()
+	return w.file.Sync()
 }
 
 // readWAV reads the samples out of a wav file.

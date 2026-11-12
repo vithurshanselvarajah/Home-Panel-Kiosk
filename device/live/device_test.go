@@ -135,8 +135,12 @@ func startDevice(t *testing.T, recording string) *device {
 		"--state-file", statePath,
 		"--control-socket", controlSocket,
 	}
+	// The speaker's audio is always written to a file, so the tests can
+	// see what the panel played. The recording is the microphone when
+	// there is one.
+	args = append(args, "--speaker-file", speakerFile)
 	if recording != "" {
-		args = append(args, "--mic-file", recording, "--speaker-file", speakerFile)
+		args = append(args, "--mic-file", recording)
 	}
 	if key := os.Getenv("LIVE_HA_ESPHOME_KEY"); key != "" {
 		args = append(args, "--esphome-key", key)
@@ -219,6 +223,22 @@ func (d *device) stop() {
 			_ = d.cmd.Process.Kill()
 		}
 	}
+}
+
+// speakerBytes says how many bytes the speaker has played.
+//
+// The speaker's audio is written to a file, so the size of the file is
+// how much has been played. A station never ends, so the file keeps
+// growing for as long as the station is playing.
+func (d *device) speakerBytes() int64 {
+	if d.speakerPath == "" {
+		return 0
+	}
+	info, err := os.Stat(d.speakerPath)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
 }
 
 // controlSocket is where the panel talks to the device program.

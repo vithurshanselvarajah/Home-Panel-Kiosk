@@ -20,6 +20,7 @@ package live
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -77,8 +78,12 @@ func get(t *testing.T, url, token string) map[string]any {
 }
 
 // post asks the server to do something and gives back the JSON.
+//
+// The answer is a list for a service call and an object for the
+// conversation, so both are given back as they came.
 func post(t *testing.T, url, token string, body any) map[string]any {
 	t.Helper()
+	out := map[string]any{}
 	raw, err := json.Marshal(body)
 	if err != nil {
 		t.Fatal(err)
@@ -89,14 +94,27 @@ func post(t *testing.T, url, token string, body any) map[string]any {
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	var out map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	answer, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode >= 400 {
+		t.Fatalf("%s said %s: %s", url, resp.Status, strings.TrimSpace(string(answer)))
+	}
+	// A list is the answer of a service call.
+	var list []any
+	if err := json.Unmarshal(answer, &list); err == nil {
+		out["list"] = list
+		return out
+	}
+	if err := json.Unmarshal(answer, &out); err != nil {
 		t.Fatalf("%s: %v", url, err)
 	}
 	return out
