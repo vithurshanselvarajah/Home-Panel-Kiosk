@@ -34,6 +34,11 @@ type Server struct {
 	onConnect func(connected bool)
 	// mu guards the services.
 	mu sync.Mutex
+	// listener is the socket the API is served on.
+	//
+	// It is kept so the API can be closed, which stops the accepting
+	// and frees the port.
+	listener net.Listener
 	// mediaPlayerKeyValue is the key the speaker is known by.
 	mediaPlayerKeyValue uint32
 	// name is the name Home Assistant shows.
@@ -232,6 +237,9 @@ func (s *Server) Voice() *Voice {
 // device on the network has, because every device needs one and they
 // cannot all have 6053.
 func (s *Server) Listen(listener net.Listener) error {
+	s.mu.Lock()
+	s.listener = listener
+	s.mu.Unlock()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -240,6 +248,31 @@ func (s *Server) Listen(listener net.Listener) error {
 		enableKeepalive(conn)
 		go s.serve(conn)
 	}
+}
+
+// Close stops the API.
+//
+// It closes the listener, which stops the accepting, and the
+// connections that are open, which stops the conversations.
+//
+// A device that is shutting down closes the API, and a test that has
+// run a panel closes it too, so the port is free for the next one.
+func (s *Server) Close() error {
+	s.mu.Lock()
+	listener := s.listener
+	s.mu.Unlock()
+
+	var err error
+	if listener != nil {
+		err = listener.Close()
+	}
+	s.connections.Range(func(_, value any) bool {
+		if client, ok := value.(*Client); ok {
+			client.close()
+		}
+		return true
+	})
+	return err
 }
 
 // keepaliveIdle is how long a connection may be quiet before the
