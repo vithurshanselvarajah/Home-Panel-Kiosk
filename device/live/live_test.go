@@ -120,6 +120,17 @@ func post(t *testing.T, url, token string, body any) map[string]any {
 	return out
 }
 
+// liveConfigFile is the device configuration the tests use.
+//
+// It is the panel's own configuration, so the music player is started
+// the way it is in production.
+func liveConfigFile() string {
+	if path := os.Getenv("LIVE_CONFIG_FILE"); path != "" {
+		return path
+	}
+	return ""
+}
+
 // liveName is the name the device is announced under.
 //
 // Home Assistant connects to the device it knows by name, so a device

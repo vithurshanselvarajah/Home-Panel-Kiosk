@@ -54,6 +54,11 @@ type ControlPlane struct {
 	// to send the audio, and there is nowhere to send it when Home
 	// Assistant is not listening.
 	client *esphome.Client
+	// onSendspinStarted is called when the music player starts.
+	//
+	// The player's identity goes in the device's capabilities, and it is
+	// not known until the player has started.
+	onSendspinStarted func()
 	// onWakeThreshold is called when the wake word's sensitivity is
 	// changed.
 	onWakeThreshold func(threshold float64)
@@ -555,6 +560,28 @@ func (p *ControlPlane) SetMediaPlayerState(state esphome.MediaPlayerState) {
 	}
 	p.mediaPlayer.SetState(state)
 	p.api.PushMediaPlayerState()
+}
+
+// OnSendspinStarted sets what is called when the music player starts.
+//
+// The player's identity goes in the device's capabilities, and it is not
+// known until the player has started. Home Assistant reads it from there
+// and passes it to the music server, which pairs with the player using
+// the token the device hands out.
+func (p *ControlPlane) OnSendspinStarted(fn func()) {
+	p.onSendspinStarted = fn
+}
+
+// PushCapabilities tells Home Assistant what the device can do.
+//
+// The capabilities are asked for when Home Assistant connects, and the
+// music player's identity is in them. The player is not running until
+// the configuration has been read, so they are pushed when it has.
+func (p *ControlPlane) PushCapabilities() {
+	if p.api == nil {
+		return
+	}
+	p.api.PushCapabilities()
 }
 
 // SetSendspin gives the server the music player.

@@ -136,6 +136,46 @@ async def main():
 
     print("roles=" + ",".join(sorted(client.active_role_ids)))
 
+    if MODE == "play":
+        # The server plays something to the panel, which is what a music
+        # server does with a player it has found.
+        role = client.group.group_role("player")
+        if role is None:
+            print("the player role was not taken")
+            return
+        print("the panel took the player role")
+
+        import math
+        import struct
+        from aiosendspin.audio import AudioFormat
+
+        rate = 48000
+        bit_depth = 16
+        channels = 2
+        fmt = AudioFormat(
+            codec="pcm_s16le",
+            sample_rate=rate,
+            channels=channels,
+            bit_depth=bit_depth,
+        )
+
+        push_stream = client.group.start_stream()
+        print("the stream was started")
+
+        # The audio, a second of a tone.
+        block = bytearray()
+        for i in range(rate // 10):
+            v = int(12000 * math.sin(2 * math.pi * 440 * i / rate))
+            block += struct.pack("<hh", v, v)
+
+        for _ in range(20):
+            push_stream.prepare_audio(bytes(block), fmt)
+            await push_stream.commit_audio()
+            await asyncio.sleep(0.1)
+        print("the audio was sent")
+        await asyncio.sleep(1.0)
+        return
+
     if MODE == "metadata":
         role = client.group.group_role("metadata")
         if role is None:

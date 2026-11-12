@@ -160,6 +160,11 @@ async def main():
         client.send_voice_assistant_event(
             VoiceAssistantEventType.VOICE_ASSISTANT_STT_VAD_END, {})
         await asyncio.sleep(0.8)
+    elif mode == "sendspin":
+        # What the device says about its music player.
+        caps = await client.device_capabilities()
+        print("sendspin_flags:" + str(caps.sendspin.feature_flags))
+        print("sendspin_client:" + str(caps.sendspin.client_id))
     elif mode == "listen":
         # The peer plays a recording into the device as the microphone
         # and prints what Home Assistant said it heard.

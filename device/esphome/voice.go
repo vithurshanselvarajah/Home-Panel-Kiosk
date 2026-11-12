@@ -230,7 +230,10 @@ func (v *Voice) handleVoiceEvent(message *VoiceAssistantEventResponse) {
 	//
 	// The run start is the one event that is not discarded: it is the
 	// new turn's, and it is what ends the barrier.
-	if v.barrier {
+	v.mu.Lock()
+	barrier := v.barrier
+	v.mu.Unlock()
+	if barrier {
 		if message.GetEventType() != VoiceAssistantEvent_VOICE_ASSISTANT_RUN_START {
 			v.log.Debug("an event was discarded by the barrier", "event", message.GetEventType())
 			return
