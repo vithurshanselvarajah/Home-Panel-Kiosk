@@ -194,9 +194,10 @@ func startControlPlane(
 	var server *ControlServer
 	if socket != "" {
 		server = NewControlServer(ControlOptions{
-			Socket:   socket,
-			Registry: registry,
-			Log:      log,
+			Socket:               socket,
+			Registry:             registry,
+			Log:                  log,
+			SendspinPairingToken: audio.sendspinPairingToken,
 		})
 		if err := server.Listen(); err != nil {
 			log.Error("the control socket could not be opened", "error", err)

@@ -48,6 +48,8 @@ class ControlClient {
     this.buffer = "";
     this.state = { ...DEFAULT_STATE };
     this.connected = false;
+    this.requestSequence = 0;
+    this.pendingSendspinTokens = new Map();
   }
 
   /**
@@ -98,6 +100,7 @@ class ControlClient {
     this.connection.on("close", () => {
       this.connected = false;
       this.connection = null;
+      this.rejectPendingSendspinTokens(new Error("The device program disconnected."));
       this.onStatus("offline");
     });
     this.connection.on("error", (error) => {
@@ -105,6 +108,7 @@ class ControlClient {
       // reported as a failure. The next try picks it up.
       this.onStatus("offline");
       this.connection = null;
+      this.rejectPendingSendspinTokens(error);
     });
   }
 
@@ -131,6 +135,16 @@ class ControlClient {
       // device program. The rest are commands.
       if (parsed && parsed.action === "link") {
         this.onLink(Boolean(parsed.connected));
+        continue;
+      }
+      if (parsed && parsed.action === "sendspin_token_response") {
+        const pending = this.pendingSendspinTokens.get(parsed.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          this.pendingSendspinTokens.delete(parsed.requestId);
+          if (parsed.error) pending.reject(new Error(parsed.error));
+          else pending.resolve(parsed.sendspinToken || "");
+        }
         continue;
       }
       this.onCommand(parsed);
@@ -169,6 +183,33 @@ class ControlClient {
       this.onLog(`the camera frame could not be sent: ${error.message}`);
       return false;
     }
+  }
+
+  requestSendspinToken() {
+    if (!this.connection || !this.connected) return Promise.reject(new Error("The device program is not connected."));
+    const requestId = `sendspin-${++this.requestSequence}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingSendspinTokens.delete(requestId);
+        reject(new Error("Timed out while reading the Sendspin pairing token."));
+      }, 5000);
+      this.pendingSendspinTokens.set(requestId, { resolve, reject, timer });
+      try {
+        this.connection.write(`${JSON.stringify({ action: "sendspin_token_request", requestId })}\n`);
+      } catch (error) {
+        clearTimeout(timer);
+        this.pendingSendspinTokens.delete(requestId);
+        reject(error);
+      }
+    });
+  }
+
+  rejectPendingSendspinTokens(error) {
+    for (const pending of this.pendingSendspinTokens.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.pendingSendspinTokens.clear();
   }
 
   /**
@@ -218,6 +259,11 @@ class ControlClient {
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    for (const pending of this.pendingSendspinTokens.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("The device connection closed."));
+    }
+    this.pendingSendspinTokens.clear();
     if (this.connection) {
       try {
         this.connection.destroy();

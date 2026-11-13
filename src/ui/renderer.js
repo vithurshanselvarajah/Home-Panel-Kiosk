@@ -105,6 +105,62 @@ function syncEncryptionKeyField() {
   const enabled = form.elements.namedItem("esphomeEncryptionEnabled");
   if (!key || !enabled) return;
   key.disabled = !enabled.checked;
+  const reveal = document.querySelector('[data-secret-toggle="ha"]');
+  if (reveal) reveal.disabled = !enabled.checked;
+  if (!enabled.checked) hideSecret("ha");
+}
+
+const secretViews = {
+  ha: { open: false, token: "", reveal: $("#ha-secret-reveal"), value: $("#ha-secret-value"), qr: $("#ha-secret-qr") },
+  sendspin: { open: false, token: "", reveal: $("#sendspin-secret-reveal"), value: $("#sendspin-secret-value"), qr: $("#sendspin-secret-qr") },
+};
+
+function hideSecret(kind) {
+  const view = secretViews[kind];
+  if (!view) return;
+  view.open = false;
+  view.token = "";
+  view.reveal.hidden = true;
+  view.value.textContent = "";
+  view.qr.removeAttribute("src");
+  const button = document.querySelector(`[data-secret-toggle="${kind}"]`);
+  if (button) button.textContent = kind === "ha" ? "Show key + QR" : "Show token + QR";
+}
+
+async function toggleSecret(kind) {
+  const view = secretViews[kind];
+  if (!view || view.open) { hideSecret(kind); return; }
+  const button = document.querySelector(`[data-secret-toggle="${kind}"]`);
+  if (button) button.disabled = true;
+  try {
+    const token = kind === "ha"
+      ? String(form.elements.namedItem("esphomeEncryptionKey")?.value || "").trim()
+      : await window.homePanel.getSendspinToken();
+    if (!token) throw new Error(kind === "ha" ? "Turn on Home Assistant encryption and save a key first." : "The Sendspin pairing token is not available yet.");
+    view.token = token;
+    view.value.textContent = token;
+    view.qr.src = await window.homePanel.keyQr(token);
+    view.reveal.hidden = false;
+    view.open = true;
+    if (button) button.textContent = kind === "ha" ? "Hide key + QR" : "Hide token + QR";
+  } catch (error) {
+    view.token = "";
+    view.value.textContent = error?.message || "The key could not be read.";
+    view.qr.removeAttribute("src");
+    view.reveal.hidden = false;
+  } finally {
+    if (button) button.disabled = kind === "ha" && !form.elements.namedItem("esphomeEncryptionEnabled")?.checked;
+  }
+}
+
+for (const button of document.querySelectorAll("[data-secret-toggle]")) {
+  button.addEventListener("click", () => toggleSecret(button.dataset.secretToggle));
+}
+for (const button of document.querySelectorAll("[data-copy-secret]")) {
+  button.addEventListener("click", async () => {
+    const token = secretViews[button.dataset.copySecret]?.token;
+    if (token) await window.homePanel.copySecret(token);
+  });
 }
 
 // makeEncryptionKey puts a new key in the field.
@@ -232,6 +288,8 @@ function closeSettings() {
   // microphone left open holds the sound card for a dashboard that is
   // showing the weather.
   stopMicMonitor();
+  hideSecret("ha");
+  hideSecret("sendspin");
   window.homePanel.setOverlayExpanded(!$("#notice").hidden || !keyboard.hidden);
   syncSettingsLayout();
 }
@@ -350,6 +408,7 @@ if (regenerateKeyButton) {
   regenerateKeyButton.addEventListener("click", async (event) => {
     event.preventDefault();
     await makeEncryptionKey();
+    hideSecret("ha");
   });
 }
 
