@@ -136,16 +136,23 @@ func (b *fileBackend) OpenClockedOutput(ctx context.Context, rate, channels int)
 }
 
 // SelectedAudioDevices reports the devices in use.
+//
+// The files are what the card made of files uses, so they are what it
+// reports.
 func (b *fileBackend) SelectedAudioDevices() (string, string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.input, b.output
 }
 
 // SelectAudioDevices chooses the devices.
+//
+// It does nothing, and that is deliberate: the input and the output of
+// a card made of files are the files, and a device name would replace
+// them. The panel's configuration says which sound card to use, and a
+// card made of files is not a sound card — so the name is ignored and
+// the files stay.
 func (b *fileBackend) SelectAudioDevices(input, output string) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.input = input
-	b.output = output
 	return nil
 }
 
