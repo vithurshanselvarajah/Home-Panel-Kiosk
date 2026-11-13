@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { safeUrl, editFieldValue, settingNumber, settingBoolean, displayMode, windowBounds } = require("../src/utils");
+const { safeUrl, editFieldValue, settingNumber, settingBoolean, displayMode, windowBounds, hostIdentity } = require("../src/utils");
 
 test("safeUrl accepts and normalizes HTTP URLs", () => {
   assert.equal(safeUrl("https://example.com/camera"), "https://example.com/camera");
@@ -90,6 +90,12 @@ test("displayMode rejects a mode nobody knows", () => {
   assert.equal(displayMode("kiosk"), "fullscreen");
   assert.equal(displayMode("minimised"), "fullscreen");
   assert.equal(displayMode(7), "fullscreen");
+});
+
+test("device identity is always the host name", () => {
+  assert.equal(hostIdentity("kitchen-display"), "kitchen-display");
+  assert.equal(hostIdentity(""), "home-panel");
+  assert.equal(hostIdentity("  hall  "), "hall");
 });
 
 test("windowBounds leaves room around the window", () => {

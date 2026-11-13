@@ -18,6 +18,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
+const os = require("node:os");
 const { WebSocketServer } = require("ws");
 const { DeviceClient, findSidecar } = require("../src/device");
 const { systemVolumePercent, setSystemVolume } = require("../src/volume");
@@ -26,6 +27,7 @@ const { editFieldValue } = require("../src/utils");
 const root = path.join(__dirname, "..");
 const uiDir = path.join(root, "src", "ui");
 const port = Number(process.env.DEV_UI_PORT || 8769);
+const hostName = (os.hostname() || "home-panel").trim();
 
 const userData = path.join(process.env.XDG_CONFIG_HOME || path.join(process.env.HOME, ".config"), "homepanel-kiosk");
 const configFile = path.join(userData, "device-config.json");
@@ -111,8 +113,8 @@ async function startSidecar() {
   }
   // The identity comes from the settings, so a development run is the same
   // device as the application is.
-  client.deviceId = settings.voiceDeviceId || "home-panel";
-  client.board = settings.deviceName || "home-panel";
+  client.deviceId = hostName;
+  client.board = hostName;
   // The live state lives in memory, not on the disk, and the device
   // program decides where: it is the one that writes it. The application
   // reads it from the same place.
@@ -181,7 +183,7 @@ wss.on("connection", (socket) => {
       // it, so a saved change reaches the device rather than waiting for
       // it to be restarted.
       await client.sendConfig({
-        board: saved.deviceName || "",
+        board: hostName,
         audioInput: saved.voiceAudioInput || "",
         audioOutput: saved.voiceAudioOutput || "",
       });

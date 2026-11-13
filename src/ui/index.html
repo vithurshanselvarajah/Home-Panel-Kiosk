@@ -122,6 +122,7 @@
       </nav>
       <div class="settings-view" id="settings-view-device" role="tabpanel" aria-labelledby="tab-device">
       <p class="panel-intro">Connect your dashboard, Immich Kiosk, and Home Assistant controls.</p>
+      <div class="host-identity" aria-label="Device identity"><span>DEVICE IDENTITY</span><strong id="device-hostname">—</strong><small>Always taken from this machine’s hostname</small></div>
       <form id="settings-form">
         <label>Home Assistant dashboard URL<input name="dashboardUrl" type="url" placeholder="http://homeassistant.local:8123" required /></label>
         <label>Immich Kiosk URL <span class="optional">optional</span><input name="slideshowUrl" type="url" placeholder="http://immich-kiosk.local:3000" /></label>
@@ -130,8 +131,6 @@
         <div class="section-label"><span>DISPLAY</span><span class="line"></span></div>
         <label>Display mode<select name="displayMode"><option value="fullscreen">Fullscreen — covers the screen</option><option value="window">Window — a movable window</option></select></label>
         <div class="section-label"><span>HOME ASSISTANT COMMANDS</span><span class="line"></span></div>
-        <label>Device name<input name="deviceName" placeholder="Kitchen Display" /></label>
-        <label>Name in Home Assistant<input name="esphomeDeviceName" placeholder="Kitchen Display" /></label>
         <label class="setting-toggle"><input name="esphomeEncryptionEnabled" type="checkbox" /> Encrypt the connection to Home Assistant</label>
         <label>Encryption key<span class="field-unit">copy this into Home Assistant</span><input name="esphomeEncryptionKey" type="text" autocomplete="off" spellcheck="false" placeholder="Paste the key from Home Assistant" /></label>
         <div class="key-actions"><button class="secondary-button" type="button" data-action="new-encryption-key">Make a new key</button></div>
@@ -152,7 +151,6 @@
         <form id="voice-form">
         <div class="section-label"><span>VOICE</span><span class="line"></span></div>
         <label class="setting-toggle"><input name="voiceEnabled" type="checkbox" /> Be a voice satellite</label>
-        <label>Device ID <span class="field-unit">must stay stable</span><input name="voiceDeviceId" type="text" placeholder="home-panel" /></label>
           <div class="section-label"><span>WAKE WORD</span><span class="line"></span></div>
           <p class="field-note">The wake word is set in Home Assistant. It is an entity on the panel, so Home Assistant can read it and change it: the sensitivity, whether the wake word is listening, the ducking and the mute.</p>
           <p class="field-note">The model and the ONNX runtime are installed on the device, outside the application. Without them the panel still works, but Home Assistant does the listening instead.</p>
@@ -175,7 +173,6 @@
           <label class="setting-toggle"><input name="voiceMuteButton" type="checkbox" checked /> The device has its own mute switch</label>
           <div class="section-label"><span>MUSIC</span><span class="line"></span></div>
           <label class="setting-toggle"><input name="musicEnabled" type="checkbox" checked /> Play music from Music Assistant</label>
-          <label>Player name <span class="field-unit">shown in Music Assistant</span><input name="musicName" type="text" placeholder="Home Panel" /></label>
           <label class="setting-toggle"><input name="musicUnpaired" type="checkbox" /> Let a server play without pairing</label>
           <div id="voice-error" class="form-error" role="alert"></div>
           <div class="form-footer"><span>Voice settings are stored on this device.</span><button class="save-button" type="submit">Save voice <span>→</span></button></div>

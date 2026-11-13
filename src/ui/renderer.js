@@ -120,6 +120,8 @@ async function makeEncryptionKey() {
 
 function populate(settings) {
   loadedSettings = settings;
+  const hostname = document.querySelector("#device-hostname");
+  if (hostname) hostname.textContent = settings.deviceName || "Unknown host";
   for (const [key, value] of Object.entries(settings)) {
     const input = form.elements.namedItem(key);
     if (input) {

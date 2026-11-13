@@ -4,7 +4,7 @@ const fsSync = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const os = require("node:os");
-const { safeUrl, settingNumber, settingBoolean, displayMode: readDisplayMode, windowBounds, DISPLAY_MODES } = require("./utils");
+const { safeUrl, settingNumber, settingBoolean, displayMode: readDisplayMode, windowBounds, hostIdentity, DISPLAY_MODES } = require("./utils");
 const { generateEncryptionKey } = require("./encryption");
 const { createHealthChecker, probeHttp } = require("./health");
 const { DeviceClient, findSidecar } = require("./device");
@@ -18,6 +18,8 @@ const {
   systemVolumeAndMicMute,
 } = require("./volume");
 
+const HOSTNAME = hostIdentity(os.hostname());
+
 const DEFAULTS = {
   configured: false,
   dashboardUrl: "http://homeassistant.local:8123",
@@ -26,14 +28,14 @@ const DEFAULTS = {
   slideshowToOffMinutes: 15,
   displayMode: "fullscreen",
   touchKeyboardEnabled: true,
-  deviceName: "Home Panel",
+  deviceName: HOSTNAME,
   esphomeEncryptionEnabled: false,
   esphomeEncryptionKey: "",
   esphomeDeviceName: "",
   // The voice settings. They are the panel's own: the wake word runs on
   // the panel and home assistant only hears the turn.
   voiceEnabled: false,
-  voiceDeviceId: "home-panel",
+  voiceDeviceId: HOSTNAME,
   voiceAudioInput: "",
   voiceAudioOutput: "",
   voiceStartupVolume: 50,
@@ -41,7 +43,7 @@ const DEFAULTS = {
   voiceDuckDb: -6,
   voiceMuteButton: true,
   musicEnabled: true,
-  musicName: "Home Panel",
+  musicName: HOSTNAME,
   musicUnpaired: false,
 };
 
@@ -104,7 +106,7 @@ let quitting = false;
 const OVERLAY_RECYCLE_DELAY_MS = 60_000;
 const VIEW_RETRY_INTERVAL_MS = 15_000;
 const POINTER_MOVE_INTERVAL_MS = 5_000;
-const deviceId = `homepanel_${os.hostname().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) || "display"}`;
+const deviceId = HOSTNAME;
 const configPath = () => path.join(app.getPath("userData"), "settings.json");
 
 // The dashboard is rendered by the main window itself, so there is no separate
@@ -193,7 +195,17 @@ async function decodeSettings(data) {
   }
   delete data.esphomeEncryptionKeyEncrypted;
   delete data.cameras;
-  return { ...DEFAULTS, ...data };
+  return {
+    ...DEFAULTS,
+    ...data,
+    // The machine hostname is the one stable identity used by every
+    // Home Assistant and Music Assistant surface. Older saved aliases
+    // are deliberately ignored.
+    deviceName: HOSTNAME,
+    voiceDeviceId: HOSTNAME,
+    esphomeDeviceName: HOSTNAME,
+    musicName: HOSTNAME,
+  };
 }
 
 function assertOverlaySender(event) {
@@ -948,6 +960,10 @@ async function loadSettings() {
 
 async function saveSettings(next) {
   const clean = { ...settings, ...next };
+  clean.deviceName = HOSTNAME;
+  clean.voiceDeviceId = HOSTNAME;
+  clean.esphomeDeviceName = HOSTNAME;
+  clean.musicName = HOSTNAME;
   clean.configured = true;
   clean.touchKeyboardEnabled = Boolean(clean.touchKeyboardEnabled);
   clean.dashboardUrl = safeUrl(clean.dashboardUrl) || DEFAULTS.dashboardUrl;
@@ -955,13 +971,11 @@ async function saveSettings(next) {
   // The voice settings. The panel is a voice satellite, and these are
   // what make it one.
   clean.voiceEnabled = Boolean(clean.voiceEnabled);
-  clean.voiceDeviceId = String(clean.voiceDeviceId || DEFAULTS.voiceDeviceId).trim() || DEFAULTS.voiceDeviceId;
   clean.voiceStartupVolume = settingNumber(clean.voiceStartupVolume) ?? DEFAULTS.voiceStartupVolume;
   clean.voiceVolume = settingNumber(clean.voiceVolume) ?? DEFAULTS.voiceVolume;
   clean.voiceDuckDb = settingNumber(clean.voiceDuckDb) ?? DEFAULTS.voiceDuckDb;
   clean.voiceMuteButton = Boolean(clean.voiceMuteButton);
   clean.musicEnabled = Boolean(clean.musicEnabled);
-  clean.musicName = String(clean.musicName || DEFAULTS.musicName).trim() || DEFAULTS.musicName;
   clean.musicUnpaired = Boolean(clean.musicUnpaired);
   // The audio devices are named by the sidecar, so the names are kept as
   // they are. An empty name is the system default.
@@ -984,7 +998,6 @@ async function saveSettings(next) {
     // thinks of a key.
     clean.esphomeEncryptionKey = generateEncryptionKey();
   }
-  clean.esphomeDeviceName = String(clean.esphomeDeviceName || "").trim();
   // The display mode is a setting, so a device that was set up before it
   // existed has none, and one with a nonsense value falls back to the
   // mode it was running in.
@@ -1147,7 +1160,7 @@ async function startDeviceProgram() {
   //
   // The path is derived from the device's identity, which is what the
   // device program derives it from too.
-  const identity = settings.voiceDeviceId || deviceId;
+  const identity = deviceId;
   const runtimeDir = runtimeDirectory(identity);
   // The device program is told where the live state lives, so that it
   // writes it where this reads it.
@@ -1169,7 +1182,7 @@ async function startDeviceProgram() {
     configFile,
     dataDirectory,
     deviceId: identity,
-    board: settings.deviceName || "home-panel",
+    board: HOSTNAME,
     runtimeDirectory: runtimeBaseDir,
     // The audio devices are named on the command line as well as in the
     // configuration, so the device opens the right ones before the
@@ -1185,7 +1198,7 @@ async function startDeviceProgram() {
     // The Home Assistant connection is made by the device program, so it
     // needs the key and the name the panel is known by.
     esphomeKey: settings.esphomeEncryptionKey || "",
-    esphomeName: settings.esphomeDeviceName || identity,
+    esphomeName: HOSTNAME,
     onState: () => {
       sendDeviceState();
       // The device's mute is the microphone's, and it is the panel's
