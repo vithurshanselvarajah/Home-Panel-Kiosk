@@ -35,7 +35,7 @@ func TestTheMusicServerStopsHomeAssistantsMusic(t *testing.T) {
 	player := livePlayer(t, d)
 	post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
 		"entity_id":          player,
-		"media_content_id":   "media-source://radio_browser/" + liveStation(t),
+		"media_content_id":   liveStationContent(t),
 		"media_content_type": "music",
 	})
 
@@ -118,7 +118,7 @@ func TestHomeAssistantsMusicPausesTheMusicServer(t *testing.T) {
 	player := livePlayer(t, d)
 	post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
 		"entity_id":          player,
-		"media_content_id":   "media-source://radio_browser/" + liveStation(t),
+		"media_content_id":   liveStationContent(t),
 		"media_content_type": "music",
 	})
 
@@ -154,7 +154,7 @@ func TestTheTransportGoesToTheMusicThatIsPlaying(t *testing.T) {
 	player := livePlayer(t, d)
 	post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
 		"entity_id":          player,
-		"media_content_id":   "media-source://radio_browser/" + liveStation(t),
+		"media_content_id":   liveStationContent(t),
 		"media_content_type": "music",
 	})
 	d.waitFor("playing Home Assistant's music", 90*time.Second, func(s deviceState) bool {
