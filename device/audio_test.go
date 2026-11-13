@@ -203,21 +203,6 @@ func TestTheSendspinGainFollowsTheVolume(t *testing.T) {
 	}
 }
 
-// TestTheMuteSilencesTheMusic checks that the mute switch is honoured.
-//
-// The mute is the panel's own, and it is what the volume is not: the
-// volume is a level and the mute is a switch.
-func TestTheMuteSilencesTheMusic(t *testing.T) {
-	pcm := []byte{0x00, 0x40, 0x00, 0x40}
-	applySendspinGain(pcm, 100, true, false, 0)
-
-	for i := 0; i < len(pcm); i += 2 {
-		if pcm[i] != 0x00 || pcm[i+1] != 0x00 {
-			t.Fatal("the music was not silent when it was muted")
-		}
-	}
-}
-
 // TestTheReportedVolumeIsThePanelsVolume checks that the panel reports
 // the volume it is actually using.
 //
@@ -279,6 +264,26 @@ func TestTheServersMuteSilencesTheMusic(t *testing.T) {
 		if pcm[i] != 0x00 || pcm[i+1] != 0x00 {
 			t.Error("the music was not silent when the server had muted it")
 		}
+	}
+}
+
+// TestTheMicrophoneMuteDoesNotMuteTheSpeaker checks that the panel's
+// microphone switch leaves Sendspin's independent speaker mute untouched.
+func TestTheMicrophoneMuteDoesNotMuteTheSpeaker(t *testing.T) {
+	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
+	a.setMuted(true)
+
+	a.mu.Lock()
+	serverMuted := a.sendspinMuted
+	a.mu.Unlock()
+	if serverMuted {
+		t.Fatal("the microphone mute changed the speaker mute")
+	}
+
+	pcm := []byte{0x00, 0x40, 0x00, 0x40}
+	applySendspinGain(pcm, 100, serverMuted, false, 0)
+	if pcm[0] != 0x00 || pcm[1] != 0x40 || pcm[2] != 0x00 || pcm[3] != 0x40 {
+		t.Fatalf("the speaker was silenced by the microphone mute: %v", pcm)
 	}
 }
 
