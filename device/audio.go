@@ -2308,6 +2308,12 @@ func (a *deviceAudio) sendspinStore() string {
 	return filepath.Join(a.credentialsDir, "sendspin.json")
 }
 
+// sendspinPairingToken exposes the long-lived pairing token from its
+// protected store without adding another copy to app settings.
+func (a *deviceAudio) sendspinPairingToken() (string, error) {
+	return sendspin.PairingToken(a.sendspinStore())
+}
+
 // stopSendspin stops the music player.
 func (a *deviceAudio) stopSendspin(reason string) {
 	a.mu.Lock()

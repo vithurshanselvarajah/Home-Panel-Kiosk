@@ -128,9 +128,21 @@
         <label>Immich Kiosk URL <span class="optional">optional</span><input name="slideshowUrl" type="url" placeholder="http://immich-kiosk.local:3000" /></label>
         <div class="section-label"><span>HOME ASSISTANT COMMANDS</span><span class="line"></span></div>
         <label class="setting-toggle"><input name="esphomeEncryptionEnabled" type="checkbox" /> Encrypt the connection to Home Assistant</label>
-        <label>Encryption key<span class="field-unit">copy this into Home Assistant</span><input name="esphomeEncryptionKey" type="text" autocomplete="off" spellcheck="false" placeholder="Paste the key from Home Assistant" /></label>
+        <div class="secret-heading"><label for="ha-encryption-key">Encryption key <span class="field-unit">for Home Assistant</span></label><button class="secondary-button secret-toggle" type="button" data-secret-toggle="ha" disabled>Show key + QR</button></div>
+        <input id="ha-encryption-key" name="esphomeEncryptionKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the key from Home Assistant" />
         <div class="key-actions"><button class="secondary-button" type="button" data-action="new-encryption-key">Make a new key</button></div>
+        <div class="secret-reveal" id="ha-secret-reveal" hidden>
+          <img id="ha-secret-qr" alt="QR code containing the Home Assistant encryption key" />
+          <div class="secret-value"><code id="ha-secret-value"></code><button class="secondary-button" type="button" data-copy-secret="ha">Copy key</button></div>
+        </div>
         <p class="field-note">Without a key the panel still connects and is still set up in one step, but the traffic is in plain text on the network. The key is the same one Home Assistant asks for when the panel is added.</p>
+        <div class="section-label"><span>SENDSPIN · MUSIC ASSISTANT</span><span class="line"></span></div>
+        <p class="field-note">Sendspin sessions are always encrypted. This pairing token lets Music Assistant trust this player; it is separate from the Home Assistant key.</p>
+        <div class="secret-heading"><span class="secret-label">Sendspin pairing token</span><button class="secondary-button secret-toggle" type="button" data-secret-toggle="sendspin">Show token + QR</button></div>
+        <div class="secret-reveal" id="sendspin-secret-reveal" hidden>
+          <img id="sendspin-secret-qr" alt="QR code containing the Sendspin pairing token" />
+          <div class="secret-value"><code id="sendspin-secret-value"></code><button class="secondary-button" type="button" data-copy-secret="sendspin">Copy token</button></div>
+        </div>
         <div id="form-error" class="form-error" role="alert"></div>
         <div class="form-footer"><span>Settings are stored on this device.</span><button class="save-button" type="submit">Save settings <span>→</span></button></div>
       </form>
