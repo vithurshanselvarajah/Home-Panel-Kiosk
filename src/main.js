@@ -593,17 +593,23 @@ function currentMute() {
 // panel that read it every time it sent its state would run a command
 // every time it sent its state.
 async function refreshVolume() {
-  const value = await systemVolumePercent();
-  if (value === null) return false;
-  systemVolume = value;
-  // The microphone's mute is read with the volume, because they are
-  // both read from the mixer and both are worth following.
-  micMuted = await systemMicMuted();
-  // The state is sent whatever the value is. The overlay is destroyed and
-  // made again while the drawer is shut, so a drawer that was not there
-  // when the volume was last read has never been told what it is.
-  sendState(true);
-  return true;
+  // The mixer is read under the lock, so that a reading cannot happen
+  // while the button is writing. A reading that happens halfway
+  // through a write sees the value from before it, and takes it for a
+  // change from outside — and undoes it.
+  return withMuteLock(async () => {
+    const value = await systemVolumePercent();
+    if (value === null) return false;
+    systemVolume = value;
+    // The microphone's mute is read with the volume, because they are
+    // both read from the mixer and both are worth following.
+    micMuted = await systemMicMuted();
+    // The state is sent whatever the value is. The overlay is destroyed and
+    // made again while the drawer is shut, so a drawer that was not there
+    // when the volume was last read has never been told what it is.
+    sendState(true);
+    return true;
+  });
 }
 
 // The volume watcher.
@@ -625,31 +631,42 @@ let volumeWatcher = null;
 // panel has just been given the volume.
 function watchVolume() {
   stopWatchingVolume();
-  volumeWatcher = setInterval(async () => {
-    const value = await systemVolumePercent();
-    if (value === null) return;
-    const muted = await systemMicMuted();
-    // The panel's own change is not a change from outside, and it has
-    // already been sent.
-    if (value === systemVolume && muted === micMuted) return;
-    systemVolume = value;
-    micMuted = muted;
-    // The device program's speaker follows the mixer, and the mixer is
-    // what a person means by the volume. The state is sent below, and
-    // the state carries the volume, so the speaker follows too.
-    //
-    // The panel's own change has already been sent, so it is not sent
-    // again here: the two telling each other about the same change for
-    // ever is what the volume follower in the device program is there to
-    // stop.
-    //
-    // The microphone muted by something else turns the device's switch
-    // on, so that Home Assistant shows what is really happening.
-    followMicMute(muted);
-    sendState(true);
-  }, volumeWatchInterval);
+  volumeWatcher = setInterval(watchTick, volumeWatchInterval);
   // The watcher is not what should keep the app alive.
   if (typeof volumeWatcher.unref === "function") volumeWatcher.unref();
+}
+
+// watchTick reads the mixer once.
+//
+// It is the watcher's body on its own, so that a test can run it
+// without waiting for the timer.
+async function watchTick() {
+    // The whole reading is under the lock, and not just the part that
+    // changes things. A reading that happens while the button is
+    // writing sees the value from before the write, and takes it for a
+    // change from outside — which is a mute that turns itself off.
+    await withMuteLock(async () => {
+      const value = await systemVolumePercent();
+      if (value === null) return;
+      const muted = await systemMicMuted();
+      // The panel's own change is not a change from outside, and it has
+      // already been sent.
+      if (value === systemVolume && muted === micMuted) return;
+      systemVolume = value;
+      micMuted = muted;
+      // The microphone muted by something else turns the device's switch
+      // on, so that Home Assistant shows what is really happening.
+      followMicMute(muted);
+      // The device program's speaker follows the mixer, and the mixer is
+      // what a person means by the volume. The state carries the
+      // volume, so the speaker follows too.
+      //
+      // The panel's own change has already been sent, so it is not sent
+      // again here: the two telling each other about the same change
+      // for ever is what the volume follower in the device program is
+      // there to stop.
+      sendState(true);
+    });
 }
 
 // stopWatchingVolume stops following the mixer.
@@ -725,6 +742,14 @@ async function setVolume(value) {
 let sentDeviceMute = null;
 let wroteMicMuted = null;
 
+// The mute is changed in one place at a time.
+//
+// The watcher reads the mixer and the button writes it, and if they
+// happen at once the watcher can read the value from before the button
+// wrote it — and then undo it. So a change and a reading of the
+// change do not happen at the same time.
+let muteLock = null;
+
 function followDeviceMute() {
   const muted = deviceClient?.state?.muted;
   if (typeof muted !== "boolean") return;
@@ -734,7 +759,10 @@ function followDeviceMute() {
   wroteMicMuted = muted;
   micMuted = muted;
   // The system microphone is the panel's microphone, so it is muted.
-  setSystemMicMuted(muted).then(() => sendState(true));
+  withMuteLock(async () => {
+    await setSystemMicMuted(muted);
+    sendState(true);
+  });
 }
 
 // followMicMute makes the device follow the system microphone.
@@ -761,20 +789,39 @@ function followMicMute(muted) {
 // machine whose microphone cannot be muted from here.
 async function setMute(muted) {
   const value = Boolean(muted);
-  await setSystemMicMuted(value);
-  // What the panel wrote and what it told the device are remembered, so
-  // that neither is taken for a change from outside.
-  wroteMicMuted = value;
-  sentDeviceMute = value;
-  micMuted = value;
-  // The device program owns the microphone, so it is told to be quiet.
-  //
-  // It is told rather than done here, so that Home Assistant's switch
-  // and the microphone are the same thing: the switch is what Home
-  // Assistant reads, and the microphone is what it means.
-  if (controlClient) controlClient.sendMute(value);
-  // The drawer shows the mute, so it has to be told.
-  sendState(true);
+  await withMuteLock(async () => {
+    await setSystemMicMuted(value);
+    // What the panel wrote and what it told the device are remembered,
+    // so that neither is taken for a change from outside.
+    //
+    // They are remembered after the write, not before it, because a
+    // reading that happens while the write is on its way would see the
+    // old value and take it for a change from outside — and undo it.
+    wroteMicMuted = value;
+    sentDeviceMute = value;
+    micMuted = value;
+    // The device program owns the microphone, so it is told to be quiet.
+    //
+    // It is told rather than done here, so that Home Assistant's switch
+    // and the microphone are the same thing: the switch is what Home
+    // Assistant reads, and the microphone is what it means.
+    if (controlClient) controlClient.sendMute(value);
+    // The drawer shows the mute, so it has to be told.
+    sendState(true);
+  });
+}
+
+// withMuteLock does one thing with the mute at a time.
+//
+// The watcher reads the mixer and the button writes it. If they happen
+// at once the watcher can read the value from before the button wrote
+// it, and then take it for a change from outside and undo it — which
+// is a mute that turns itself off.
+function withMuteLock(work) {
+  const next = (muteLock || Promise.resolve()).then(work, work);
+  // The lock is not what should keep the app alive.
+  muteLock = next.catch(() => {});
+  return next;
 }
 
 // handleCommand acts on a command.

@@ -28,12 +28,25 @@ function muteSource() {
 function run() {
   const sent = [];
   let micMuted = false;
+  // The mixer the test pretends is there. It remembers the value that
+  // was asked for and does not answer with it until the write has
+  // landed, which is what a real mixer does.
+  let pending = null;
   const deviceState = { muted: false };
   const sandbox = {
     systemVolumePercent: async () => 50,
     setSystemVolume: async () => true,
+    // The mixer answers with what it has been told, and a write that
+    // has not landed yet is not what it says.
     systemMicMuted: async () => micMuted,
-    setSystemMicMuted: async (muted) => { micMuted = muted; return true; },
+    setSystemMicMuted: async (muted) => {
+      // The write lands on the next turn of the event loop, which is
+      // what a real mixer does: the command goes out and the mixer
+      // answers afterwards.
+      await new Promise((resolve) => setImmediate(resolve));
+      micMuted = muted;
+      return true;
+    },
     sendState: () => {},
     controlClient: { sendMute: (muted) => sent.push(muted) },
     deviceClient: { state: deviceState },
@@ -51,12 +64,16 @@ function run() {
     isMuted: () => micMuted,
     // The device's state arrives.
     deviceSays: (muted) => { deviceState.muted = muted; sandbox.followDeviceMute(); },
+    // The watcher reads the mixer.
+    tick: async () => { await sandbox.watchTick(); },
+
   };
 }
 
 test("the device's mute mutes the microphone", async () => {
-  const { sandbox, isMuted, deviceSays } = run();
+  const { isMuted, deviceSays } = run();
   deviceSays(true);
+  await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(isMuted(), true, "the microphone was not muted");
 });
@@ -74,6 +91,22 @@ test("the panel does not chase its own mute", async () => {
   deviceSays(true);
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(sent, [true], "the panel chased its own change");
+});
+
+test("pressing the mute twice does not turn it back on", async () => {
+  // The button writes the mixer and the watcher reads it. If the
+  // watcher reads the value from before the button wrote it, it takes
+  // it for a change from outside and undoes it — which is a mute that
+  // turns itself off.
+  const { sandbox, sent, isMuted, tick } = run();
+
+  await sandbox.setMute(true);
+  // The watcher reads the mixer while the button's write is on its way.
+  await tick();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(isMuted(), true, "the mute turned itself off");
+  assert.deepEqual(sent, [true], "the device was told twice");
 });
 
 test("a microphone muted outside the panel turns the device's switch on", async () => {
