@@ -885,19 +885,7 @@ async function handleCommand(command) {
         cameraView = overlayView?.webContents;
         if (!cameraView || cameraView.isDestroyed()) throw new Error("Panel camera view is unavailable");
         if (cameraView.isLoadingMainFrame()) await waitForOverlayLoad(cameraView);
-        const dataURL = await cameraView.executeJavaScript(`(async () => {
-          if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera capture is unavailable");
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 2, max: 5 } }, audio: false });
-          try {
-            const video = document.createElement("video"); video.srcObject = stream; video.muted = true; await video.play();
-            await new Promise((resolve, reject) => { if (video.videoWidth) resolve(); else { video.onloadedmetadata = resolve; video.onerror = reject; } });
-            const scale = Math.min(1, 1280 / video.videoWidth, 720 / video.videoHeight);
-            const canvas = document.createElement("canvas"); canvas.width = Math.round(video.videoWidth * scale); canvas.height = Math.round(video.videoHeight * scale);
-            canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-            video.pause(); video.srcObject = null;
-            return canvas.toDataURL("image/jpeg", 0.78);
-          } finally { stream.getTracks().forEach((track) => track.stop()); }
-        })()`);
+        const dataURL = await cameraView.executeJavaScript("window.homePanelCaptureCameraFrame()");
         cameraData = typeof dataURL === "string" && dataURL.startsWith("data:image/jpeg;base64,") ? dataURL.slice(23) : "";
         if (!cameraData) throw new Error("The camera returned no JPEG image");
       } catch (error) {
@@ -1315,8 +1303,17 @@ function createOverlayView() {
     preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: false,
   } });
   overlayView.setBackgroundColor("#00000000");
-  overlayView.webContents.loadFile(path.join(__dirname, "ui", "index.html"));
-  overlayView.webContents.on("did-finish-load", sendState);
+  const webContents = overlayView.webContents;
+  webContents.loadFile(path.join(__dirname, "ui", "index.html"));
+  webContents.on("did-finish-load", sendState);
+  webContents.on("render-process-gone", (_event, details) => {
+    if (details.reason === "clean-exit" || webContents.isDestroyed()) return;
+    console.error("Panel overlay renderer stopped:", details.reason);
+    setTimeout(() => {
+      if (overlayView?.webContents !== webContents || webContents.isDestroyed()) return;
+      webContents.reload();
+    }, 1000).unref?.();
+  });
 }
 
 function waitForOverlayLoad(webContents) {
