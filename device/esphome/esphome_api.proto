@@ -188,26 +188,6 @@ message ButtonCommandRequest {
   uint32 device_id = 2;
 }
 
-message CameraImageRequest {
-
-
-
-
-  bool single = 1;
-  bool stream = 2;
-}
-
-message CameraImageResponse {
-
-
-
-
-  fixed32 key = 1;
-  bytes data = 2;
-  bool done = 3;
-  uint32 device_id = 4;
-}
-
 message CrashReportCapabilities {
   // Bitmask of CrashReportFlag. ESP32 checks BUILD_MATCHES against the build time stored with the record;
   // ESP8266, RP2 and LibreTiny store none and assume it.
@@ -496,21 +476,6 @@ message ListEntitiesButtonResponse {
   EntityCategory entity_category = 7;
   string device_class = 8;
   uint32 device_id = 9;
-}
-
-message ListEntitiesCameraResponse {
-
-
-
-
-  string object_id = 1;
-  fixed32 key = 2;
-  string name = 3;
-  reserved 4; // Deprecated: was string unique_id
-  bool disabled_by_default = 5;
-  string icon = 6;
-  EntityCategory entity_category = 7;
-  uint32 device_id = 8;
 }
 
 message ListEntitiesDoneResponse {

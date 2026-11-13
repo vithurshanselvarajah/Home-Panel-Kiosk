@@ -20,7 +20,7 @@ module.exports = {
     },
   },
   makers: [
-    { name: "@electron-forge/maker-deb", config: {} },
+    { name: "@electron-forge/maker-deb", config: { depends: ["ffmpeg"] } },
     { name: "@electron-forge/maker-zip", platforms: ["linux"], config: {} },
   ],
   plugins: [

@@ -137,7 +137,7 @@ function findSidecar(appPath, resourcesPath, execPath) {
  * DeviceClient runs the sidecar and reads the state it reports.
  */
 class DeviceClient {
-  constructor({ binary, stateFile, levelFile, configFile, dataDirectory, deviceId, board, mic, speaker, runtimeDirectory, controlSocket, esphomeKey, esphomeName, cameraAvailable, onState, onLog }) {
+  constructor({ binary, stateFile, levelFile, configFile, dataDirectory, deviceId, board, mic, speaker, runtimeDirectory, controlSocket, esphomeKey, esphomeName, onState, onLog }) {
     this.binary = binary;
     this.stateFile = stateFile;
     this.levelFile = levelFile || `${stateFile}.level`;
@@ -163,7 +163,6 @@ class DeviceClient {
     // the panel is known by come from the panel.
     this.esphomeKey = esphomeKey || "";
     this.esphomeName = esphomeName || "";
-    this.cameraAvailable = Boolean(cameraAvailable);
     this.onState = onState || (() => {});
     this.onLog = onLog || (() => {});
     this.child = null;
@@ -207,7 +206,6 @@ class DeviceClient {
     if (this.controlSocket) args.push("--control-socket", this.controlSocket);
     if (this.esphomeKey) args.push("--esphome-key", this.esphomeKey);
     if (this.esphomeName) args.push("--esphome-name", this.esphomeName);
-    args.push("--camera-available", this.cameraAvailable ? "true" : "false");
 
     // The spawn is guarded, because a path that is not executable throws
     // here rather than arriving as an error event, and a throw in here

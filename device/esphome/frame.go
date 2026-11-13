@@ -47,9 +47,6 @@ const (
 	TypeSubscribeHomeAssistantState    uint32 = 39
 	TypeHomeAssistantStateResponse     uint32 = 40
 	TypeListEntitiesServicesResponse   uint32 = 41
-	TypeListEntitiesCameraResponse     uint32 = 43
-	TypeCameraImageResponse            uint32 = 44
-	TypeCameraImageRequest             uint32 = 45
 	TypeExecuteServiceRequest          uint32 = 42
 	TypeDeviceCapabilitiesRequest      uint32 = 149
 	TypeDeviceCapabilitiesResponse     uint32 = 150

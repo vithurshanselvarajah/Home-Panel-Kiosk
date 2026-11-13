@@ -174,13 +174,13 @@ class ControlClient {
     }
   }
 
-  sendCameraFrame(cameraRequestId, cameraData = "", cameraError = "") {
+  sendCameraPassword(password = "") {
     if (!this.connection || !this.connected) return false;
     try {
-      this.connection.write(`${JSON.stringify({ action: "camera_frame", cameraRequestId, cameraData, cameraError })}\n`);
+      this.connection.write(`${JSON.stringify({ action: "camera_password", cameraPassword: password })}\n`);
       return true;
     } catch (error) {
-      this.onLog(`the camera frame could not be sent: ${error.message}`);
+      this.onLog(`the camera password could not be sent: ${error.message}`);
       return false;
     }
   }
