@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -45,6 +46,8 @@ type device struct {
 	states      []deviceState
 	lines       []string
 	stopped     bool
+	// started is when the device program was started.
+	started time.Time
 }
 
 // deviceState is the state the device program publishes.
@@ -206,6 +209,7 @@ func startDevice(t *testing.T, recording string) *device {
 
 	d := &device{
 		t:           t,
+		started:     time.Now(),
 		cmd:         cmd,
 		statePath:   statePath,
 		controlPath: controlSocket,
@@ -255,16 +259,30 @@ func startDevice(t *testing.T, recording string) *device {
 	return d
 }
 
-// retryUntilConnected starts the device again if it does not connect.
+// retryUntilConnected makes sure Home Assistant can reach the panel.
 //
-// It gives up after a while, because a device that will not connect is
-// a failure the test should report rather than a failure it should
-// keep retrying.
+// Home Assistant finds the panel by the address it was given, and it
+// keeps that address. The panel's address changes: the machine it runs
+// on gets a new address from the network, and a machine with a
+// container network has several.
+//
+// So when the panel does not connect, the entry is pointed at this
+// machine and the panel is told to try again.
+//
+// The entry is only reconfigured when the panel has not connected,
+// because reconfiguring reloads the entry and a reload drops the
+// connection and takes a moment to come back. A test that reconfigured
+// every time would be about the reload rather than about the panel.
 func (d *device) retryUntilConnected() {
-	deadline := time.Now().Add(60 * time.Second)
+	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
 		if state, found := d.lastState(); found && state.Connection == "connected" {
 			return
+		}
+		// The panel has had a moment and has not connected, so
+		// Home Assistant is probably looking in the wrong place.
+		if time.Now().After(d.started.Add(10 * time.Second)) {
+			pointHomeAssistantHere(d.t)
 		}
 		time.Sleep(2 * time.Second)
 	}
@@ -540,3 +558,243 @@ func haEntities(t *testing.T, piece string) map[string]string {
 var _ = context.Background
 var _ = fmt.Sprintf
 var _ = slog.Default
+
+// pointHomeAssistantHere tells Home Assistant where the panel is.
+//
+// Home Assistant finds the panel by the address it was given, and it
+// keeps that address. A panel whose machine has been given a new
+// address is a panel Home Assistant cannot reach, and the tests would
+// be about the network rather than about the panel.
+//
+// The entry is reconfigured rather than created, because there is one
+// panel and there should be one entry for it.
+func pointHomeAssistantHere(t *testing.T) {
+	t.Helper()
+	if haURL() == "" || haToken() == "" {
+		return
+	}
+	// The address is this machine's address on the network Home
+	// Assistant is on.
+	address := localAddress(t)
+
+	// The entry is found by its title, so the test does not care which
+	// entry it is.
+	entries := configEntries(t, "esphome")
+	for _, entry := range entries {
+		if entry.title != "Home Panel" {
+			continue
+		}
+		// The entry is only reconfigured when the panel has not
+		// connected, which is what this is only called for.
+		//
+		// Reconfiguring reloads the entry, and a reload drops the
+		// connection and takes a moment to come back. So it is not
+		// done over and over: the address it was pointed at is
+		// remembered, and it is only done again when the address has
+		// changed.
+		if lastEsphomeAddress(t) == address {
+			return
+		}
+		reconfigureEsphomeEntry(t, entry.id, address, livePort())
+		rememberEsphomeAddress(t, address)
+		return
+	}
+	t.Log("Home Assistant has no esphome entry for the panel")
+}
+
+// esphomeAddressFile is where the address the entry was pointed at is
+// remembered.
+//
+// It is a file rather than a variable because the live tests are run
+// one at a time but in separate processes, and a variable would be
+// forgotten between them.
+func esphomeAddressFile() string {
+	return filepath.Join(os.TempDir(), "homepanel-live-esphome-address")
+}
+
+// lastEsphomeAddress is the address the entry was last pointed at.
+func lastEsphomeAddress(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(esphomeAddressFile())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// rememberEsphomeAddress remembers the address the entry was pointed
+// at.
+func rememberEsphomeAddress(t *testing.T, address string) {
+	t.Helper()
+	if err := os.WriteFile(esphomeAddressFile(), []byte(address), 0o600); err != nil {
+		t.Logf("the address could not be remembered: %v", err)
+	}
+}
+
+// configEntry is one of Home Assistant's configuration entries.
+type configEntry struct {
+	id    string
+	title string
+	host  string
+	port  int
+}
+
+// configEntries gives back the entries of a kind.
+func configEntries(t *testing.T, kind string) []configEntry {
+	t.Helper()
+	body, err := httpGet(haURL()+"/api/config/config_entries/entry", haToken())
+	if err != nil {
+		t.Logf("the configuration entries could not be read: %v", err)
+		return nil
+	}
+	var raw []map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Logf("the configuration entries could not be read: %v", err)
+		return nil
+	}
+	var out []configEntry
+	for _, item := range raw {
+		if item["domain"] != kind {
+			continue
+		}
+		entry := configEntry{
+			id:    stringOf(item["entry_id"]),
+			title: stringOf(item["title"]),
+		}
+		// The address is in the entry's data, which the list does not
+		// always carry.
+		if data, ok := item["data"].(map[string]any); ok {
+			entry.host = stringOf(data["host"])
+			if number, ok := data["port"].(float64); ok {
+				entry.port = int(number)
+			}
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+// reconfigureEsphomeEntry points an esphome entry at an address.
+func reconfigureEsphomeEntry(t *testing.T, entryID, host string, port int) {
+	t.Helper()
+	flow, err := httpPost(haURL()+"/api/config/config_entries/flow", haToken(), map[string]any{
+		"handler":              "esphome",
+		"entry_id":             entryID,
+		"show_advanced_options": true,
+	})
+	if err != nil {
+		t.Logf("the entry could not be reconfigured: %v", err)
+		return
+	}
+	var form struct {
+		FlowID string `json:"flow_id"`
+	}
+	if err := json.Unmarshal(flow, &form); err != nil || form.FlowID == "" {
+		t.Logf("the entry could not be reconfigured: %s", strings.TrimSpace(string(flow)))
+		return
+	}
+	// The form answers with an error when nothing is there to talk to
+	// yet, and the address is taken from the answer either way.
+	answer, err := httpPost(haURL()+"/api/config/config_entries/flow/"+form.FlowID, haToken(), map[string]any{
+		"host": host,
+		"port": port,
+	})
+	if err != nil {
+		t.Logf("the entry could not be pointed at %s: %v", host, err)
+		return
+	}
+	t.Logf("Home Assistant's entry was pointed at %s:%d (%s)", host, port, strings.TrimSpace(string(answer)))
+}
+
+// localAddress is this machine's address on the network.
+//
+// It is the address Home Assistant can reach the panel on, which is
+// the one on the network Home Assistant is on and not the one on a
+// container's own network.
+func localAddress(t *testing.T) string {
+	t.Helper()
+	// The address is found by asking which address would be used to
+	// reach Home Assistant.
+	// The address of Home Assistant is taken from its URL, because the
+	// machine can reach it and so Home Assistant can reach the machine.
+	address := haURL()
+	address = strings.TrimPrefix(address, "http://")
+	address = strings.TrimPrefix(address, "https://")
+	// The port is cut off: the address is what matters.
+	if colon := strings.LastIndex(address, ":"); colon > 0 {
+		address = address[:colon]
+	}
+	conn, err := net.Dial("udp", address+":9")
+	if err != nil {
+		t.Logf("the machine's address could not be found: %v", err)
+		return "127.0.0.1"
+	}
+	defer conn.Close()
+	return conn.LocalAddr().(*net.UDPAddr).IP.String()
+}
+
+// httpGet asks for something and gives back the raw answer.
+//
+// The answer is raw because some of Home Assistant's answers are a list
+// and the helpers that read a list would have to know what was in it.
+func httpGet(url, token string) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("%s: %d %s", url, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return body, nil
+}
+
+// httpPost asks for something to be done and gives back the raw answer.
+//
+// The answer is raw because Home Assistant's reconfigure flow answers
+// with a form, and the form is not an object with a known shape.
+func httpPost(url, token string, body any) ([]byte, error) {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(string(raw)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	answer, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("%s: %d %s", url, resp.StatusCode, strings.TrimSpace(string(answer)))
+	}
+	return answer, nil
+}
+
+// stringOf is a string, or an empty string.
+func stringOf(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return ""
+}

@@ -593,6 +593,20 @@ func main() {
 		if player == nil {
 			return
 		}
+		// The command goes to the server only if the server says it
+		// takes it.
+		//
+		// The server is the one that has the music, and it says what
+		// it will do with it. A command it does not want is a command
+		// it refuses, and the panel's buttons are drawn from the same
+		// list, so the button and the music agree.
+		//
+		// A seek is a special case: the server's list says "seek" for a
+		// server that will take one, and the panel's list is what the
+		// drawer uses to decide whether the scrubber works.
+		if !player.CanTransport(command.Action) {
+			return
+		}
 		switch command.Action {
 		case "play":
 			player.Transport("play")

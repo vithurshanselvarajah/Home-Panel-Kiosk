@@ -143,6 +143,25 @@ func (s *Server) reportConnected(connected bool) {
 	}
 }
 
+// reportLink tells the listener whether Home Assistant is there.
+//
+// There can be more than one connection: Home Assistant connects, and
+// the panel's own discovery probe connects as well, and the probe goes
+// away again.
+//
+// So the link is reported while *any* connection is open. A connection
+// that reported on its own would say "disconnected" when it closed
+// while another connection was still up, and the panel would say it
+// was disconnected while Home Assistant was talking to it.
+func (s *Server) reportLink() {
+	open := false
+	s.connections.Range(func(_, _ any) bool {
+		open = true
+		return false
+	})
+	s.reportConnected(open)
+}
+
 // Registry gives access to the entities.
 func (s *Server) Registry() *Registry { return s.registry }
 
@@ -353,11 +372,17 @@ func (s *Server) serve(conn net.Conn) {
 	defer client.close()
 
 	s.connections.Store(client, struct{}{})
-	defer s.connections.Delete(client)
 
 	s.log.Info("home assistant connected", "name", s.name, "address", conn.RemoteAddr())
-	s.reportConnected(true)
-	defer s.reportConnected(false)
+	// The link is reported again when the connection closes, and the
+	// connection is taken out of the list first, so that the report is
+	// about what is left rather than about what is going.
+	//
+	// The defers run in the reverse order they are written, so the
+	// removal is written last and runs first.
+	defer s.reportLink()
+	defer s.connections.Delete(client)
+	s.reportLink()
 
 	// The device pings, so that a connection nobody is using is not
 	// taken for a dead one.

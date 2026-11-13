@@ -268,6 +268,75 @@ async def main():
         await asyncio.sleep(1.0)
         return
 
+    if MODE == "chaos":
+        # The server plays something and holds the session open, so the
+        # transport commands can be thrown at the panel while the music
+        # is playing.
+        #
+        # The server takes the controller role as well, because the
+        # transport commands are for it, and it says what the transport
+        # can do so the panel shows the buttons that work.
+        from aiosendspin.models.types import MediaCommand
+
+        player_role = client.group.group_role("player")
+        metadata_role = client.group.group_role("metadata")
+        controller_role = client.group.group_role("controller")
+        if player_role is None:
+            print("the player role was not taken")
+            return
+        print("the panel took the player role")
+        if controller_role is not None:
+            controller_role.set_supported_commands([
+                MediaCommand.PLAY,
+                MediaCommand.PAUSE,
+                MediaCommand.STOP,
+                MediaCommand.NEXT,
+                MediaCommand.PREVIOUS,
+                MediaCommand.SEEK,
+            ])
+            print("the transport was set")
+
+        import math
+        import struct
+        from aiosendspin.audio import AudioFormat
+        from aiosendspin.server.roles.metadata.state import Metadata
+
+        rate = 48000
+        bit_depth = 16
+        channels = 2
+        fmt = AudioFormat(sample_rate=rate, channels=channels, bit_depth=bit_depth)
+
+        push_stream = client.group.start_stream()
+        print("the stream was started")
+
+        block = bytearray()
+        for i in range(rate // 10):
+            v = int(12000 * math.sin(2 * math.pi * 440 * i / rate))
+            block += struct.pack("<hh", v, v)
+
+        if metadata_role is not None:
+            metadata_role.set_metadata(Metadata(
+                title="Aurora",
+                artist="Vithusel",
+                album="Chaos",
+                track_duration=195000,
+                track_progress=0,
+                playback_speed=1000,
+            ))
+            print("the metadata was set")
+
+        # The music goes on for as long as the test needs it.
+        #
+        # The session is held open by the loop: a server that closed the
+        # session would take the panel's music away, and the panel would
+        # look broken when the fault was the server's.
+        for _ in range(600):
+            push_stream.prepare_audio(bytes(block), fmt)
+            await push_stream.commit_audio()
+            await asyncio.sleep(0.2)
+        print("the audio was sent")
+        return
+
 asyncio.run(main())
 `
 

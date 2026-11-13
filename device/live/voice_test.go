@@ -32,7 +32,7 @@ func TestTheVoiceTurnAgainstLiveHomeAssistant(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
 	recording := liveConvertedRecording(t, liveRecording(t))
-	question := liveQuestion()
+	question := liveQuestion(t)
 
 	// What Home Assistant answers to the same question, asked as text.
 	answered := post(t, haURL()+"/api/conversation/process", haToken(), map[string]any{
@@ -136,11 +136,29 @@ func liveConvertedRecording(t *testing.T, source string) string {
 }
 
 // liveQuestion is what the recording is asking.
-func liveQuestion() string {
+//
+// It is taken from the recording's own name when it is not given
+// outright, because a recording that says one thing and a question that
+// asks another make the test about something nobody meant to test.
+//
+// The recording is named after what it says, so the name is the
+// question.
+func liveQuestion(t *testing.T) string {
+	t.Helper()
 	if question := os.Getenv("LIVE_QUESTION"); question != "" {
 		return question
 	}
-	return "what is the time"
+	path := liveRecording(t)
+	name := filepath.Base(path)
+	// The name is "test-recording - What is the time.mp3".
+	if dash := strings.Index(name, " - "); dash >= 0 {
+		name = name[dash+3:]
+	}
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+	if name == "" {
+		return "what is the time"
+	}
+	return strings.ToLower(name)
 }
 
 // speechOf reads the answer out of a conversation reply.
