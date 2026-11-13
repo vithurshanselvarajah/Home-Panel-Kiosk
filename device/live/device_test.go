@@ -52,32 +52,33 @@ type device struct {
 // It is the same shape as the panel's state file, so the live tests
 // read the panel's own view of the device.
 type deviceState struct {
-	Connection       string  `json:"connection"`
-	ConnectionReason string  `json:"connection_reason"`
-	Phase            string  `json:"phase"`
-	Listen           string  `json:"listen"`
-	Listening        bool    `json:"listening"`
-	Speaking         bool    `json:"speaking"`
-	Thinking         bool    `json:"thinking"`
-	Transcript       string  `json:"transcript"`
-	Spoken           string  `json:"spoken"`
-	SpokenProgress   float64 `json:"spoken_progress"`
-	Muted            bool    `json:"muted"`
-	Volume           int     `json:"volume"`
-	Level            int     `json:"level"`
-	MediaState       string  `json:"media_state"`
-	MusicState       string  `json:"music_state"`
-	MusicPaired      int     `json:"music_paired"`
-	MusicSynced      bool    `json:"music_synced"`
-	MusicBuffered    int     `json:"music_buffered"`
-	MusicTitle       string  `json:"music_title"`
-	MusicArtist      string  `json:"music_artist"`
-	MusicAlbum       string  `json:"music_album"`
-	MusicArtwork     string  `json:"music_artwork"`
-	MusicPosition    int     `json:"music_position"`
-	MusicDuration    int     `json:"music_duration"`
-	MusicPlaying     bool    `json:"music_playing"`
-	LastError        string  `json:"last_error"`
+	Connection       string   `json:"connection"`
+	ConnectionReason string   `json:"connection_reason"`
+	Phase            string   `json:"phase"`
+	Listen           string   `json:"listen"`
+	Listening        bool     `json:"listening"`
+	Speaking         bool     `json:"speaking"`
+	Thinking         bool     `json:"thinking"`
+	Transcript       string   `json:"transcript"`
+	Spoken           string   `json:"spoken"`
+	SpokenProgress   float64  `json:"spoken_progress"`
+	Muted            bool     `json:"muted"`
+	Volume           int      `json:"volume"`
+	Level            int      `json:"level"`
+	MediaState       string   `json:"media_state"`
+	MusicState       string   `json:"music_state"`
+	MusicPaired      int      `json:"music_paired"`
+	MusicSynced      bool     `json:"music_synced"`
+	MusicBuffered    int      `json:"music_buffered"`
+	MusicTitle       string   `json:"music_title"`
+	MusicArtist      string   `json:"music_artist"`
+	MusicAlbum       string   `json:"music_album"`
+	MusicArtwork     string   `json:"music_artwork"`
+	MusicPosition    int      `json:"music_position"`
+	MusicDuration    int      `json:"music_duration"`
+	MusicPlaying     bool     `json:"music_playing"`
+	MusicTransport   []string `json:"music_transport"`
+	LastError        string   `json:"last_error"`
 }
 
 // startDevice runs the device program.
@@ -131,6 +132,14 @@ func startDevice(t *testing.T, recording string) *device {
 	}
 	// An old state file would be read as the new one's first state.
 	_ = os.Remove(statePath)
+
+	// The ports have to be free, or the device cannot start and the
+	// test is about the wrong thing.
+	//
+	// They are the panel's own, so Home Assistant finds the device where
+	// it expects to find it, and a music server finds the player.
+	waitForFreePort(liveSendspinPort())
+	waitForFreePort(livePort())
 
 	// The port is the panel's own, so Home Assistant finds the device
 	// where it expects to find it.
