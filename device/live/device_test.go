@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -140,11 +139,10 @@ func startDevice(t *testing.T, recording string) *device {
 	// system: Home Assistant finds the device by the announcement, and
 	// the announcement carries the port. A device on a port nobody
 	// announced is a device nobody connects to.
-	port := 6053
-	if listener, err := net.Listen("tcp", ":0"); err == nil {
-		port = listener.Addr().(*net.TCPAddr).Port
-		_ = listener.Close()
-	}
+	//
+	// So the tests cannot run at the same time, and they are told which
+	// port to use.
+	port := livePort()
 
 	args := []string{
 		"--credentials-dir", creds,

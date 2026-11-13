@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,22 @@ func post(t *testing.T, url, token string, body any) map[string]any {
 		t.Fatalf("%s: %v", url, err)
 	}
 	return out
+}
+
+// livePort is the port the panel is served on.
+//
+// It is the panel's own port, because Home Assistant finds the device
+// by the announcement and the announcement carries the port. A device
+// on a port nobody announced is a device nobody connects to.
+//
+// So the tests cannot run at the same time.
+func livePort() int {
+	if port := os.Getenv("LIVE_ESPHOME_PORT"); port != "" {
+		if number, err := strconv.Atoi(port); err == nil {
+			return number
+		}
+	}
+	return 6053
 }
 
 // liveConfigFile is the device configuration the tests use.
