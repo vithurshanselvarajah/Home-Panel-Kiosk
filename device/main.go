@@ -217,9 +217,13 @@ func readConfig(path string) (Config, error) {
 const bargeInThreshold = 0.85
 
 func main() {
+	hostName, err := os.Hostname()
+	if err != nil || hostName == "" {
+		hostName = "home-panel"
+	}
 	var (
-		deviceID      = flag.String("device-id", "home-panel", "stable device identity")
-		board         = flag.String("board", "home-panel", "board name, shown in Home Assistant")
+		deviceID      = flag.String("device-id", hostName, "stable device identity")
+		board         = flag.String("board", hostName, "board name, shown in Home Assistant")
 		creds         = flag.String("credentials-dir", "", "where the link credential lives")
 		stateFile     = flag.String("state-file", "", "write the state here as JSON")
 		levelFile     = flag.String("level-file", "", "write the live microphone level here; empty derives it from the state file")
@@ -231,7 +235,7 @@ func main() {
 		verbose       = flag.Bool("verbose", false, "log at debug level")
 		esphomePort   = flag.Int("esphome-port", 0, "the port the Home Assistant API is on; zero picks one")
 		esphomeKey    = flag.String("esphome-key", "", "the base64 encryption key for the Home Assistant API")
-		esphomeName   = flag.String("esphome-name", "home-panel", "the name Home Assistant knows the panel by")
+		esphomeName   = flag.String("esphome-name", hostName, "the name Home Assistant knows the panel by")
 		controlSocket = flag.String("control-socket", "", "the socket the panel talks to this program over")
 	)
 	flag.Parse()

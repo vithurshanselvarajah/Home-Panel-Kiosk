@@ -65,7 +65,7 @@ APP_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk
 configure_pi_touch() {
   local settings_file="${APP_CONFIG_DIR}/settings.json"
   local interactive=true
-  if [[ -n "${PITOUCH_DASHBOARD_URL:-}${PITOUCH_SLIDESHOW_URL:-}${PITOUCH_DEVICE_NAME:-}${PITOUCH_IDLE_SLIDESHOW_MINUTES:-}${PITOUCH_SLIDESHOW_OFF_MINUTES:-}${PITOUCH_TOUCH_KEYBOARD:-}${PITOUCH_DISPLAY_MODE:-}" ]]; then
+  if [[ -n "${PITOUCH_DASHBOARD_URL:-}${PITOUCH_SLIDESHOW_URL:-}${PITOUCH_IDLE_SLIDESHOW_MINUTES:-}${PITOUCH_SLIDESHOW_OFF_MINUTES:-}${PITOUCH_TOUCH_KEYBOARD:-}${PITOUCH_DISPLAY_MODE:-}" ]]; then
     interactive=false
   fi
 
@@ -85,7 +85,7 @@ configure_pi_touch() {
 
   # Pull defaults from any existing settings.json so re-running the installer
   # pre-fills the prompts with the user's previous values.
-  local existing_dashboard_url="" existing_slideshow_url="" existing_device_name=""
+  local existing_dashboard_url="" existing_slideshow_url=""
   local existing_idle_slideshow_min="" existing_slideshow_off_min="" existing_touch_keyboard=""
   local existing_display_mode=""
   if [[ -f "$settings_file" ]] && command -v python3 >/dev/null 2>&1; then
@@ -107,20 +107,18 @@ PY
     }
     existing_dashboard_url=$(read_existing dashboardUrl)
     existing_slideshow_url=$(read_existing slideshowUrl)
-    existing_device_name=$(read_existing deviceName)
     existing_idle_slideshow_min=$(read_existing idleToSlideshowMinutes)
     existing_slideshow_off_min=$(read_existing slideshowToOffMinutes)
     existing_touch_keyboard=$(read_existing touchKeyboardEnabled)
     existing_display_mode=$(read_existing displayMode)
   fi
 
-  local dashboard_url slideshow_url device_name esphome_key esphome_encryption
+  local dashboard_url slideshow_url esphome_key esphome_encryption
   local idle_slideshow_min slideshow_off_min touch_keyboard display_mode
 
   # Fall back to the documented defaults if no prior value is recorded.
   local def_dashboard=${existing_dashboard_url:-http://homeassistant.local:8123}
   local def_slideshow=${existing_slideshow_url:-}
-  local def_device_name=${existing_device_name:-Home Panel}
   local def_idle_slideshow_min=${existing_idle_slideshow_min:-5}
   local def_slideshow_off_min=${existing_slideshow_off_min:-15}
   local def_touch_keyboard=${existing_touch_keyboard:-true}
@@ -163,10 +161,6 @@ PY
     if [[ -z "$display_mode_input" ]]; then
       display_mode=$def_display_mode
     elif [[ "$display_mode_input" =~ ^[Ww]$ ]]; then display_mode="window"; else display_mode="fullscreen"; fi
-    local name_prompt="Device name shown in Home Assistant"
-    [[ -n "$def_device_name" && "$def_device_name" != "Home Panel" ]] && name_prompt="Device name shown in Home Assistant [$def_device_name]"
-    read -r -p "$name_prompt: " device_name
-    device_name=${device_name:-$def_device_name}
     # The key is not asked for here. It is made by the application when
     # the connection is turned to encrypted, and it is shown in the
     # settings to be copied into Home Assistant.
@@ -178,7 +172,6 @@ PY
     idle_slideshow_min=${PITOUCH_IDLE_SLIDESHOW_MINUTES:-5}
     slideshow_off_min=${PITOUCH_SLIDESHOW_OFF_MINUTES:-15}
     touch_keyboard=${PITOUCH_TOUCH_KEYBOARD:-true}
-    device_name=${PITOUCH_DEVICE_NAME:-Home Panel}
     esphome_key=${PITOUCH_ESPHOME_KEY:-}
     esphome_encryption=${PITOUCH_ESPHOME_ENCRYPTION:-false}
     display_mode=${PITOUCH_DISPLAY_MODE:-fullscreen}
@@ -196,7 +189,6 @@ PY
   PITOUCH_IDLE_SLIDESHOW_MINUTES="$idle_slideshow_min" \
   PITOUCH_SLIDESHOW_OFF_MINUTES="$slideshow_off_min" \
   PITOUCH_TOUCH_KEYBOARD="$touch_keyboard" \
-  PITOUCH_DEVICE_NAME="$device_name" \
   PITOUCH_ESPHOME_KEY="$esphome_key" \
   PITOUCH_ESPHOME_ENCRYPTION="$esphome_encryption" \
   PITOUCH_DISPLAY_MODE="$display_mode" \
@@ -221,10 +213,8 @@ settings = {
     "slideshowToOffMinutes": int_env("PITOUCH_SLIDESHOW_OFF_MINUTES", 15),
     "displayMode": os.environ.get("PITOUCH_DISPLAY_MODE", "fullscreen") or "fullscreen",
     "touchKeyboardEnabled": os.environ.get("PITOUCH_TOUCH_KEYBOARD", "true").lower() not in ("0", "false", "no"),
-    "deviceName": os.environ.get("PITOUCH_DEVICE_NAME", "Home Panel") or "Home Panel",
     "esphomeEncryptionEnabled": os.environ.get("PITOUCH_ESPHOME_ENCRYPTION", "false").lower() in ("1", "true", "yes"),
     "esphomeEncryptionKey": os.environ.get("PITOUCH_ESPHOME_KEY", ""),
-    "esphomeDeviceName": os.environ.get("PITOUCH_DEVICE_NAME", "Home Panel") or "Home Panel",
 }
 
 with open(out_path, "w", encoding="utf-8") as fh:

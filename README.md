@@ -104,7 +104,6 @@ The installer writes a `settings.json` into Electron's per-user app config direc
 | `PITOUCH_SLIDESHOW_OFF_MINUTES` | Slideshow minutes before the screen turns off (`0` disables). |
 | `PITOUCH_TOUCH_KEYBOARD` | `true` / `false` — enable the automatic touch keyboard. |
 | `PITOUCH_DISPLAY_MODE` | `fullscreen` / `window` — how the device starts (default `fullscreen`). |
-| `PITOUCH_DEVICE_NAME` | Device name shown in Home Assistant (default `Home Panel`). |
 | `PITOUCH_ESPHOME_ENCRYPTION` | `true` / `false` — encrypt the connection to Home Assistant (default `false`). |
 | `PITOUCH_ESPHOME_KEY` | The encryption key. Blank means the application makes one when the connection is turned to encrypted. The same key is given to Home Assistant when the device is added. |
 | `PITOUCH_SKIP_SETUP` | Set to `1` to skip install-time setup entirely; the app will open its settings UI on first launch. |
@@ -116,7 +115,6 @@ Example fully unattended install:
 ```sh
 PITOUCH_DASHBOARD_URL="https://homeassistant.example.com" \
 PITOUCH_SLIDESHOW_URL="https://immich-kiosk.example.com" \
-PITOUCH_DEVICE_NAME="Kitchen Display" \
 bash <(wget -qO- https://raw.githubusercontent.com/vithurshanselvarajah/Home-Panel-Kiosk/main/install.sh)
 ```
 

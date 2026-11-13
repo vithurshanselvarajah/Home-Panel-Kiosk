@@ -191,6 +191,11 @@
 .voice-overlay__text--heard{color:#9fb0c4;font-size:clamp(15px,1.9vw,25px);font-weight:500}
 .voice-overlay__text--said{color:#fff}
 
+.host-identity{display:grid;gap:5px;margin:0 0 16px;padding:14px 16px;border:1px solid var(--line);border-radius:15px;background:var(--surface)}
+.host-identity>span{color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.12em}
+.host-identity>strong{color:var(--ink);font-size:17px;overflow-wrap:anywhere}
+.host-identity>small{color:var(--muted);font-size:12px}
+
 /* The overlay is swiped away in any direction. It follows the finger and
    fades as it goes, so the gesture reads as the gesture rather than as a
    button press. */

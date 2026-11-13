@@ -56,6 +56,13 @@ test("the settings panel has its parts", () => {
   }
 });
 
+test("the device name is read-only and comes from the host", () => {
+  assert.ok(html.includes('id="device-hostname"'), "the current host name is not shown");
+  for (const name of ["deviceName", "esphomeDeviceName", "voiceDeviceId", "musicName"]) {
+    assert.ok(!html.includes(`name="${name}"`), `${name} can still be changed on the device`);
+  }
+});
+
 test("the page loads the scripts it needs", () => {
   for (const source of ["./dev-bridge.js", "./device-ui.js", "./renderer.js", "./style.css"]) {
     assert.ok(html.includes(source), `the page does not load ${source}`);
