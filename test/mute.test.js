@@ -40,6 +40,16 @@ test("the mute silences the microphone and not the speaker", () => {
   );
 });
 
+test("the device microphone switch does not call the speaker mute", () => {
+  const start = deviceMain.indexOf("control.OnMuted(func(muted bool) {");
+  const end = deviceMain.indexOf("\n\t})", start);
+  assert.notEqual(start, -1, "the device has no microphone mute handler");
+  assert.notEqual(end, -1, "the microphone mute handler is incomplete");
+  const handler = deviceMain.slice(start, end);
+  assert.ok(handler.includes("reporter.setMuted(muted)"), "the device mute state is not reported");
+  assert.ok(!handler.includes("speaker_.setMuted"), "the microphone mute also mutes the speaker");
+});
+
 test("the panel asks the device program to mute the microphone", () => {
   // The device program owns the microphone, so the panel asks for it.
   assert.ok(
