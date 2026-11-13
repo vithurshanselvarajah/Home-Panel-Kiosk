@@ -107,10 +107,6 @@ const client = new DeviceClient({
 
 async function startSidecar() {
   const settings = await readSettings();
-  if (settings.voiceEnabled === false) {
-    console.log("dev: the voice is off in the settings");
-    return;
-  }
   // The identity comes from the settings, so a development run is the same
   // device as the application is.
   client.deviceId = hostName;

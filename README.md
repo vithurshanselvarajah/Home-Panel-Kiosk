@@ -154,7 +154,8 @@ Home Assistant as an ordinary ESPHome device, with its entities and its
 services, and — once the wake word models are installed — as a voice
 satellite.
 
-`npm run dev -- --no-voice` starts it without the voice.
+The wake word and its sensitivity are switched from Home Assistant on the
+panel's device page.
 
 ### The audio devices
 

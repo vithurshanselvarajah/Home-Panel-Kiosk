@@ -126,10 +126,6 @@
       <form id="settings-form">
         <label>Home Assistant dashboard URL<input name="dashboardUrl" type="url" placeholder="http://homeassistant.local:8123" required /></label>
         <label>Immich Kiosk URL <span class="optional">optional</span><input name="slideshowUrl" type="url" placeholder="http://immich-kiosk.local:3000" /></label>
-        <div class="two-col"><label>Idle before slideshow <span class="field-unit">minutes · 0 disables</span><input name="idleToSlideshowMinutes" type="number" min="0" max="1440" /></label><label>Slideshow before screen off <span class="field-unit">minutes · 0 disables</span><input name="slideshowToOffMinutes" type="number" min="0" max="1440" /></label></div>
-        <label class="setting-toggle"><input name="touchKeyboardEnabled" type="checkbox" /> Enable automatic touch keyboard</label>
-        <div class="section-label"><span>DISPLAY</span><span class="line"></span></div>
-        <label>Display mode<select name="displayMode"><option value="fullscreen">Fullscreen — covers the screen</option><option value="window">Window — a movable window</option></select></label>
         <div class="section-label"><span>HOME ASSISTANT COMMANDS</span><span class="line"></span></div>
         <label class="setting-toggle"><input name="esphomeEncryptionEnabled" type="checkbox" /> Encrypt the connection to Home Assistant</label>
         <label>Encryption key<span class="field-unit">copy this into Home Assistant</span><input name="esphomeEncryptionKey" type="text" autocomplete="off" spellcheck="false" placeholder="Paste the key from Home Assistant" /></label>
@@ -147,13 +143,8 @@
             <span id="voice-status-reason">Not connected to Home Assistant.</span>
           </div>
         </div>
-        <p class="panel-intro">The panel is a voice satellite to Home Assistant. The wake word runs on the panel, so nothing is sent until it fires.</p>
+        <p class="panel-intro">Choose the local audio hardware here. Wake word, sensitivity, music ducking, and startup volume are configured on the Home Panel device in Home Assistant.</p>
         <form id="voice-form">
-        <div class="section-label"><span>VOICE</span><span class="line"></span></div>
-        <label class="setting-toggle"><input name="voiceEnabled" type="checkbox" /> Be a voice satellite</label>
-          <div class="section-label"><span>WAKE WORD</span><span class="line"></span></div>
-          <p class="field-note">The wake word is set in Home Assistant. It is an entity on the panel, so Home Assistant can read it and change it: the sensitivity, whether the wake word is listening, the ducking and the mute.</p>
-          <p class="field-note">The model and the ONNX runtime are installed on the device, outside the application. Without them the panel still works, but Home Assistant does the listening instead.</p>
           <div class="section-label"><span>MICROPHONE</span><span class="line"></span></div>
           <label>Microphone<select name="voiceAudioInput" id="voice-audio-input"><option value="">System default</option></select></label>
           <div class="audio-test">
@@ -161,7 +152,6 @@
             <div class="audio-meter" role="meter" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100" id="mic-meter"><i id="mic-meter-fill"></i></div>
             <span class="audio-test__value" id="mic-level-value">—</span>
           </div>
-          <label>Startup volume <span class="field-unit">0 to 100</span><input name="voiceStartupVolume" type="number" min="0" max="100" placeholder="50" /></label>
           <div class="section-label"><span>SPEAKER</span><span class="line"></span></div>
           <label>Speaker<select name="voiceAudioOutput" id="voice-audio-output"><option value="">System default</option></select></label>
           <div class="audio-test">
@@ -169,8 +159,6 @@
             <div class="audio-meter" role="meter" aria-label="Speaker level" aria-valuemin="0" aria-valuemax="100" id="speaker-meter"><i id="speaker-meter-fill"></i></div>
             <span class="audio-test__value" id="speaker-level-value">—</span>
           </div>
-          <div class="two-col"><label>Output volume <span class="field-unit">0 to 100</span><input name="voiceVolume" type="number" min="0" max="100" placeholder="50" /></label><label>Ducking <span class="field-unit">dB under a response</span><input name="voiceDuckDb" type="number" min="-60" max="0" step="0.5" placeholder="-6" /></label></div>
-          <label class="setting-toggle"><input name="voiceMuteButton" type="checkbox" checked /> The device has its own mute switch</label>
           <div class="section-label"><span>MUSIC</span><span class="line"></span></div>
           <label class="setting-toggle"><input name="musicEnabled" type="checkbox" checked /> Play music from Music Assistant</label>
           <label class="setting-toggle"><input name="musicUnpaired" type="checkbox" /> Let a server play without pairing</label>

@@ -253,82 +253,89 @@ func (s *Server) entityMessage(entity *Entity) (entityMessage, error) {
 		return entityMessage{
 			Type: TypeListEntitiesSwitchResponse,
 			Body: &ListEntitiesSwitchResponse{
-				Key:         entity.Key,
-				Name:        entity.Name,
-				ObjectId:    entity.ObjectID,
-				Icon:        entity.Icon,
-				DeviceClass: entity.DeviceClass,
+				Key:            entity.Key,
+				Name:           entity.Name,
+				ObjectId:       entity.ObjectID,
+				Icon:           entity.Icon,
+				DeviceClass:    entity.DeviceClass,
+				EntityCategory: entity.Category,
 			},
 		}, nil
 	case KindNumber:
 		return entityMessage{
 			Type: TypeListEntitiesNumberResponse,
 			Body: &ListEntitiesNumberResponse{
-				Key:         entity.Key,
-				Name:        entity.Name,
-				ObjectId:    entity.ObjectID,
-				Icon:        entity.Icon,
-				MinValue:    float32(entity.Min),
-				MaxValue:    float32(entity.Max),
-				Step:        float32(entity.Step),
-				DeviceClass: entity.DeviceClass,
+				Key:            entity.Key,
+				Name:           entity.Name,
+				ObjectId:       entity.ObjectID,
+				Icon:           entity.Icon,
+				MinValue:       float32(entity.Min),
+				MaxValue:       float32(entity.Max),
+				Step:           float32(entity.Step),
+				DeviceClass:    entity.DeviceClass,
+				EntityCategory: entity.Category,
 			},
 		}, nil
 	case KindSelect:
 		return entityMessage{
 			Type: TypeListEntitiesSelectResponse,
 			Body: &ListEntitiesSelectResponse{
-				Key:      entity.Key,
-				Name:     entity.Name,
-				ObjectId: entity.ObjectID,
-				Icon:     entity.Icon,
-				Options:  entity.Options,
+				Key:            entity.Key,
+				Name:           entity.Name,
+				ObjectId:       entity.ObjectID,
+				Icon:           entity.Icon,
+				Options:        entity.Options,
+				EntityCategory: entity.Category,
 			},
 		}, nil
 	case KindText:
 		return entityMessage{
 			Type: TypeListEntitiesTextResponse,
 			Body: &ListEntitiesTextResponse{
-				Key:       entity.Key,
-				Name:      entity.Name,
-				ObjectId:  entity.ObjectID,
-				Icon:      entity.Icon,
-				Mode:      TextMode(entity.Mode),
-				MinLength: entity.MinLength,
-				MaxLength: entity.MaxLength,
+				Key:            entity.Key,
+				Name:           entity.Name,
+				ObjectId:       entity.ObjectID,
+				Icon:           entity.Icon,
+				Mode:           TextMode(entity.Mode),
+				MinLength:      entity.MinLength,
+				MaxLength:      entity.MaxLength,
+				EntityCategory: entity.Category,
 			},
 		}, nil
 	case KindButton:
 		return entityMessage{
 			Type: TypeListEntitiesButtonResponse,
 			Body: &ListEntitiesButtonResponse{
-				Key:         entity.Key,
-				Name:        entity.Name,
-				ObjectId:    entity.ObjectID,
-				Icon:        entity.Icon,
-				DeviceClass: entity.DeviceClass,
+				Key:            entity.Key,
+				Name:           entity.Name,
+				ObjectId:       entity.ObjectID,
+				Icon:           entity.Icon,
+				DeviceClass:    entity.DeviceClass,
+				EntityCategory: entity.Category,
 			},
 		}, nil
 	case KindBinarySensor:
 		return entityMessage{
 			Type: TypeListEntitiesBinarySensorResponse,
 			Body: &ListEntitiesBinarySensorResponse{
-				Key:         entity.Key,
-				Name:        entity.Name,
-				ObjectId:    entity.ObjectID,
-				Icon:        entity.Icon,
-				DeviceClass: entity.DeviceClass,
+				Key:            entity.Key,
+				Name:           entity.Name,
+				ObjectId:       entity.ObjectID,
+				Icon:           entity.Icon,
+				DeviceClass:    entity.DeviceClass,
+				EntityCategory: entity.Category,
 			},
 		}, nil
 	case KindTextSensor:
 		return entityMessage{
 			Type: TypeListEntitiesTextSensorResponse,
 			Body: &ListEntitiesTextSensorResponse{
-				Key:         entity.Key,
-				Name:        entity.Name,
-				ObjectId:    entity.ObjectID,
-				Icon:        entity.Icon,
-				DeviceClass: entity.DeviceClass,
+				Key:            entity.Key,
+				Name:           entity.Name,
+				ObjectId:       entity.ObjectID,
+				Icon:           entity.Icon,
+				DeviceClass:    entity.DeviceClass,
+				EntityCategory: entity.Category,
 			},
 		}, nil
 	case KindSensor:
@@ -341,6 +348,7 @@ func (s *Server) entityMessage(entity *Entity) (entityMessage, error) {
 				Icon:              entity.Icon,
 				UnitOfMeasurement: entity.Unit,
 				DeviceClass:       entity.DeviceClass,
+				EntityCategory:    entity.Category,
 			},
 		}, nil
 	}

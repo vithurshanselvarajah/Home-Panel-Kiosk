@@ -83,12 +83,6 @@ console.log("run: starting the packaged app");
 const app = spawn(binary, process.argv.slice(2), {
   cwd: packagedDir,
   stdio: "inherit",
-  env: {
-    ...process.env,
-    // A packaged run is a device run, so the voice stays as the
-    // device's own settings say. The environment can still turn it on for
-    // a run that has not been configured yet.
-    HOME_PANEL_VOICE: process.env.HOME_PANEL_VOICE || "",
-  },
+  env: process.env,
 });
 app.on("exit", (code) => process.exit(code || 0));

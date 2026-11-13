@@ -356,9 +356,6 @@ if (regenerateKeyButton) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form));
-  data.idleToSlideshowMinutes = Number(data.idleToSlideshowMinutes);
-  data.slideshowToOffMinutes = Number(data.slideshowToOffMinutes);
-  data.touchKeyboardEnabled = form.elements.namedItem("touchKeyboardEnabled").checked;
   // The key is only wanted when the connection is encrypted. The toggle
   // says so, and the key follows it: no key when the connection is in
   // plain text.
