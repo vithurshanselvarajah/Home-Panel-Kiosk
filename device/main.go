@@ -729,7 +729,6 @@ func main() {
 	// mutes the panel wants the room to stop hearing them, and they
 	// still want to hear the music.
 	control.OnMuted(func(muted bool) {
-		speaker_.setMuted(muted)
 		reporter.setMuted(muted)
 		log.Info("the mute was switched", "muted", muted)
 	})
