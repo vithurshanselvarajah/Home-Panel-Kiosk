@@ -92,6 +92,15 @@ type deviceState struct {
 func startDevice(t *testing.T, recording string) *device {
 	t.Helper()
 
+	// Home Assistant is told where the panel is before the panel
+	// starts.
+	//
+	// A panel whose address has changed is a panel Home Assistant
+	// cannot reach, and pointing the entry at the panel after it has
+	// started means waiting for Home Assistant to notice it, which
+	// takes a moment the test does not have.
+	pointHomeAssistantHere(t)
+
 	// The tests cannot run at the same time, because they share the
 	// panel's ports. So they take a lock, and the one that is waiting
 	// says so.
@@ -113,7 +122,17 @@ func startDevice(t *testing.T, recording string) *device {
 	name := liveName()
 
 	dir := t.TempDir()
-	creds := filepath.Join(dir, "credentials")
+	// The credentials directory is the panel's identity, and it has to
+	// be the same every run.
+	//
+	// The identity is what Home Assistant knows the panel by, and a
+	// panel with a new identity is a new panel to Home Assistant: the
+	// old one stays behind as an entity that is never available, and
+	// the tests cannot tell which player is the panel's.
+	//
+	// So the directory is in the temporary directory and not in the
+	// test's own, and it is shared by the tests.
+	creds := filepath.Join(os.TempDir(), "homepanel-live-credentials")
 	if err := os.MkdirAll(creds, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -242,9 +261,6 @@ func startDevice(t *testing.T, recording string) *device {
 
 	t.Cleanup(d.stop)
 	t.Cleanup(unlockPorts)
-	// The entry is put back when the tests are done, so that the panel
-	// that is really there is the one Home Assistant is talking to.
-	t.Cleanup(func() { restoreHomeAssistant(t) })
 
 	// Home Assistant does not always take the device the first time.
 	//
@@ -278,13 +294,20 @@ func startDevice(t *testing.T, recording string) *device {
 // every time would be about the reload rather than about the panel.
 func (d *device) retryUntilConnected() {
 	deadline := time.Now().Add(90 * time.Second)
+	// The entry is reconfigured once and not again.
+	//
+	// A reconfigure reloads the entry, and a reload drops the
+	// connection and takes a moment to come back. Doing it again while
+	// Home Assistant is reconnecting stops it from ever reconnecting.
+	pointed := false
 	for time.Now().Before(deadline) {
 		if state, found := d.lastState(); found && state.Connection == "connected" {
 			return
 		}
 		// The panel has had a moment and has not connected, so
 		// Home Assistant is probably looking in the wrong place.
-		if time.Now().After(d.started.Add(10 * time.Second)) {
+		if !pointed && time.Now().After(d.started.Add(10 * time.Second)) {
+			pointed = true
 			pointHomeAssistantHere(d.t)
 		}
 		time.Sleep(2 * time.Second)
@@ -297,7 +320,21 @@ func (d *device) retryUntilConnected() {
 // machine whose address has changed is a panel Home Assistant cannot
 // reach. The entry is put back when the tests are done, because the
 // entry belongs to the panel that is really there.
+//
+// It is done once, at the end of the run, and not after each test: a
+// reconfigure reloads the entry, and a reload drops the connection and
+// takes a moment to come back. Doing it between the tests would stop
+// the next test's panel from ever connecting.
 func restoreHomeAssistant(t *testing.T) {
+	t.Helper()
+	restoreHomeAssistantEntry(t)
+}
+
+// restoreHomeAssistantEntry puts the entry back.
+//
+// It is a function of its own so that it can be called when the tests
+// are over, which is not a test.
+func restoreHomeAssistantEntry(t *testing.T) {
 	t.Helper()
 	address := originalEsphomeAddress(t)
 	if address == "" {
@@ -311,6 +348,17 @@ func restoreHomeAssistant(t *testing.T) {
 		reconfigureEsphomeEntry(t, entry.id, address, livePort())
 		return
 	}
+}
+
+// TestMain puts Home Assistant's entry back when the tests are done.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	// The entry is put back, so the panel that is really there is the
+	// one Home Assistant is talking to.
+	if haURL() != "" && haToken() != "" {
+		restoreHomeAssistantEntry(&testing.T{})
+	}
+	os.Exit(code)
 }
 
 // runtimeDirectory is where the onnx runtime is, next to the binary.
@@ -628,6 +676,10 @@ func pointHomeAssistantHere(t *testing.T) {
 		}
 		reconfigureEsphomeEntry(t, entry.id, address, livePort())
 		rememberEsphomeAddress(t, address)
+		// A reconfigure reloads the entry, and a reload takes a
+		// moment. The panel is started after it, so the panel is
+		// there when Home Assistant comes looking for it.
+		waitForEntryToLoad(t)
 		return
 	}
 	t.Log("Home Assistant has no esphome entry for the panel")
@@ -715,10 +767,31 @@ func rememberEsphomeAddress(t *testing.T, address string) {
 	}
 }
 
+// waitForEntryToLoad waits for Home Assistant to finish reloading the
+// entry.
+//
+// A reconfigure reloads the entry, and a reload takes a moment. The
+// panel is started after it, so the panel is there when Home Assistant
+// comes looking for it.
+func waitForEntryToLoad(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, entry := range configEntries(t, "esphome") {
+			if entry.title == "Home Panel" && entry.state == "loaded" {
+				return
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Log("the entry did not say it was loaded")
+}
+
 // configEntry is one of Home Assistant's configuration entries.
 type configEntry struct {
 	id    string
 	title string
+	state string
 	host  string
 	port  int
 }
@@ -744,6 +817,7 @@ func configEntries(t *testing.T, kind string) []configEntry {
 		entry := configEntry{
 			id:    stringOf(item["entry_id"]),
 			title: stringOf(item["title"]),
+			state: stringOf(item["state"]),
 		}
 		// The address is in the entry's data, which the list does not
 		// always carry.
