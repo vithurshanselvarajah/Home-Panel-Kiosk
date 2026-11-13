@@ -235,3 +235,14 @@ func (s *store) setSettings(p playerSettings) {
 }
 
 func (s *store) token() string { return pairingToken(s.id.pub, s.pp) }
+
+// PairingToken reads (or creates) the device's persistent pairing token.
+// The caller should expose it only over a trusted local channel or an
+// encrypted ESPHome API connection.
+func PairingToken(path string) (string, error) {
+	s, err := openStore(path)
+	if err != nil {
+		return "", err
+	}
+	return s.token(), nil
+}

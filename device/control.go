@@ -121,6 +121,8 @@ type ControlServer struct {
 	log *slog.Logger
 	// onCommand is called when the panel asks for something.
 	onCommand func(ControlCommand)
+	// sendspinPairingToken reads the pairing token from the device's Sendspin store.
+	sendspinPairingToken func() (string, error)
 	// onMute is called when the panel asks for the microphone to be
 	// muted.
 	//
@@ -186,6 +188,8 @@ type ControlOptions struct {
 	Log *slog.Logger
 	// OnCommand is called when the panel asks for something.
 	OnCommand func(ControlCommand)
+	// SendspinPairingToken returns the pairing token without copying it into app settings.
+	SendspinPairingToken func() (string, error)
 }
 
 // NewControlServer makes the control server.
@@ -194,10 +198,11 @@ func NewControlServer(options ControlOptions) *ControlServer {
 		options.Log = slog.Default()
 	}
 	return &ControlServer{
-		socket:    options.Socket,
-		registry:  options.Registry,
-		log:       options.Log,
-		onCommand: options.OnCommand,
+		socket:               options.Socket,
+		registry:             options.Registry,
+		log:                  options.Log,
+		onCommand:            options.OnCommand,
+		sendspinPairingToken: options.SendspinPairingToken,
 	}
 }
 
@@ -275,7 +280,7 @@ func (s *ControlServer) serve(conn net.Conn) {
 					s.log.Error("the panel's message could not be handled", "panic", recovered)
 				}
 			}()
-			s.handle(message)
+			s.handle(conn, message)
 		}()
 	}
 }
@@ -287,7 +292,7 @@ func (s *ControlServer) serve(conn net.Conn) {
 // be driven, which is the one thing the panel asks for: the transport
 // belongs to the music server, and the panel is the one with the
 // buttons.
-func (s *ControlServer) handle(message ControlMessage) {
+func (s *ControlServer) handle(conn net.Conn, message ControlMessage) {
 	switch message.Action {
 	case "state":
 		s.SetState(message.State)
@@ -311,6 +316,21 @@ func (s *ControlServer) handle(message ControlMessage) {
 				err = fmt.Errorf("%s", message.CameraError)
 			}
 			result <- cameraResult{data: data, err: err}
+		}
+	case "sendspin_token_request":
+		token := ""
+		var err error
+		if s.sendspinPairingToken == nil {
+			err = fmt.Errorf("Sendspin pairing is unavailable")
+		} else {
+			token, err = s.sendspinPairingToken()
+		}
+		response := ControlMessage{Action: "sendspin_token_response", RequestID: message.RequestID, SendspinToken: token}
+		if err != nil {
+			response.Error = err.Error()
+		}
+		if err := s.writeMessage(conn, response); err != nil {
+			s.log.Debug("the Sendspin pairing token could not be returned", "error", err)
 		}
 	case "transport":
 		s.mu.Lock()
@@ -377,6 +397,9 @@ type ControlMessage struct {
 	CameraRequestID string `json:"cameraRequestId,omitempty"`
 	CameraData      string `json:"cameraData,omitempty"`
 	CameraError     string `json:"cameraError,omitempty"`
+	RequestID       string `json:"requestId,omitempty"`
+	SendspinToken   string `json:"sendspinToken,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // TransportCommand is what the panel asks of the music transport.

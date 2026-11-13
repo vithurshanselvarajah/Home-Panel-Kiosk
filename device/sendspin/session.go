@@ -79,7 +79,6 @@ type session struct {
 	psk        resolvedPSK
 	roles      []string
 	stateSent  bool // a client/state has gone out on this connection
-	stateDue   bool // one is owed, held until the clock converges
 	group      groupUpdate
 	lastAudio  time.Time
 	// metadata is what the server says is playing.
@@ -427,39 +426,32 @@ func (s *session) isAdmitted() bool { return s.c.isAdmitted(s) }
 // ── player ──────────────────────────────────────────────────────────────────
 
 // available is what client/state reports. It means only "Home Assistant
-// has not taken the music plane": 9.1.1 reads false as an external source
-// and moves the device out of its group, so it must never be sent merely
-// because the clock is still converging. The spec's rule — never true before
-// the clock has converged — is kept by holding the first report until it
-// has (sendState), about 0.4s after activation against 9.1.1's 5s allowance.
+// has not taken the music plane"; clock synchronization is independent.
 func (s *session) available() bool { return !s.c.external() }
 
-// sendState reports availability and the player's state: on activation, on
-// a command, when HA takes or releases the music plane. Held while the clock
-// has not converged, and sent from onTime once it has.
+// sendState reports availability and the player's state. It is sent as soon
+// as the role activates: Music Assistant waits for this state before it
+// starts the stream. Audio stays queued until the clock filter is ready.
 func (s *session) sendState() {
 	if !s.playerRole() {
 		return
 	}
-	if !s.filter.synchronized() {
-		s.mu.Lock()
-		s.stateDue = true
-		s.mu.Unlock()
-		return
-	}
 	set := s.c.store.settings()
 	s.mu.Lock()
-	s.stateSent, s.stateDue = true, false
+	s.stateSent = true
 	s.mu.Unlock()
 	s.send("client/state", clientState{
 		Available: s.available(),
 		Player: &playerState{
-			Volume:            set.Volume,
-			Muted:             set.Muted,
-			OutputDelayMs:     set.StaticDelayMs,
-			RequiredLeadMs:    s.c.requiredLeadMs,
-			MinBufferMs:       s.c.minBufferMs(),
-			SupportedCommands: []string{"set_output_delay"},
+			Volume:         set.Volume,
+			Muted:          set.Muted,
+			OutputDelayMs:  set.StaticDelayMs,
+			RequiredLeadMs: s.c.requiredLeadMs,
+			MinBufferMs:    s.c.minBufferMs(),
+			// The handlers for all three commands are implemented below.
+			// Omitting volume and mute here made Music Assistant treat the
+			// speaker as having no controllable volume and display 0%.
+			SupportedCommands: []string{"volume", "mute", "set_output_delay"},
 		},
 	})
 }
@@ -469,12 +461,6 @@ func (s *session) onTime(t serverTime) {
 	offset := float64((t.ServerReceived-t.ClientTransmitted)+(t.ServerTransmitted-now)) / 2
 	delay := float64((now-t.ClientTransmitted)-(t.ServerTransmitted-t.ServerReceived)) / 2
 	s.filter.update(pyRound(offset), pyRound(delay), now)
-	s.mu.Lock()
-	due := s.stateDue
-	s.mu.Unlock()
-	if due && s.filter.synchronized() {
-		s.sendState()
-	}
 }
 
 // onServerState records what the server says is playing.

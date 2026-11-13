@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, screen, safeStorage, session } = require("electron");
+const { app, BrowserWindow, WebContentsView, ipcMain, screen, safeStorage, session, clipboard } = require("electron");
 const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const path = require("node:path");
@@ -6,6 +6,7 @@ const { execFile } = require("node:child_process");
 const os = require("node:os");
 const { safeUrl, settingNumber, settingBoolean, displayMode: readDisplayMode, windowBounds, hostIdentity, DISPLAY_MODES } = require("./utils");
 const { generateEncryptionKey } = require("./encryption");
+const QRCode = require("qrcode");
 const { createHealthChecker, probeHttp } = require("./health");
 const { DeviceClient, findSidecar } = require("./device");
 const { ControlClient, findControlSocket } = require("./control");
@@ -1489,6 +1490,22 @@ function registerIpc() {
   ipcMain.handle("app:get-settings", (event) => { assertOverlaySender(event); return publicSettings(); });
   ipcMain.handle("app:save-settings", async (event, value) => { assertOverlaySender(event); return saveSettings(value); });
   ipcMain.handle("app:new-encryption-key", (event) => { assertOverlaySender(event); return generateEncryptionKey(); });
+  ipcMain.handle("app:get-sendspin-token", (event) => {
+    assertOverlaySender(event);
+    if (!controlClient) throw new Error("The device program is not connected.");
+    return controlClient.requestSendspinToken();
+  });
+  ipcMain.handle("app:key-qr", (event, value) => {
+    assertOverlaySender(event);
+    if (typeof value !== "string" || !value.trim() || value.length > 512) throw new Error("This key cannot be encoded as a QR code.");
+    return QRCode.toDataURL(value.trim(), { errorCorrectionLevel: "M", margin: 2, width: 320 });
+  });
+  ipcMain.handle("app:copy-secret", (event, value) => {
+    assertOverlaySender(event);
+    if (typeof value !== "string" || value.length > 512) return false;
+    clipboard.writeText(value);
+    return true;
+  });
   ipcMain.handle("app:command", (event, command) => {
     assertOverlaySender(event);
     if (!command || typeof command.action !== "string") return false;
