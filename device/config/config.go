@@ -56,6 +56,8 @@ type Config struct {
 	// default: anyone on the network can claim to be a server, and
 	// pairing is one paste of the device's token.
 	SendspinUnpaired *bool `json:"sendspinUnpaired,omitempty"`
+	// CameraEnabled retains the Home Assistant camera switch state.
+	CameraEnabled *bool `json:"cameraEnabled,omitempty"`
 
 	// ── Hardware ────────────────────────────────────────────────────────
 	// AudioInput is the microphone to use. An empty name is the system

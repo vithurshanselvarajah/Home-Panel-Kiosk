@@ -52,7 +52,7 @@ The key also protects Sendspin pairing: the device withholds its Sendspin pairin
 | Keyboard visible | binary sensor | Whether the touch keyboard is up |
 | Last activity | sensor | When somebody last did something |
 | Version | text sensor | The version of the application |
-| Camera stream | switch | Starts or stops the authenticated standalone RTSP/H.264 feed |
+| Camera stream | switch | Allows or blocks authenticated RTSP/H.264 viewers; its state is retained across restarts |
 | Camera · Frame rate | number (configuration) | Frames per second, 1 to 30 |
 | Camera · Resolution | select (configuration) | Maximum supported mode or a mode reported by the camera |
 | Display · Idle to slideshow | number (configuration) | Minutes before the dashboard changes to the slideshow; zero disables it |
@@ -67,9 +67,9 @@ Configuration entities appear under the device's configuration section in Home A
 
 ### The standalone camera stream
 
-The legacy ESPHome JPEG camera entity has been removed. When a V4L2 camera and FFmpeg are available, the device offers a Camera stream switch plus frame-rate and resolution controls in Home Assistant. The stream uses the largest mode reported by the camera by default. It probes the available V4L2 M2M, VAAPI, NVENC, and QSV H.264 encoders and uses the first one that works; otherwise it uses FFmpeg's low-latency software H.264 encoder. Debian packages depend on FFmpeg. When running from source with `npm start`, install FFmpeg separately.
+The legacy ESPHome JPEG camera entity has been removed. When a V4L2 camera and FFmpeg are available, the device offers a Camera stream switch plus frame-rate and resolution controls in Home Assistant. The switch preference is retained across app restarts. Capture and encoding remain idle until an authenticated RTSP viewer requests the stream, and stop four seconds after the last viewer pauses or disconnects. The stream uses the largest mode reported by the camera by default. It probes the available V4L2 M2M, VAAPI, NVENC, and QSV H.264 encoders and uses the first one that works; otherwise it uses FFmpeg's low-latency software H.264 encoder. Debian packages depend on FFmpeg. When running from source with `npm start`, install FFmpeg separately.
 
-Set or reset the stream password in the panel's **Settings → Camera** section. The saved password is encrypted by Electron safe storage and is never returned to the settings UI. Leave the field blank to keep the existing password. The camera stream is off until enabled in Home Assistant, and a password must be set before it can be enabled.
+Set or reset the stream password in the panel's **Settings → Camera** section. The saved password is encrypted by Electron safe storage and is never returned to the settings UI. Leave the field blank to keep the existing password. The Home Assistant switch controls whether viewers are allowed; set a password before opening the stream in Generic Camera.
 
 Add the stream in Home Assistant through **Settings → Devices & services → Add integration → Generic Camera**. Use the RTSP URL shown in the panel's camera settings, the username `homepanel`, and the password set there. Select **Digest** authentication in Generic Camera. The password is used for RTSP authentication; the RTSP media itself is not encrypted, so keep the feed on a trusted LAN or VPN.
 

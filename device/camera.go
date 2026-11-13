@@ -27,6 +27,8 @@ import (
 )
 
 const cameraRTSPPort = 8554
+const cameraViewerIdleDelay = 4 * time.Second
+const cameraStreamStartTimeout = 12 * time.Second
 
 var cameraModePattern = regexp.MustCompile(`([0-9]{2,5})x([0-9]{2,5})`)
 
@@ -131,17 +133,19 @@ func splitCameraMode(mode string) (int, int) {
 
 type cameraStreamHandler struct {
 	server       *gortsplib.Server
+	camera       *CameraService
 	mu           sync.RWMutex
 	stream       *gortsplib.ServerStream
+	streamChange chan struct{}
 	publisher    *gortsplib.ServerSession
 	readPassword func() string
 	writeUser    string
 	writePass    string
 }
 
-// CameraService owns the one camera stream exposed to Home Assistant. The
-// RTSP server stays light while the camera switch is off; enabling it starts
-// one capture and one H.264 encoder for every reader to share.
+// CameraService owns the one camera stream exposed to Home Assistant. The RTSP
+// listener stays up while enabled, but capture/encoding runs only while an
+// authenticated viewer is starting or watching the stream.
 type CameraService struct {
 	mu            sync.Mutex
 	input         *cameraInput
@@ -153,12 +157,16 @@ type CameraService struct {
 	resolution    *esphome.Entity
 	logger        *slog.Logger
 	password      string
+	enabledValue  bool
 	fpsValue      int
 	modeValue     string
 	encoder       string
 	encoderDevice string
 	command       *exec.Cmd
 	commandDone   chan struct{}
+	stopping      bool
+	viewers       map[*gortsplib.ServerSession]struct{}
+	idleTimer     *time.Timer
 	closing       bool
 }
 
@@ -188,8 +196,8 @@ func NewCameraService(log *slog.Logger, ffmpeg string) (*CameraService, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	s := &CameraService{input: input, logger: log, fpsValue: 5, modeValue: input.maxMode}
-	h := &cameraStreamHandler{readPassword: func() string {
+	s := &CameraService{input: input, logger: log, fpsValue: 5, modeValue: input.maxMode, viewers: make(map[*gortsplib.ServerSession]struct{})}
+	h := &cameraStreamHandler{camera: s, streamChange: make(chan struct{}), readPassword: func() string {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		return s.password
@@ -227,7 +235,7 @@ func (s *CameraService) AddEntities(registry *esphome.Registry) {
 	s.registry = registry
 	s.enabled = registry.Add(&esphome.Entity{
 		Kind: esphome.KindSwitch, Name: "Camera stream", ObjectID: "camera_stream",
-		Icon: "mdi:video", State: esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
+		Icon: "mdi:video", State: esphome.EntityValue{Kind: esphome.KindSwitch, Bool: s.enabledValue},
 	})
 	s.fps = registry.Add(&esphome.Entity{
 		Kind: esphome.KindNumber, Name: "Camera · Frame rate", ObjectID: "camera_fps",
@@ -245,7 +253,7 @@ func (s *CameraService) AddEntities(registry *esphome.Registry) {
 }
 
 // SetPassword applies the stream password without returning or logging it.
-// An enabled stream is restarted so that existing RTSP sessions are dropped.
+// Existing viewers are disconnected if their credentials change.
 func (s *CameraService) SetPassword(password string) error {
 	password = strings.TrimSpace(password)
 	if password != "" && (len(password) < 8 || len(password) > 128) {
@@ -257,16 +265,25 @@ func (s *CameraService) SetPassword(password string) error {
 		return nil
 	}
 	s.password = password
-	enabled := s.enabled != nil && s.enabled.StateOf().Bool
+	active := s.command != nil
+	var sessions []*gortsplib.ServerSession
+	for session := range s.viewers {
+		sessions = append(sessions, session)
+		delete(s.viewers, session)
+	}
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+		s.idleTimer = nil
+	}
 	var done <-chan struct{}
-	if enabled {
+	if active {
 		done = s.stopCaptureLocked()
 	}
 	s.mu.Unlock()
-	waitCameraProcess(done)
-	if enabled && password != "" {
-		return s.startCapture()
+	for _, session := range sessions {
+		session.Close()
 	}
+	waitCameraProcess(done)
 	return nil
 }
 
@@ -276,23 +293,84 @@ func (s *CameraService) SetEnabled(enabled bool) error {
 		s.mu.Unlock()
 		return fmt.Errorf("the camera stream is stopping")
 	}
-	if enabled && s.password == "" {
-		s.mu.Unlock()
-		return fmt.Errorf("set a camera password in the panel settings before enabling the stream")
-	}
-	if enabled == (s.command != nil) {
+	if enabled == s.enabledValue {
 		s.mu.Unlock()
 		return nil
 	}
+	s.enabledValue = enabled
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+		s.idleTimer = nil
+	}
+	var sessions []*gortsplib.ServerSession
+	var done <-chan struct{}
 	if !enabled {
-		done := s.stopCaptureLocked()
-		s.registry.SetState(s.enabled.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false})
-		s.mu.Unlock()
-		waitCameraProcess(done)
-		return nil
+		for session := range s.viewers {
+			sessions = append(sessions, session)
+			delete(s.viewers, session)
+		}
+		done = s.stopCaptureLocked()
+	}
+	if s.registry != nil && s.enabled != nil {
+		s.registry.SetState(s.enabled.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: enabled})
 	}
 	s.mu.Unlock()
-	return s.startCapture()
+	for _, session := range sessions {
+		session.Close()
+	}
+	waitCameraProcess(done)
+	return nil
+}
+
+func (s *CameraService) addViewer(session *gortsplib.ServerSession) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closing || !s.enabledValue || s.command == nil || s.stopping {
+		return false
+	}
+	s.viewers[session] = struct{}{}
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+		s.idleTimer = nil
+	}
+	return true
+}
+
+func (s *CameraService) removeViewer(session *gortsplib.ServerSession) {
+	s.mu.Lock()
+	delete(s.viewers, session)
+	if len(s.viewers) == 0 {
+		s.scheduleIdleStopLocked()
+	}
+	s.mu.Unlock()
+}
+
+func (s *CameraService) scheduleIdleStop() {
+	s.mu.Lock()
+	s.scheduleIdleStopLocked()
+	s.mu.Unlock()
+}
+
+func (s *CameraService) scheduleIdleStopLocked() {
+	if s.closing || !s.enabledValue || len(s.viewers) != 0 || s.command == nil {
+		return
+	}
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+	}
+	s.idleTimer = time.AfterFunc(cameraViewerIdleDelay, s.stopIfIdle)
+}
+
+func (s *CameraService) stopIfIdle() {
+	s.mu.Lock()
+	s.idleTimer = nil
+	if s.closing || !s.enabledValue || len(s.viewers) != 0 {
+		s.mu.Unlock()
+		return
+	}
+	done := s.stopCaptureLocked()
+	s.mu.Unlock()
+	waitCameraProcess(done)
 }
 
 func (s *CameraService) SetFPS(fps int) error {
@@ -316,7 +394,10 @@ func (s *CameraService) SetFPS(fps int) error {
 	s.mu.Unlock()
 	if enabled {
 		waitCameraProcess(done)
-		return s.startCapture()
+		if err := s.startCapture(); err != nil {
+			return err
+		}
+		s.scheduleIdleStop()
 	}
 	return nil
 }
@@ -352,7 +433,10 @@ func (s *CameraService) SetResolution(mode string) error {
 	s.mu.Unlock()
 	if enabled {
 		waitCameraProcess(done)
-		return s.startCapture()
+		if err := s.startCapture(); err != nil {
+			return err
+		}
+		s.scheduleIdleStop()
 	}
 	return nil
 }
@@ -362,6 +446,12 @@ func (s *CameraService) startCapture() error {
 	defer s.mu.Unlock()
 	if s.closing || s.command != nil {
 		return nil
+	}
+	if s.stopping {
+		return fmt.Errorf("the camera encoder is stopping")
+	}
+	if !s.enabledValue {
+		return fmt.Errorf("the camera stream is disabled")
 	}
 	if s.password == "" {
 		return fmt.Errorf("the camera stream has no password")
@@ -404,24 +494,19 @@ func (s *CameraService) startCapture() error {
 	s.command = cmd
 	done := make(chan struct{})
 	s.commandDone = done
-	if s.enabled != nil && s.registry != nil {
-		s.registry.SetState(s.enabled.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: true})
-	}
 	go func(expected *exec.Cmd) {
 		err := expected.Wait()
 		s.mu.Lock()
-		close(done)
+		s.stopping = false
 		if s.command == expected {
 			s.command = nil
 			s.commandDone = nil
-			if s.enabled != nil && s.registry != nil {
-				s.registry.SetState(s.enabled.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false})
-			}
 			if !s.closing && err != nil {
 				detail := strings.ReplaceAll(string(diagnostics.data), s.handler.writeUser+":"+s.handler.writePass+"@", "[redacted]@")
 				s.logger.Warn("the camera encoder stopped", "error", err, "details", strings.TrimSpace(detail))
 			}
 		}
+		close(done)
 		s.mu.Unlock()
 	}(cmd)
 	return nil
@@ -436,6 +521,7 @@ func (s *CameraService) stopCaptureLocked() <-chan struct{} {
 	s.command = nil
 	s.commandDone = nil
 	if cmd.Process != nil {
+		s.stopping = true
 		_ = cmd.Process.Signal(os.Interrupt)
 		go func() {
 			timer := time.NewTimer(3 * time.Second)
@@ -463,9 +549,21 @@ func waitCameraProcess(done <-chan struct{}) {
 func (s *CameraService) Close() {
 	s.mu.Lock()
 	s.closing = true
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+		s.idleTimer = nil
+	}
+	sessions := make([]*gortsplib.ServerSession, 0, len(s.viewers))
+	for session := range s.viewers {
+		sessions = append(sessions, session)
+	}
+	s.viewers = make(map[*gortsplib.ServerSession]struct{})
 	done := s.stopCaptureLocked()
 	server := s.server
 	s.mu.Unlock()
+	for _, session := range sessions {
+		session.Close()
+	}
 	waitCameraProcess(done)
 	if server != nil {
 		server.Close()
@@ -546,12 +644,41 @@ func (h *cameraStreamHandler) OnDescribe(ctx *gortsplib.ServerHandlerOnDescribeC
 	if !h.authorized(ctx.Conn, ctx.Request, false) {
 		return &base.Response{StatusCode: base.StatusUnauthorized}, nil, liberrors.ErrServerAuth{}
 	}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	if strings.Trim(ctx.Path, "/") != "homepanel" || h.stream == nil {
+	if strings.Trim(ctx.Path, "/") != "homepanel" {
 		return &base.Response{StatusCode: base.StatusNotFound}, nil, nil
 	}
-	return &base.Response{StatusCode: base.StatusOK}, h.stream, nil
+	if err := h.camera.startCapture(); err != nil {
+		return &base.Response{StatusCode: base.StatusServiceUnavailable}, nil, nil
+	}
+	stream := h.waitForStream(cameraStreamStartTimeout)
+	if stream == nil {
+		return &base.Response{StatusCode: base.StatusServiceUnavailable}, nil, nil
+	}
+	h.camera.scheduleIdleStop()
+	return &base.Response{StatusCode: base.StatusOK}, stream, nil
+}
+
+func (h *cameraStreamHandler) signalStreamChangedLocked() {
+	close(h.streamChange)
+	h.streamChange = make(chan struct{})
+}
+
+func (h *cameraStreamHandler) waitForStream(timeout time.Duration) *gortsplib.ServerStream {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		h.mu.RLock()
+		stream, changed := h.stream, h.streamChange
+		h.mu.RUnlock()
+		if stream != nil {
+			return stream
+		}
+		select {
+		case <-changed:
+		case <-timer.C:
+			return nil
+		}
+	}
 }
 
 func (h *cameraStreamHandler) OnAnnounce(ctx *gortsplib.ServerHandlerOnAnnounceCtx) (*base.Response, error) {
@@ -569,6 +696,7 @@ func (h *cameraStreamHandler) OnAnnounce(ctx *gortsplib.ServerHandlerOnAnnounceC
 	old := h.stream
 	oldPublisher := h.publisher
 	h.stream, h.publisher = stream, ctx.Session
+	h.signalStreamChangedLocked()
 	h.mu.Unlock()
 	if old != nil {
 		old.Close()
@@ -589,10 +717,13 @@ func (h *cameraStreamHandler) OnSetup(ctx *gortsplib.ServerHandlerOnSetupCtx) (*
 	if !h.authorized(ctx.Conn, ctx.Request, false) {
 		return &base.Response{StatusCode: base.StatusUnauthorized}, nil, liberrors.ErrServerAuth{}
 	}
+	if strings.Trim(ctx.Path, "/") != "homepanel" {
+		return &base.Response{StatusCode: base.StatusNotFound}, nil, nil
+	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	if h.stream == nil {
-		return &base.Response{StatusCode: base.StatusNotFound}, nil, nil
+		return &base.Response{StatusCode: base.StatusServiceUnavailable}, nil, nil
 	}
 	return &base.Response{StatusCode: base.StatusOK}, h.stream, nil
 }
@@ -601,6 +732,17 @@ func (h *cameraStreamHandler) OnPlay(ctx *gortsplib.ServerHandlerOnPlayCtx) (*ba
 	if !h.authorized(ctx.Conn, ctx.Request, false) {
 		return &base.Response{StatusCode: base.StatusUnauthorized}, liberrors.ErrServerAuth{}
 	}
+	if strings.Trim(ctx.Path, "/") != "homepanel" || !h.camera.addViewer(ctx.Session) {
+		return &base.Response{StatusCode: base.StatusServiceUnavailable}, nil
+	}
+	return &base.Response{StatusCode: base.StatusOK}, nil
+}
+
+func (h *cameraStreamHandler) OnPause(ctx *gortsplib.ServerHandlerOnPauseCtx) (*base.Response, error) {
+	if !h.authorized(ctx.Conn, ctx.Request, false) {
+		return &base.Response{StatusCode: base.StatusUnauthorized}, liberrors.ErrServerAuth{}
+	}
+	h.camera.removeViewer(ctx.Session)
 	return &base.Response{StatusCode: base.StatusOK}, nil
 }
 
@@ -621,14 +763,15 @@ func (h *cameraStreamHandler) OnRecord(ctx *gortsplib.ServerHandlerOnRecordCtx) 
 
 func (h *cameraStreamHandler) OnSessionClose(ctx *gortsplib.ServerHandlerOnSessionCloseCtx) {
 	h.mu.Lock()
-	if h.publisher != ctx.Session {
-		h.mu.Unlock()
-		return
+	var stream *gortsplib.ServerStream
+	if h.publisher == ctx.Session {
+		stream = h.stream
+		h.stream, h.publisher = nil, nil
+		h.signalStreamChangedLocked()
 	}
-	stream := h.stream
-	h.stream, h.publisher = nil, nil
 	h.mu.Unlock()
 	if stream != nil {
 		stream.Close()
 	}
+	h.camera.removeViewer(ctx.Session)
 }
