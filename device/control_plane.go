@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -460,55 +459,25 @@ func panelMAC(name string) string {
 		seed = "home-panel"
 	}
 
-	// The interface the panel is on the network with.
-	machine := ""
-	if interfaceName := defaultRouteInterface(); interfaceName != "" {
-		if address, err := os.ReadFile(filepath.Join("/sys/class/net", interfaceName, "address")); err == nil {
-			candidate := strings.TrimSpace(string(address))
-			if len(candidate) == 17 && candidate[2] == ':' {
-				machine = candidate
-			}
-		}
-	}
-
-	if machine == "" {
-		// The interface could not be read, so the first hardware address
-		// on the machine is used. It is better than nothing, and it is
-		// better than a made-up one: the point of the address is that it
-		// is the same on every run.
-		entries, err := os.ReadDir("/sys/class/net")
-		if err == nil {
-			for _, entry := range entries {
-				if entry.IsDir() {
-					continue
-				}
-				address, err := os.ReadFile(filepath.Join("/sys/class/net", entry.Name(), "address"))
-				if err != nil {
-					continue
-				}
-				candidate := strings.TrimSpace(string(address))
-				if len(candidate) == 17 && candidate[2] == ':' {
-					machine = candidate
-					break
-				}
-			}
-		}
-	}
-
-	if machine == "" {
-		// There is no hardware address at all, so a local one is made up.
-		machine = "02:00:00:00:00:00"
-	}
+	// The panel's own address is made up, and it is the same every time.
+	//
+	// The machine's hardware address is not used, because it changes: a
+	// laptop that is on the network by wifi one day and by a cable the
+	// next has a different address, and Home Assistant keeps the device
+	// under the address it was given. So a panel that took the machine's
+	// address would be a new device every time the machine's interfaces
+	// changed, and the old one would be left behind.
+	//
+	// The address is made up instead, and it is made up from the panel's
+	// own name, so it is the same on every run and on every machine the
+	// panel runs on.
+	parts := []string{"02", "00", "00", "00", "00", "00"}
 
 	// The name is mixed into the last three bytes, so two panels on the
 	// same machine are told apart.
 	sum := uint32(2166136261)
 	for i := 0; i < len(seed); i++ {
 		sum = (sum ^ uint32(seed[i])) * 16777619
-	}
-	parts := strings.Split(machine, ":")
-	if len(parts) != 6 {
-		return machine
 	}
 	parts[3] = fmt.Sprintf("%02x", (sum>>16)&0xFF)
 	parts[4] = fmt.Sprintf("%02x", (sum>>8)&0xFF)
