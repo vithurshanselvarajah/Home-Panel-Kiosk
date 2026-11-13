@@ -54,7 +54,7 @@ func TestThePanelPlaysRadioFromHomeAssistant(t *testing.T) {
 	//
 	// Home Assistant notices the device a moment after it connects, so
 	// the player is not there the instant the link is up.
-	player := livePlayer(t)
+	player := livePlayer(t, d)
 	t.Logf("the player is %s", player)
 
 	// Home Assistant is told to play the station.
@@ -111,12 +111,25 @@ func liveStation(t *testing.T) string {
 //
 // Home Assistant notices the device a moment after it connects, so the
 // player is waited for rather than looked for.
-func livePlayer(t *testing.T) string {
+// livePlayer is the panel's media player in Home Assistant.
+//
+// There may be more than one panel in Home Assistant — a device that
+// was here before and one that is here now — so the player is found by
+// the device it belongs to.
+//
+// The device is told which one it is by its address, and the address
+// is what Home Assistant knows the device by.
+func livePlayer(t *testing.T, d *device) string {
 	t.Helper()
+	// The player that is available is the panel's.
+	//
+	// Home Assistant adds an entity for every panel it has ever seen, so
+	// there may be more than one, and the ones that are not running are
+	// marked unavailable. The one that is available is the one that is
+	// here now.
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
-		entities := haEntities(t, "media_player")
-		for id, state := range entities {
+		for id, state := range haEntities(t, "media_player") {
 			if !strings.Contains(id, "home_panel") {
 				continue
 			}
@@ -144,7 +157,14 @@ func TestThePanelSurvivesTheMediaPlaying(t *testing.T) {
 		return s.Connection == "connected"
 	})
 
-	player := livePlayer(t)
+	player := livePlayer(t, d)
+
+	// Whatever the test before it left playing is stopped, so the test
+	// starts from a known place.
+	post(t, haURL()+"/api/services/media_player/media_stop", haToken(), map[string]any{
+		"entity_id": player,
+	})
+
 	post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
 		"entity_id":          player,
 		"media_content_id":   "media-source://radio_browser/" + liveStation(t),
