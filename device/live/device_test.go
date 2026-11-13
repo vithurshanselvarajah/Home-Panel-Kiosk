@@ -88,6 +88,12 @@ type deviceState struct {
 func startDevice(t *testing.T, recording string) *device {
 	t.Helper()
 
+	// The tests cannot run at the same time, because they share the
+	// panel's ports. So they take a lock, and the one that is waiting
+	// says so.
+	lockPorts()
+	t.Cleanup(unlockPorts)
+
 	binary := liveDeviceBinary()
 	if binary == "" {
 		t.Skip("no device binary was named")
@@ -312,6 +318,20 @@ func (d *device) esphomeAddress() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.address
+}
+
+// portsLock is the lock the tests take, so they do not run at the same
+// time.
+var portsLock sync.Mutex
+
+// lockPorts takes the lock.
+func lockPorts() {
+	portsLock.Lock()
+}
+
+// unlockPorts gives it back.
+func unlockPorts() {
+	portsLock.Unlock()
 }
 
 // esphomePeer is the peer that asks the device questions.
