@@ -92,8 +92,12 @@ func startDevice(t *testing.T, recording string) *device {
 	// The tests cannot run at the same time, because they share the
 	// panel's ports. So they take a lock, and the one that is waiting
 	// says so.
+	//
+	// The lock is given back after the device has stopped, and not
+	// before: the cleanups run in the reverse order they were set, so
+	// the one set last runs first. The device's own cleanup is set
+	// last, so it runs first, and the lock is given back after it.
 	lockPorts()
-	t.Cleanup(unlockPorts)
 
 	binary := liveDeviceBinary()
 	if binary == "" {
@@ -233,7 +237,37 @@ func startDevice(t *testing.T, recording string) *device {
 	}()
 
 	t.Cleanup(d.stop)
+	t.Cleanup(unlockPorts)
+
+	// Home Assistant does not always take the device the first time.
+	//
+	// It finds the device by the announcement, and it checks the
+	// announcement against the device it already has. A device that has
+	// just been reloaded — because the panel's address changed, or
+	// because the test before it left one behind — takes a moment to
+	// settle, and until it has the announcement is refused.
+	//
+	// So the device is started again if it does not connect. The
+	// announcement is the same every time, so the second try is the one
+	// that works.
+	go d.retryUntilConnected()
+
 	return d
+}
+
+// retryUntilConnected starts the device again if it does not connect.
+//
+// It gives up after a while, because a device that will not connect is
+// a failure the test should report rather than a failure it should
+// keep retrying.
+func (d *device) retryUntilConnected() {
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		if state, found := d.lastState(); found && state.Connection == "connected" {
+			return
+		}
+		time.Sleep(2 * time.Second)
+	}
 }
 
 // runtimeDirectory is where the onnx runtime is, next to the binary.
@@ -275,6 +309,23 @@ func (d *device) stop() {
 	// them.
 	waitForFreePort(livePort())
 	waitForFreePort(liveSendspinPort())
+}
+
+// deviceID is the address Home Assistant knows the device by.
+//
+// It is the device's own address, which is the base64url of its public
+// key, and it is what the entities are filed under.
+func (d *device) deviceID() string {
+	lines, err := d.peer("device_id", "")
+	if err != nil {
+		return ""
+	}
+	for _, line := range lines {
+		if strings.HasPrefix(line, "device_id:") {
+			return strings.TrimPrefix(line, "device_id:")
+		}
+	}
+	return ""
 }
 
 // speakerBytes says how many bytes the speaker has played.
@@ -359,7 +410,10 @@ async def main():
     client = APIClient(host, int(port), noise_psk=None, password=None)
     await client.connect(login=True)
 
-    if MODE == "capabilities":
+    if MODE == "device_id":
+        info = await client.device_info()
+        print("device_id:" + str(info.mac_address))
+    elif MODE == "capabilities":
         caps = await client.device_capabilities()
         print("sendspin_flags:" + str(caps.sendspin.feature_flags))
         print("sendspin_client:" + str(caps.sendspin.client_id))

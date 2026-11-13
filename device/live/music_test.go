@@ -312,8 +312,8 @@ func TestTheMusicServerControlsThePanel(t *testing.T) {
 
 	// A button is pressed. The command goes from the panel to the
 	// device program and on to the music server.
-	d.sendTransport("pause")
-	d.sendTransport("play")
+	d.sendTransport("pause", "server")
+	d.sendTransport("play", "server")
 	t.Logf("the transport was driven")
 }
 
@@ -321,7 +321,7 @@ func TestTheMusicServerControlsThePanel(t *testing.T) {
 //
 // The buttons are on the panel, and the panel talks to the device
 // program over the control socket, so that is where the press goes.
-func (d *device) sendTransport(action string) {
+func (d *device) sendTransport(action string, source string) {
 	d.t.Helper()
 	socket := d.controlSocket()
 	if socket == "" {
@@ -337,7 +337,7 @@ func (d *device) sendTransport(action string) {
 		"action": "transport",
 		"command": map[string]any{
 			"action": action,
-			"source": "server",
+			"source": source,
 		},
 	})
 	if err != nil {

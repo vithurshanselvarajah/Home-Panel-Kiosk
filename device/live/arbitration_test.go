@@ -32,7 +32,7 @@ func TestTheMusicServerStopsHomeAssistantsMusic(t *testing.T) {
 	})
 
 	// Home Assistant plays the radio.
-	player := livePlayer(t)
+	player := livePlayer(t, d)
 	post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
 		"entity_id":          player,
 		"media_content_id":   "media-source://radio_browser/" + liveStation(t),
@@ -115,7 +115,7 @@ func TestHomeAssistantsMusicPausesTheMusicServer(t *testing.T) {
 	t.Log("the panel is playing the music server's music")
 
 	// Now Home Assistant plays the radio.
-	player := livePlayer(t)
+	player := livePlayer(t, d)
 	post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
 		"entity_id":          player,
 		"media_content_id":   "media-source://radio_browser/" + liveStation(t),
@@ -133,4 +133,42 @@ func TestHomeAssistantsMusicPausesTheMusicServer(t *testing.T) {
 		return !s.MusicPlaying && s.MusicState != "playing"
 	})
 	t.Log("the music server's music stopped")
+}
+
+// TestTheTransportGoesToTheMusicThatIsPlaying checks that the transport
+// goes to one piece of music and not to both.
+//
+// There are two kinds of music: the music Home Assistant is playing,
+// which the device holds, and the music a music server is playing,
+// which the server has the transport for. Sending the command to both
+// would pause one while the other is playing.
+func TestTheTransportGoesToTheMusicThatIsPlaying(t *testing.T) {
+	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
+
+	d := startDevice(t, "")
+	d.waitFor("connected to Home Assistant", 90*time.Second, func(s deviceState) bool {
+		return s.Connection == "connected"
+	})
+
+	// Home Assistant plays the radio, and the panel is playing it.
+	player := livePlayer(t, d)
+	post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
+		"entity_id":          player,
+		"media_content_id":   "media-source://radio_browser/" + liveStation(t),
+		"media_content_type": "music",
+	})
+	d.waitFor("playing Home Assistant's music", 90*time.Second, func(s deviceState) bool {
+		return s.MediaState == "playing"
+	})
+	t.Log("the panel is playing Home Assistant's music")
+
+	// The panel is asked to pause. The source is Home Assistant's,
+	// because that is the music that is playing.
+	d.sendTransport("pause", "home")
+
+	// And the music Home Assistant is playing is paused.
+	d.waitFor("Home Assistant's music paused", 30*time.Second, func(s deviceState) bool {
+		return s.MediaState == "paused"
+	})
+	t.Log("Home Assistant's music was paused")
 }
