@@ -136,6 +136,10 @@
           <div class="secret-value"><code id="ha-secret-value"></code><button class="secondary-button" type="button" data-copy-secret="ha">Copy key</button></div>
         </div>
         <p class="field-note">Without a key the panel still connects and is still set up in one step, but the traffic is in plain text on the network. The key is the same one Home Assistant asks for when the panel is added.</p>
+        <div class="section-label"><span>CAMERA · RTSP VIDEO</span><span class="line"></span></div>
+        <label>Stream password <span class="optional" id="camera-password-status">not set</span><input name="cameraPassword" type="password" autocomplete="new-password" spellcheck="false" placeholder="Enter a new password to set or reset" /></label>
+        <p class="field-note">The saved password is never shown here. Enter a new password to replace it; leave this blank to keep it. Use at least 8 characters. Add this URL in Home Assistant with Generic Camera, username <code>homepanel</code>, and Digest authentication:</p>
+        <code class="camera-stream-url" id="camera-stream-url">rtsp://DEVICE.local:8554/homepanel</code>
         <div class="section-label"><span>SENDSPIN · MUSIC ASSISTANT</span><span class="line"></span></div>
         <label class="setting-toggle"><input name="sendspinRequirePairing" type="checkbox" /> Require a paired Music Assistant server</label>
         <p class="field-note">Sendspin sessions are always encrypted. Requiring pairing also authenticates the server. Turn this off only to allow unpaired servers.</p>

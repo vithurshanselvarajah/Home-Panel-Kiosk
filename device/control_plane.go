@@ -39,6 +39,9 @@ type ControlPlane struct {
 	// It is the entity the reply to a voice turn comes back on, and the
 	// one Music Assistant plays music through.
 	mediaPlayer *esphome.MediaPlayer
+	// camera is an independent RTSP/H.264 service. ESPHome only exposes
+	// its enable and quality controls; the video travels over RTSP.
+	camera *CameraService
 	// audio is the panel's own audio, so the volume can be set on it.
 	audio *deviceAudio
 	// voice is the voice assistant.
@@ -97,16 +100,23 @@ func startControlPlane(
 	name string,
 	board string,
 	socket string,
-	cameraAvailable bool,
 	audio *deviceAudio,
 ) *ControlPlane {
 	plane := &ControlPlane{log: log, audio: audio}
+	if camera, err := NewCameraService(log, ""); err == nil {
+		plane.camera = camera
+	} else {
+		log.Info("the standalone camera stream is unavailable", "reason", err)
+	}
 
 	registry := panelEntities(PanelCapabilities{
 		CanControlScreen: true,
 		HasBacklight:     true,
 		HasSlideshow:     true,
 	})
+	if plane.camera != nil {
+		plane.camera.AddEntities(registry)
+	}
 	// The voice settings are entities too, so Home Assistant can read
 	// them and change them.
 	voiceEntities(registry)
@@ -119,14 +129,6 @@ func startControlPlane(
 		EncryptionKey: key,
 		Registry:      registry,
 		Log:           log,
-	}
-	if cameraAvailable {
-		serverOptions.CameraCapture = func(ctx context.Context) ([]byte, error) {
-			if plane.server == nil {
-				return nil, fmt.Errorf("panel camera is not connected")
-			}
-			return plane.server.CaptureCamera(ctx)
-		}
 	}
 	api := esphome.NewServer(serverOptions)
 	plane.api = api
@@ -198,6 +200,21 @@ func startControlPlane(
 			Registry:             registry,
 			Log:                  log,
 			SendspinPairingToken: audio.sendspinPairingToken,
+			SetCameraPassword: func(password string) {
+				if plane.camera == nil {
+					return
+				}
+				if err := plane.camera.SetPassword(password); err != nil {
+					log.Warn("the camera password was rejected", "error", err)
+				}
+			},
+			OnCameraConnected: func(password string) {
+				if plane.camera != nil {
+					if err := plane.camera.SetPassword(password); err != nil {
+						log.Warn("the saved camera password could not be applied", "error", err)
+					}
+				}
+			},
 		})
 		if err := server.Listen(); err != nil {
 			log.Error("the control socket could not be opened", "error", err)
@@ -313,6 +330,27 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, plane *Cont
 				plane.setDucking(value.Number)
 			case "muted":
 				plane.setMuted(value.Bool)
+			case "camera_stream":
+				if plane.camera != nil {
+					if err := plane.camera.SetEnabled(value.Bool); err != nil {
+						log.Warn("the camera stream could not change state", "error", err)
+						if entity.Kind == esphome.KindSwitch {
+							registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false})
+						}
+					}
+				}
+			case "camera_fps":
+				if plane.camera != nil {
+					if err := plane.camera.SetFPS(int(value.Number)); err != nil {
+						log.Warn("the camera frame rate could not change", "error", err)
+					}
+				}
+			case "camera_resolution":
+				if plane.camera != nil {
+					if err := plane.camera.SetResolution(value.Text); err != nil {
+						log.Warn("the camera resolution could not change", "error", err)
+					}
+				}
 			case "idle_slideshow_minutes", "slideshow_off_minutes", "touch_keyboard_enabled", "startup_volume", "music_enabled", "music_unpaired":
 				var settingValue any
 				switch value.Kind {
@@ -888,6 +926,9 @@ func (p *ControlPlane) Close() {
 		}
 		if p.listener != nil {
 			p.listener.Close()
+		}
+		if p.camera != nil {
+			p.camera.Close()
 		}
 	})
 }

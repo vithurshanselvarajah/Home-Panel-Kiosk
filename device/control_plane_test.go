@@ -18,7 +18,7 @@ func TestControlPlaneStarts(t *testing.T) {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	socket := t.TempDir() + "/control.sock"
-	plane := startControlPlane(context.Background(), log, 0, "", "home-panel-test", "Home Panel Test", socket, false, nil)
+	plane := startControlPlane(context.Background(), log, 0, "", "home-panel-test", "Home Panel Test", socket, nil)
 	defer plane.Close()
 
 	if plane.listener == nil {

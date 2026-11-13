@@ -1,7 +1,6 @@
 package esphome
 
 import (
-	"context"
 	"log/slog"
 	"net"
 	"sync"
@@ -26,11 +25,6 @@ type Server struct {
 	mediaPlayer *MediaPlayer
 	// sendspin is the music player, when the device has one.
 	sendspin *Sendspin
-	// cameraCapture takes one JPEG from the host's default camera.
-	cameraCapture  func(context.Context) ([]byte, error)
-	cameraKeyValue uint32
-	cameraStreams  sync.Map
-	cameraMu       sync.Mutex
 	// onConnect is called when Home Assistant connects or disconnects.
 	//
 	// The panel shows whether it is linked, and only the server knows:
@@ -68,13 +62,6 @@ type Server struct {
 	writeMu sync.Mutex
 }
 
-// cameraStream is a comparable identity for a live camera request. A
-// context.CancelFunc cannot be compared, so it cannot be the value passed to
-// sync.Map.CompareAndDelete when a stream ends.
-type cameraStream struct {
-	cancel context.CancelFunc
-}
-
 // ServerOptions is what the server is made with.
 type ServerOptions struct {
 	// Name is the device name, as Home Assistant knows it.
@@ -96,8 +83,6 @@ type ServerOptions struct {
 	Services *ServiceRegistry
 	// Log is where the messages go.
 	Log *slog.Logger
-	// CameraCapture captures a JPEG from the host's default camera.
-	CameraCapture func(context.Context) ([]byte, error)
 }
 
 // NewServer makes a server.
@@ -128,7 +113,6 @@ func NewServer(options ServerOptions) *Server {
 		version:       options.Version,
 		encryptionKey: options.EncryptionKey,
 		log:           options.Log,
-		cameraCapture: options.CameraCapture,
 	}
 	// A state change is pushed to every client that is connected.
 	server.registry.OnChange(func(entity *Entity) {
@@ -386,7 +370,6 @@ func (s *Server) serve(conn net.Conn) {
 		return
 	}
 	defer client.close()
-	defer s.stopCameraStream(client)
 
 	s.connections.Store(client, struct{}{})
 
@@ -489,23 +472,6 @@ func (s *Server) handle(client *Client, frame Frame) error {
 
 	case TypeListEntitiesRequest:
 		return s.listEntities(client)
-
-	case TypeCameraImageRequest:
-		request := &CameraImageRequest{}
-		if err := proto.Unmarshal(frame.Payload, request); err != nil {
-			return err
-		}
-		if request.Stream {
-			s.startCameraStream(client)
-			return nil
-		}
-		s.stopCameraStream(client)
-		if request.Single {
-			if err := s.sendCameraImage(client, context.Background()); err != nil {
-				s.log.Warn("camera capture failed", "error", err)
-			}
-		}
-		return nil
 
 	case TypeSubscribeStatesRequest:
 		// The client wants the state of everything, now and as it
@@ -686,13 +652,6 @@ func (s *Server) listEntities(client *Client) error {
 			return err
 		}
 	}
-	if s.cameraCapture != nil {
-		if err := client.write(TypeListEntitiesCameraResponse, &ListEntitiesCameraResponse{
-			Key: s.cameraKey(), Name: "Camera", ObjectId: "camera", Icon: "mdi:camera",
-		}); err != nil {
-			return err
-		}
-	}
 	// The speaker is listed apart from the entities, because it has its
 	// own message and its own key.
 	if s.mediaPlayer != nil {
@@ -711,80 +670,6 @@ func (s *Server) listEntities(client *Client) error {
 		}
 	}
 	return client.write(TypeListEntitiesDoneResponse, &ListEntitiesDoneResponse{})
-}
-
-func (s *Server) cameraKey() uint32 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.cameraKeyValue == 0 {
-		s.cameraKeyValue = s.registry.NextKeyValue() + 2
-	}
-	return s.cameraKeyValue
-}
-
-func (s *Server) sendCameraImage(client *Client, ctx context.Context) error {
-	if s.cameraCapture == nil {
-		return nil
-	}
-	s.cameraMu.Lock()
-	defer s.cameraMu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	data, err := s.cameraCapture(ctx)
-	if err != nil {
-		return err
-	}
-	if len(data) == 0 {
-		return nil
-	}
-	const chunkSize = 32 * 1024
-	for offset := 0; offset < len(data); offset += chunkSize {
-		end := min(offset+chunkSize, len(data))
-		if err := client.write(TypeCameraImageResponse, &CameraImageResponse{Key: s.cameraKey(), Data: data[offset:end], Done: end == len(data)}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *Server) startCameraStream(client *Client) {
-	ctx, cancel := context.WithCancel(context.Background())
-	stream := &cameraStream{cancel: cancel}
-	previous, loaded := s.cameraStreams.Swap(client, stream)
-	if loaded {
-		previous.(*cameraStream).cancel()
-	}
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		defer s.cameraStreams.CompareAndDelete(client, stream)
-		failed := false
-		for {
-			if err := s.sendCameraImage(client, ctx); err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				if !failed {
-					s.log.Warn("camera stream frame failed; will retry", "error", err)
-					failed = true
-				}
-			} else {
-				failed = false
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
-}
-
-func (s *Server) stopCameraStream(client *Client) {
-	if value, ok := s.cameraStreams.LoadAndDelete(client); ok {
-		value.(*cameraStream).cancel()
-	}
 }
 
 // serviceMessage builds the message that describes one service.

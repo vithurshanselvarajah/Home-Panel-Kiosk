@@ -11,7 +11,7 @@ An independent Electron kiosk for a Home Assistant touch display. Immich photos 
 - Configurable dashboard and external Immich Kiosk URLs.
 - Idle transition from dashboard to slideshow, then optional display power-off.
 - The panel is an ESPHome device to Home Assistant, over the ESPHome native API. It announces itself on the network and appears in Home Assistant like any other device.
-- A Home Assistant camera entity uses the host's default camera across supported operating systems. It captures only when Home Assistant requests an image or stream and sends scaled JPEG frames.
+- An optional standalone RTSP camera stream uses the host's default V4L2 camera, H.264 encoding, and ESPHome controls for enable, frame rate, and resolution.
 - Entities for the supported view, screen, brightness, notification, and URL controls. Unsupported device controls are omitted.
 - Drawer indicators for the ESPHome link, Immich Kiosk page load, and Home Assistant dashboard page load.
 - Local notification overlay and settings UI.
@@ -52,7 +52,9 @@ The key also protects Sendspin pairing: the device withholds its Sendspin pairin
 | Keyboard visible | binary sensor | Whether the touch keyboard is up |
 | Last activity | sensor | When somebody last did something |
 | Version | text sensor | The version of the application |
-| Camera | camera | Snapshot and live frames from the system-default camera; reports capture failures when unavailable |
+| Camera stream | switch | Starts or stops the authenticated standalone RTSP/H.264 feed |
+| Camera · Frame rate | number (configuration) | Frames per second, 1 to 30 |
+| Camera · Resolution | select (configuration) | Maximum supported mode or a mode reported by the camera |
 | Display · Idle to slideshow | number (configuration) | Minutes before the dashboard changes to the slideshow; zero disables it |
 | Display · Slideshow before screen off | number (configuration) | Minutes before the display powers off; zero disables it |
 | Display · Touch keyboard | switch (configuration) | Enables the on-screen keyboard |
@@ -61,7 +63,15 @@ The key also protects Sendspin pairing: the device withholds its Sendspin pairin
 | Music · Music Assistant | switch (configuration) | Enables the Sendspin player |
 | Music · Allow unpaired servers | switch (configuration) | Allows local servers to play without pairing |
 
-Configuration entities appear under the device's configuration section in Home Assistant. The dashboard and slideshow URLs and local microphone/speaker selection remain in setup because they are connection details or depend on locally enumerated hardware. The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface. Camera frames use the system default camera; the operating system must allow the installed app to access it.
+Configuration entities appear under the device's configuration section in Home Assistant. The dashboard and slideshow URLs and local microphone/speaker selection remain in setup because they are connection details or depend on locally enumerated hardware. The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface.
+
+### The standalone camera stream
+
+The legacy ESPHome JPEG camera entity has been removed. When a V4L2 camera and FFmpeg are available, the device offers a Camera stream switch plus frame-rate and resolution controls in Home Assistant. The stream uses the largest mode reported by the camera by default. It probes the available V4L2 M2M, VAAPI, NVENC, and QSV H.264 encoders and uses the first one that works; otherwise it uses FFmpeg's low-latency software H.264 encoder. Debian packages depend on FFmpeg. When running from source with `npm start`, install FFmpeg separately.
+
+Set or reset the stream password in the panel's **Settings → Camera** section. The saved password is encrypted by Electron safe storage and is never returned to the settings UI. Leave the field blank to keep the existing password. The camera stream is off until enabled in Home Assistant, and a password must be set before it can be enabled.
+
+Add the stream in Home Assistant through **Settings → Devices & services → Add integration → Generic Camera**. Use the RTSP URL shown in the panel's camera settings, the username `homepanel`, and the password set there. Select **Digest** authentication in Generic Camera. The password is used for RTSP authentication; the RTSP media itself is not encrypted, so keep the feed on a trusted LAN or VPN.
 
 There is a control for each thing the panel can do and a sensor for each thing that can be seen but not set. Nothing is offered twice: the screen switch turns the screen off and on, so there is no separate button for either.
 

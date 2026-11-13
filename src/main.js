@@ -40,6 +40,7 @@ const DEFAULTS = {
   musicEnabled: true,
   musicName: HOSTNAME,
   musicUnpaired: false,
+  cameraPassword: "",
 };
 
 // The microphone monitor and the test sound are not settings.
@@ -188,7 +189,17 @@ async function decodeSettings(data) {
       delete data.esphomeEncryptionKey;
     }
   }
+  if (data.cameraPasswordEncrypted && await safeStorage.isAsyncEncryptionAvailable()) {
+    try {
+      const { result } = await safeStorage.decryptStringAsync(Buffer.from(data.cameraPasswordEncrypted, "base64"));
+      data.cameraPassword = result;
+    } catch (error) {
+      console.warn("The saved camera password could not be read.", error.message);
+      delete data.cameraPassword;
+    }
+  }
   delete data.esphomeEncryptionKeyEncrypted;
+  delete data.cameraPasswordEncrypted;
   delete data.cameras;
   delete data.voiceEnabled;
   delete data.voiceDeviceId;
@@ -876,26 +887,6 @@ async function handleCommand(command) {
   if (!command || typeof command !== "object" || typeof command.action !== "string") return;
   const action = command.action;
   switch (action) {
-    case "camera_capture": {
-      let cameraData = "";
-      let cameraError = "";
-      let cameraView;
-      try {
-        ensureOverlayView();
-        cameraView = overlayView?.webContents;
-        if (!cameraView || cameraView.isDestroyed()) throw new Error("Panel camera view is unavailable");
-        if (cameraView.isLoadingMainFrame()) await waitForOverlayLoad(cameraView);
-        const dataURL = await cameraView.executeJavaScript("window.homePanelCaptureCameraFrame()");
-        cameraData = typeof dataURL === "string" && dataURL.startsWith("data:image/jpeg;base64,") ? dataURL.slice(23) : "";
-        if (!cameraData) throw new Error("The camera returned no JPEG image");
-      } catch (error) {
-        cameraError = error?.message || String(error || "Camera capture failed");
-        console.warn("Panel camera capture failed:", cameraError);
-      }
-      if (!overlayExpanded && !sidePanelOpen && !keyboardVisible && mode !== "url" && !voiceOverlayFull) scheduleOverlayRecycle();
-      controlClient?.sendCameraFrame(command.cameraRequestId, cameraData, cameraError);
-      break;
-    }
     case "wake": {
       const wasOff = displayIsOff || requestedDisplayStatus === "off";
       recordActivity("home-assistant");
@@ -981,7 +972,10 @@ function startControlPlane() {
     onStatus: () => {},
     // The state is sent as soon as the connection is there, because the
     // connection is made after the first state has been sent.
-    onConnect: () => sendState(true),
+    onConnect: () => {
+      sendState(true);
+      controlClient.sendCameraPassword(settings.cameraPassword || "");
+    },
     // The link to Home Assistant is what the drawer shows, and only the
     // device program knows whether it is there.
     onLink: (connected) => {
@@ -1028,6 +1022,10 @@ async function saveSettings(next) {
   // key follows it: no key means the connection is in plain text.
   clean.esphomeEncryptionEnabled = Boolean(clean.esphomeEncryptionEnabled);
   clean.esphomeEncryptionKey = String(clean.esphomeEncryptionKey || "").trim();
+  clean.cameraPassword = String(clean.cameraPassword || "");
+  if (clean.cameraPassword && (clean.cameraPassword.length < 8 || clean.cameraPassword.length > 128)) {
+    throw new Error("The camera password must contain 8 to 128 characters.");
+  }
   if (!clean.esphomeEncryptionEnabled) {
     // The connection is in plain text, so there is no key.
     clean.esphomeEncryptionKey = "";
@@ -1051,14 +1049,23 @@ async function saveSettings(next) {
   // bring it back the next time the settings were read.
   delete persisted.esphomeEncryptionKeyEncrypted;
   delete persisted.esphomeEncryptionKey;
+  delete persisted.cameraPasswordEncrypted;
+  delete persisted.cameraPassword;
   if (clean.esphomeEncryptionKey && await safeStorage.isAsyncEncryptionAvailable()) {
     persisted.esphomeEncryptionKeyEncrypted = (await safeStorage.encryptStringAsync(clean.esphomeEncryptionKey)).toString("base64");
+  }
+  if (clean.cameraPassword) {
+    if (!await safeStorage.isAsyncEncryptionAvailable()) {
+      throw new Error("Secure password storage is unavailable on this system.");
+    }
+    persisted.cameraPasswordEncrypted = (await safeStorage.encryptStringAsync(clean.cameraPassword)).toString("base64");
   }
   await fs.mkdir(path.dirname(configPath()), { recursive: true });
   await writeSettingsFile(persisted);
   const previous = settings;
   const previousDisplayMode = displayMode();
   settings = { ...clean };
+  if (previous.cameraPassword !== settings.cameraPassword) controlClient?.sendCameraPassword(settings.cameraPassword);
   // The mode is applied only when it changed, so saving the other settings
   // does not move the window the user is looking at.
   if (settings.displayMode !== previousDisplayMode) applyDisplayMode();
@@ -1117,7 +1124,8 @@ async function writeSettingsFile(data) {
 }
 
 function publicSettings() {
-  return { ...settings };
+  const { cameraPassword, ...visible } = settings;
+  return { ...visible, cameraPasswordConfigured: Boolean(cameraPassword) };
 }
 
 // runtimeDirectory is where the live state of a device lives.
@@ -1218,9 +1226,6 @@ async function startDeviceProgram() {
   // restart: a player that forgets its identity is a new player, and the
   // server has to pair with it again.
   const dataDirectory = path.join(app.getPath("userData"), "device");
-  const cameraAvailable = await detectCameraAvailable();
-  console.info(`Panel camera ${cameraAvailable ? "detected" : "not detected"}`);
-
   deviceClient = new DeviceClient({
     binary,
     stateFile,
@@ -1245,7 +1250,6 @@ async function startDeviceProgram() {
     // needs the key and the name the panel is known by.
     esphomeKey: settings.esphomeEncryptionKey || "",
     esphomeName: HOSTNAME,
-    cameraAvailable,
     onState: () => {
       sendDeviceState();
       // The device's mute is the microphone's, and it is the panel's
@@ -1267,33 +1271,6 @@ async function startDeviceProgram() {
   // change. Otherwise a device that was configured yesterday would run
   // today with the defaults.
   sendDeviceConfig();
-}
-
-async function detectCameraAvailable() {
-  try {
-    ensureOverlayView();
-    const cameraView = overlayView?.webContents;
-    if (!cameraView || cameraView.isDestroyed()) return false;
-    if (cameraView.isLoadingMainFrame()) {
-      await Promise.race([
-        waitForOverlayLoad(cameraView),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("camera probe timed out")), 5000)),
-      ]);
-    }
-    return await cameraView.executeJavaScript(`(async () => {
-      if (!navigator.mediaDevices?.getUserMedia) return false;
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        return stream.getVideoTracks().some((track) => track.readyState === "live");
-      } finally {
-        stream?.getTracks().forEach((track) => track.stop());
-      }
-    })()`);
-  } catch (error) {
-    console.info("Panel camera detection failed:", error?.message || String(error));
-    return false;
-  }
 }
 
 function createOverlayView() {
