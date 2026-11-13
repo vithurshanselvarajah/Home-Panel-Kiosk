@@ -11,6 +11,7 @@ An independent Electron kiosk for a Home Assistant touch display. Immich photos 
 - Configurable dashboard and external Immich Kiosk URLs.
 - Idle transition from dashboard to slideshow, then optional display power-off.
 - The panel is an ESPHome device to Home Assistant, over the ESPHome native API. It announces itself on the network and appears in Home Assistant like any other device.
+- A Home Assistant camera entity uses the host's default camera across supported operating systems. It captures only when Home Assistant requests an image or stream and sends scaled JPEG frames.
 - Entities for the supported view, screen, brightness, notification, and URL controls. Unsupported device controls are omitted.
 - Drawer indicators for the ESPHome link, Immich Kiosk page load, and Home Assistant dashboard page load.
 - Local notification overlay and settings UI.
@@ -42,15 +43,21 @@ The key is kept out of the settings file and encrypted with Electron `safeStorag
 | Brightness | number | The screen brightness, 0 to 100 |
 | Volume | number | The volume of the room, 0 to 100 |
 | View | select | `dashboard` or `slideshow` |
-| Display mode | select | `fullscreen` or `window` |
+| Display mode | select (configuration) | `fullscreen` or `window` |
 | Return to Home | button | Shows the dashboard |
 | Exit | button | Shuts the app down |
 | Drawer open | binary sensor | Whether the drawer is open |
 | Keyboard visible | binary sensor | Whether the touch keyboard is up |
 | Last activity | sensor | When somebody last did something |
 | Version | text sensor | The version of the application |
+| Camera | camera | Snapshot and live frames from the system-default camera; reports capture failures when unavailable |
+| Display · Idle to slideshow | number (configuration) | Minutes before the dashboard changes to the slideshow; zero disables it |
+| Display · Slideshow before screen off | number (configuration) | Minutes before the display powers off; zero disables it |
+| Display · Touch keyboard | switch (configuration) | Enables the on-screen keyboard |
+| Audio · Startup volume | number (configuration) | Volume applied when the audio device starts |
+| Voice · Wake word / sensitivity / music ducking | switch / numbers (configuration) | Voice satellite settings |
 
-The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface.
+Configuration entities appear under the device's configuration section in Home Assistant. The dashboard and slideshow URLs remain in the local setup because they are connection details, not device controls. The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface. Camera frames use the system default camera; the operating system must allow the installed app to access it.
 
 There is a control for each thing the panel can do and a sensor for each thing that can be seen but not set. Nothing is offered twice: the screen switch turns the screen off and on, so there is no separate button for either.
 
@@ -149,7 +156,7 @@ the network. There is nothing to point it at.
 npm run dev
 ```
 
-That starts the app with the voice switched on. The panel appears in
+That starts the app with its voice satellite enabled. The panel appears in
 Home Assistant as an ordinary ESPHome device, with its entities and its
 services, and — once the wake word models are installed — as a voice
 satellite.
