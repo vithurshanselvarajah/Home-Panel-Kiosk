@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/binary"
 	"io"
 	"os"
 	"testing"
@@ -86,7 +85,7 @@ func TestTheRecordingIsSentToHomeAssistant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pcm, err := decodeRecording(raw)
+	pcm, err := wavSamples(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,25 +127,4 @@ func TestTheRecordingIsSentToHomeAssistant(t *testing.T) {
 		}
 	}
 	t.Logf("%d bytes were sent to Home Assistant", len(got))
-}
-
-// decodeRecording turns a recording into the raw PCM the device wants.
-//
-// The recording is a wav file at sixteen kilohertz, mono, sixteen bit,
-// and the device wants the same thing.
-func decodeRecording(raw []byte) ([]byte, error) {
-	if len(raw) < 44 {
-		return nil, io.ErrUnexpectedEOF
-	}
-	for i := 12; i+8 < len(raw); i++ {
-		if string(raw[i:i+4]) == "data" {
-			size := binary.LittleEndian.Uint32(raw[i+4 : i+8])
-			start := i + 8
-			if size == 0xFFFFFFFF || int(size) > len(raw)-start {
-				size = uint32(len(raw) - start)
-			}
-			return raw[start : start+int(size)], nil
-		}
-	}
-	return nil, io.ErrUnexpectedEOF
 }

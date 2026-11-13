@@ -78,6 +78,7 @@ type deviceState struct {
 	MusicDuration    int      `json:"music_duration"`
 	MusicPlaying     bool     `json:"music_playing"`
 	MusicTransport   []string `json:"music_transport"`
+	DuckingDb        float64  `json:"ducking_db"`
 	LastError        string   `json:"last_error"`
 }
 

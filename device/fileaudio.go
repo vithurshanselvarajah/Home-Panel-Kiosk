@@ -272,8 +272,20 @@ func readWAV(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	pcm, err := wavSamples(raw)
+	if err != nil {
+		return nil, fmt.Errorf("home-panel: %s: %w", path, err)
+	}
+	return pcm, nil
+}
+
+// wavSamples reads the samples out of a wav file's bytes.
+//
+// The data chunk is found by walking the chunks, because a file may
+// carry other chunks before it.
+func wavSamples(raw []byte) ([]byte, error) {
 	if len(raw) < 44 {
-		return nil, fmt.Errorf("home-panel: %s is not a wav file", path)
+		return nil, fmt.Errorf("it is not a wav file")
 	}
 	for i := 12; i+8 < len(raw); i++ {
 		if string(raw[i:i+4]) != "data" {
@@ -288,5 +300,5 @@ func readWAV(path string) ([]byte, error) {
 		}
 		return raw[start : start+int(size)], nil
 	}
-	return nil, fmt.Errorf("home-panel: %s has no samples in it", path)
+	return nil, fmt.Errorf("it has no samples in it")
 }

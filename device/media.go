@@ -746,28 +746,10 @@ func decodeFLAC(body []byte) ([]byte, int, error) {
 		if err != nil {
 			return nil, 0, err
 		}
-		if len(frame.Subframes) == 0 {
-			continue
-		}
-
-		samples := frame.Subframes[0].Samples
-		if len(frame.Subframes) == 1 {
-			for _, s := range samples {
-				out = appendSample(out, int32(s))
-			}
-			continue
-		}
-
-		// A stereo stream is averaged down to the one channel the
-		// speaker takes.
-		right := frame.Subframes[1].Samples
-		for i, s := range samples {
-			other := int32(0)
-			if i < len(right) {
-				other = int32(right[i])
-			}
-			out = appendSample(out, (int32(s)+other)/2)
-		}
+		// The frame is turned into samples the same way whether it
+		// came from a whole file or from a stream, so there is one
+		// place that does it.
+		out = append(out, flacFramePCM(frame)...)
 	}
 	return out, int(stream.Info.SampleRate), nil
 }
