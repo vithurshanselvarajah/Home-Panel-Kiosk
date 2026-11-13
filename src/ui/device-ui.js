@@ -411,10 +411,12 @@
       // the sidecar reported.
       const key = state.pairing && state.connection === "pending" ? "pairing" : state.connection;
       const connection = CONNECTIONS[key] || CONNECTIONS.unknown;
-      options.row.hidden = false;
-      options.state.textContent = connection.label;
-      options.state.title = state.connection_reason || "";
-      options.led.dataset.status = connection.led;
+      if (options.row) options.row.hidden = false;
+      if (options.state) {
+        options.state.textContent = connection.label;
+        options.state.title = state.connection_reason || "";
+      }
+      if (options.led) options.led.dataset.status = connection.led;
 
       // The same state is repeated at the top of the voice tab, so the
       // settings page says what the drawer says.

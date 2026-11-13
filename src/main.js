@@ -10,7 +10,12 @@ const { createHealthChecker, probeHttp } = require("./health");
 const { DeviceClient, findSidecar } = require("./device");
 const { ControlClient, findControlSocket } = require("./control");
 const { moveCachesToMemory } = require("./caches");
-const { systemVolumePercent, setSystemVolume, systemVolumeMuted, setSystemVolumeMuted } = require("./volume");
+const {
+  systemVolumePercent,
+  setSystemVolume,
+  systemMicMuted,
+  setSystemMicMuted,
+} = require("./volume");
 
 const DEFAULTS = {
   configured: false,
@@ -563,19 +568,23 @@ function currentBrightness() {
 // drawer opens and when the volume is changed.
 let systemVolume = null;
 
-// systemMuted is whether the mixer is muted.
+// micMuted is whether the system microphone is muted.
 //
 // It is null when the mixer cannot say, and the drawer shows the
-// volume on its own when it cannot.
-let systemMuted = null;
+// microphone's mute as unknown when it cannot.
+//
+// The mute is the microphone's and not the speaker's: a person who
+// mutes the panel wants the room to stop hearing them, and they still
+// want to hear the music.
+let micMuted = null;
 
 function currentVolume() {
   return systemVolume;
 }
 
-// currentMute is whether the mixer is muted.
+// currentMute is whether the microphone is muted.
 function currentMute() {
-  return systemMuted;
+  return micMuted;
 }
 
 // refreshVolume reads the volume of the mixer.
@@ -587,8 +596,9 @@ async function refreshVolume() {
   const value = await systemVolumePercent();
   if (value === null) return false;
   systemVolume = value;
-  // The mute is read with the volume, because it is the same answer.
-  systemMuted = await systemVolumeMuted();
+  // The microphone's mute is read with the volume, because they are
+  // both read from the mixer and both are worth following.
+  micMuted = await systemMicMuted();
   // The state is sent whatever the value is. The overlay is destroyed and
   // made again while the drawer is shut, so a drawer that was not there
   // when the volume was last read has never been told what it is.
@@ -602,29 +612,40 @@ async function refreshVolume() {
 // keyboard's media keys, a desktop's own control, an automation. So the
 // panel watches the mixer while the drawer is open and follows it.
 //
-// It watches only while the drawer is open, because a drawer that is
-// shut does not show the volume, and a command every few hundred
-// milliseconds for nothing is a machine doing work for no reason.
-//
-// It stops when the panel is shutting down.
+// It watches for as long as the panel is running, and it stops when the
+// panel is shutting down.
 let volumeWatcher = null;
 
-// watchVolume follows the mixer's volume while the drawer is open.
+// watchVolume follows the mixer's volume.
 //
-// It is called when the drawer opens and stopped when it closes. The
-// first reading is not a change, so it does not send the state: the
-// drawer has just been given the volume.
+// It runs for as long as the panel does, because the device program's
+// speaker follows the mixer and the drawer is shut most of the time.
+//
+// The first reading is not a change, so it does not send the state: the
+// panel has just been given the volume.
 function watchVolume() {
   stopWatchingVolume();
   volumeWatcher = setInterval(async () => {
     const value = await systemVolumePercent();
     if (value === null) return;
-    const muted = await systemVolumeMuted();
+    const muted = await systemMicMuted();
     // The panel's own change is not a change from outside, and it has
     // already been sent.
-    if (value === systemVolume && muted === systemMuted) return;
+    if (value === systemVolume && muted === micMuted) return;
     systemVolume = value;
-    systemMuted = muted;
+    micMuted = muted;
+    // The device program's speaker follows the mixer, and the mixer is
+    // what a person means by the volume. The state is sent below, and
+    // the state carries the volume, so the speaker follows too.
+    //
+    // The panel's own change has already been sent, so it is not sent
+    // again here: the two telling each other about the same change for
+    // ever is what the volume follower in the device program is there to
+    // stop.
+    //
+    // The microphone muted by something else turns the device's switch
+    // on, so that Home Assistant shows what is really happening.
+    followMicMute(muted);
     sendState(true);
   }, volumeWatchInterval);
   // The watcher is not what should keep the app alive.
@@ -679,30 +700,79 @@ async function setBrightness(value) {
 async function setVolume(value) {
   const percent = Math.max(0, Math.min(100, Number(value)));
   if (!Number.isFinite(percent)) return;
-  // Reaching for the volume is reaching for the sound, so a muted
-  // mixer is unmuted. A person who wants it quiet can mute it again.
-  //
-  // The mute is read first, because the panel may not know it yet: the
-  // mixer may have been muted by something else while the drawer was
-  // shut.
-  const muted = await systemVolumeMuted();
-  if (muted) {
-    systemMuted = false;
-    await setSystemVolumeMuted(false);
-  }
   await setSystemVolume(percent);
   // The drawer shows the volume, so it has to be told.
   await refreshVolume();
 }
 
-// setMute mutes the system, or unmutes it.
+// followDeviceMute makes the system microphone follow the device's.
 //
-// The mute is the system's own, because the volume is: a person who
-// reaches for the volume on a panel expects the volume of the room.
+// The device's mute is Home Assistant's mute: a switch on the device
+// that Home Assistant can turn on and off. Turning it on mutes the
+// system's microphone, so the room stops hearing the person in front
+// of the panel.
+//
+// And the other way round: muting the system's microphone turns the
+// device's switch on, so Home Assistant shows what is really happening.
+//
+// The two follow each other, and each one only follows the other when
+// the change did not come from here. That is what stops them arguing:
+// the panel mutes the microphone, the device says it is muted, the panel
+// sees that it said so itself and does nothing.
+//
+// sentDeviceMute is what the panel last told the device, and
+// wroteMicMuted is what it last wrote to the mixer.
+let sentDeviceMute = null;
+let wroteMicMuted = null;
+
+function followDeviceMute() {
+  const muted = deviceClient?.state?.muted;
+  if (typeof muted !== "boolean") return;
+  // A change the panel made itself is not a change to follow.
+  if (muted === sentDeviceMute) return;
+  sentDeviceMute = muted;
+  wroteMicMuted = muted;
+  micMuted = muted;
+  // The system microphone is the panel's microphone, so it is muted.
+  setSystemMicMuted(muted).then(() => sendState(true));
+}
+
+// followMicMute makes the device follow the system microphone.
+//
+// A microphone muted by something else — the keyboard's mute key, a
+// desktop's own control — turns the device's switch on, so that Home
+// Assistant shows what is really happening.
+function followMicMute(muted) {
+  // A change the panel made itself is not a change to follow.
+  if (muted === wroteMicMuted) return;
+  wroteMicMuted = muted;
+  sentDeviceMute = muted;
+  micMuted = muted;
+  if (controlClient) controlClient.sendMute(muted);
+}
+
+// setMute mutes the microphone, or unmutes it.
+//
+// The mute is the microphone's, because the microphone is what the
+// mute button is next to: the panel's own microphone, so the room
+// stops hearing the person in front of it.
+//
+// It is best effort: a machine with no mixer is not a failure, it is a
+// machine whose microphone cannot be muted from here.
 async function setMute(muted) {
   const value = Boolean(muted);
-  await setSystemVolumeMuted(value);
-  systemMuted = value;
+  await setSystemMicMuted(value);
+  // What the panel wrote and what it told the device are remembered, so
+  // that neither is taken for a change from outside.
+  wroteMicMuted = value;
+  sentDeviceMute = value;
+  micMuted = value;
+  // The device program owns the microphone, so it is told to be quiet.
+  //
+  // It is told rather than done here, so that Home Assistant's switch
+  // and the microphone are the same thing: the switch is what Home
+  // Assistant reads, and the microphone is what it means.
+  if (controlClient) controlClient.sendMute(value);
   // The drawer shows the mute, so it has to be told.
   sendState(true);
 }
@@ -716,7 +786,7 @@ async function setMute(muted) {
 //
 // The names are the ones the panel has always used, so an automation
 // that was written against the old broker still works.
-function handleCommand(command) {
+async function handleCommand(command) {
   if (typeof command === "string") {
     try { command = JSON.parse(command); } catch { command = { action: command }; }
   }
@@ -738,7 +808,15 @@ function handleCommand(command) {
       openMode("url", command.url || command.target || command.value || "", command.duration);
       break;
     case "brightness": recordActivity("home-assistant"); setBrightness(command.value); break;
-    case "volume": recordActivity("home-assistant"); setVolume(command.value); break;
+    // The volume the device program sends is the speaker's volume, and
+    // the speaker's volume follows the mixer. So the mixer is read and
+    // not written: the device program is telling the panel what the
+    // mixer is saying, and the panel writing it back would be the panel
+    // arguing with itself.
+    //
+    // The one thing that writes the mixer is a person reaching for the
+    // volume, or Home Assistant asking for it.
+    case "volume": recordActivity("home-assistant"); await refreshVolume(); break;
     case "notification": recordActivity("home-assistant"); showNotice(command); break;
     case "dismiss_notification": sendToOverlay("app:dismiss-notification"); break;
     case "set_mode":
@@ -1049,7 +1127,17 @@ async function startDeviceProgram() {
     // needs the key and the name the panel is known by.
     esphomeKey: settings.esphomeEncryptionKey || "",
     esphomeName: settings.esphomeDeviceName || identity,
-    onState: () => sendDeviceState(),
+    onState: () => {
+      sendDeviceState();
+      // The device's mute is the microphone's, and it is the panel's
+      // microphone: the panel mutes the system's microphone so the room
+      // stops hearing the person in front of it.
+      //
+      // The two are the same thing said in two places, and each one
+      // tells the other what it has just been told. So a change in
+      // either settles rather than going round.
+      followDeviceMute();
+    },
     onLog: (message) => { if (message) console.info("device:", message); },
   });
 
@@ -1284,8 +1372,14 @@ function registerIpc() {
     // The drawer shows the volume, and the volume can be changed by
     // something other than the panel, so the mixer is followed while the
     // drawer is open.
-    if (open) watchVolume();
-    else stopWatchingVolume();
+    // The mixer is followed whatever the drawer is doing, because the
+    // device program's speaker follows it and the drawer is not the only
+    // thing that shows the volume.
+    //
+    // The watcher is always running, so this is not needed here. It is
+    // left so that the drawer's opening still reads the mixer at once
+    // rather than waiting for the watcher.
+    if (open) await refreshVolume();
   });
   ipcMain.on("app:keyboard", (event, visible) => { assertOverlaySender(event); setKeyboardVisible(visible); });
   ipcMain.handle("app:set-brightness", (event, value) => { assertOverlaySender(event); return setBrightness(value); });
@@ -1395,15 +1489,18 @@ app.whenReady().then(async () => {
   healthChecker.start();
   registerIpc();
   createWindow();
-  // The volume is read once when the app starts. It is read again when
-  // the drawer opens, because the mixer may have been changed by
-  // something else while the drawer was shut, but reading it here means
-  // the first drawer has it rather than showing it a moment after it
-  // opens.
+  // The volume is read once when the app starts, and the mixer is
+  // followed from then on.
+  //
+  // The mixer is followed whatever the drawer is doing, because the
+  // device program's speaker follows it: a volume changed by the
+  // keyboard's media keys has to reach the speaker as well as the
+  // drawer, and the drawer is shut most of the time.
   //
   // It is not waited for: the panel is the thing a person is waiting
   // for, and a quarter of a second of mixer work does not hold it up.
   refreshVolume();
+  watchVolume();
   // The device program is started before the control socket is opened.
   //
   // The socket is made by the device program, and it makes a new one

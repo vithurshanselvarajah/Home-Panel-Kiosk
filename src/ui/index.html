@@ -34,13 +34,16 @@
         </div>
         <div class="quick-control" id="volume-control" hidden>
           <div class="quick-control__head">
-            <button class="quick-control__mute" id="volume-mute" aria-label="Mute" aria-pressed="false">
-              <span aria-hidden="true">♪</span>
-            </button>
+            <span class="quick-control__icon" aria-hidden="true">♪</span>
             <span class="quick-control__label">Volume</span>
             <span class="quick-control__value" id="volume-value">—</span>
           </div>
-          <input class="slider" id="volume-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Volume" />
+          <div class="quick-control__row">
+            <input class="slider" id="volume-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Volume" />
+            <button class="mic-mute" id="mic-mute" aria-label="Mute the microphone" aria-pressed="false">
+              <span class="mic-mute__icon" aria-hidden="true">🎙</span>
+            </button>
+          </div>
         </div>
       </section>
       <!-- The music. It is here rather than in the settings because it is
@@ -87,7 +90,6 @@
         <div class="service-row"><i class="service-led" data-service="control"></i><span>ESPHome</span><b id="control-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="immich"></i><span>Immich Kiosk</span><b id="immich-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="dashboard"></i><span>Dashboard</span><b id="dashboard-state">Checking</b></div>
-        <div class="service-row" id="voice-row" hidden><i class="service-led" data-service="voice"></i><span>Voice assistant</span><b id="voice-state">Unknown</b></div>
       </section>
       <footer class="drawer-footer">
         <span id="mode-label">Dashboard</span>

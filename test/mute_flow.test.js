@@ -35,7 +35,7 @@ test("the mute can be set from the drawer", () => {
 
 test("the drawer shows the mute", () => {
   assert.ok(
-    html.includes('id="volume-mute"'),
+    html.includes('id="mic-mute"'),
     "there is no mute button",
   );
   assert.ok(
@@ -44,11 +44,11 @@ test("the drawer shows the mute", () => {
   );
 });
 
-test("the volume icon is the mute button", () => {
-  // The icon was there and is a button now, so the volume's own icon
-  // can be pressed.
+test("the mute button has its own colour", () => {
+  // The microphone's mute is red when it is muted and green when it is
+  // not, so the state is seen rather than read.
   assert.ok(
-    html.includes('class="quick-control__mute"'),
+    html.includes('class="mic-mute"'),
     "the mute button is not styled as one",
   );
 });

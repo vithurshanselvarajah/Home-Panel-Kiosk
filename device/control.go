@@ -107,6 +107,13 @@ type ControlServer struct {
 	log *slog.Logger
 	// onCommand is called when the panel asks for something.
 	onCommand func(ControlCommand)
+	// onMute is called when the panel asks for the microphone to be
+	// muted.
+	//
+	// The mute is the microphone's: a person who mutes the panel wants
+	// the room to stop hearing them, and they still want to hear the
+	// music.
+	onMute func(muted bool)
 	// onVolume is called when the panel reports a volume.
 	//
 	// The panel's volume is the speaker's volume, and the speaker is
@@ -269,6 +276,18 @@ func (s *ControlServer) handle(message ControlMessage) {
 		if handler != nil {
 			handler(message.Command)
 		}
+	case "mute":
+		// The panel mutes the microphone.
+		//
+		// The mute is the microphone's, and the device is the one that
+		// owns the microphone, so the panel asks for it rather than
+		// doing it itself.
+		s.mu.Lock()
+		handler := s.onMute
+		s.mu.Unlock()
+		if handler != nil {
+			handler(message.Muted)
+		}
 	case "listen":
 		// The panel is asking the device to start listening.
 		//
@@ -307,6 +326,11 @@ type ControlMessage struct {
 	// It is always sent, even when it is false, because "not connected"
 	// is the answer half the time.
 	Connected bool `json:"connected"`
+	// Muted says whether the microphone is muted, for the mute message.
+	//
+	// The mute is the microphone's, so the panel asks the device
+	// program for it: the device program owns the microphone.
+	Muted bool `json:"muted,omitempty"`
 }
 
 // TransportCommand is what the panel asks of the music transport.
@@ -376,6 +400,14 @@ func (s *ControlServer) writeMessage(conn net.Conn, message ControlMessage) erro
 func (s *ControlServer) SetListenHandler(fn func(phrase string)) {
 	s.mu.Lock()
 	s.onListen = fn
+	s.mu.Unlock()
+}
+
+// SetMuteHandler sets what is called when the panel asks for the
+// microphone to be muted.
+func (s *ControlServer) SetMuteHandler(fn func(muted bool)) {
+	s.mu.Lock()
+	s.onMute = fn
 	s.mu.Unlock()
 }
 

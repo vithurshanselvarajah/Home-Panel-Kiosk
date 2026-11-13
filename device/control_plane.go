@@ -669,6 +669,23 @@ func (p *ControlPlane) OnTransport(fn func(command TransportCommand)) {
 	p.server.SetTransportHandler(fn)
 }
 
+// OnMute sets what is called when the panel asks for the microphone to
+// be muted.
+//
+// The mute is the microphone's, and the device program owns the
+// microphone, so the panel asks for it.
+// The mute is switched from two places: Home Assistant's switch on the
+// device, and the panel's own button. They are the same thing, so they
+// are handled the same way, and the entity is published either way —
+// so that what Home Assistant shows is what the microphone is really
+// doing.
+func (p *ControlPlane) OnMute() {
+	if p.server == nil {
+		return
+	}
+	p.server.SetMuteHandler(p.setMuted)
+}
+
 // OnListen sets what is called when something asks for a turn to
 // start.
 //

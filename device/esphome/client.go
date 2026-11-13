@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -182,6 +183,35 @@ func (c *Client) write(messageType uint32, message proto.Message) error {
 		return c.secure.writeEncrypted(messageType, payload)
 	}
 	return writeFrame(c.conn, messageType, payload)
+}
+
+// pingInterval is how often the device says something.
+//
+// It is well inside Home Assistant's minute of silence, so the
+// connection is never taken for a dead one.
+const pingInterval = 30 * time.Second
+
+// ping keeps the connection alive.
+//
+// Home Assistant waits for the device to say something and drops the
+// connection after a minute of silence, so a panel that is only
+// listening has to say something now and then.
+//
+// The ping is the protocol's own: a ping request and a ping reply, and
+// nothing is asked for.
+func (c *Client) ping(stop <-chan struct{}) {
+	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			if err := c.write(TypePingRequest, &PingRequest{}); err != nil {
+				return
+			}
+		}
+	}
 }
 
 // disconnect ends the connection politely.

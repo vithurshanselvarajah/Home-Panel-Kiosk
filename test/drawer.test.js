@@ -119,9 +119,9 @@ function page() {
   mediaPanel.appendChild(sourceHome);
   mediaPanel.appendChild(scrubber);
 
-  // The quick controls, with the volume's mute button.
+  // The quick controls, with the microphone's mute button.
   const quick = element("section", { class: "quick-controls" });
-  const mute = element("button", { id: "volume-mute" });
+  const mute = element("button", { id: "mic-mute" });
   quick.appendChild(mute);
 
   // The drawer's own actions.
