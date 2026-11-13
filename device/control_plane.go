@@ -308,7 +308,7 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, plane *Cont
 				plane.setDucking(value.Number)
 			case "muted":
 				plane.setMuted(value.Bool)
-			case "idle_slideshow_minutes", "slideshow_off_minutes", "touch_keyboard_enabled", "startup_volume":
+			case "idle_slideshow_minutes", "slideshow_off_minutes", "touch_keyboard_enabled", "startup_volume", "music_enabled", "music_unpaired":
 				var settingValue any
 				switch value.Kind {
 				case esphome.KindSwitch:
