@@ -10,7 +10,7 @@ const { createHealthChecker, probeHttp } = require("./health");
 const { DeviceClient, findSidecar } = require("./device");
 const { ControlClient, findControlSocket } = require("./control");
 const { moveCachesToMemory } = require("./caches");
-const { systemVolumePercent, setSystemVolume } = require("./volume");
+const { systemVolumePercent, setSystemVolume, systemVolumeMuted, setSystemVolumeMuted } = require("./volume");
 
 const DEFAULTS = {
   configured: false,
@@ -212,7 +212,7 @@ function sendToOverlay(channel, payload) {
 // again while the drawer is shut, so a drawer that was not there when
 // the state last changed has never been told about it.
 function sendState(force = false) {
-  const state = { mode, displayIsOff, keyboardVisible, sidePanelOpen, displayMode: displayMode(), brightness: currentBrightness(), volume: currentVolume(), version: app.getVersion(), serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
+  const state = { mode, displayIsOff, keyboardVisible, sidePanelOpen, displayMode: displayMode(), brightness: currentBrightness(), volume: currentVolume(), muted: currentMute(), version: app.getVersion(), serviceStatus: { ...serviceStatus }, lastActivity: new Date(lastActivity).toISOString() };
   const fingerprint = `${state.mode}|${state.displayIsOff}|${state.keyboardVisible}|${state.sidePanelOpen}|${state.displayMode}|${state.brightness}|${state.volume}|${JSON.stringify(state.serviceStatus)}`;
   if (force || fingerprint !== lastSentState) {
     lastSentState = fingerprint;
@@ -563,8 +563,19 @@ function currentBrightness() {
 // drawer opens and when the volume is changed.
 let systemVolume = null;
 
+// systemMuted is whether the mixer is muted.
+//
+// It is null when the mixer cannot say, and the drawer shows the
+// volume on its own when it cannot.
+let systemMuted = null;
+
 function currentVolume() {
   return systemVolume;
+}
+
+// currentMute is whether the mixer is muted.
+function currentMute() {
+  return systemMuted;
 }
 
 // refreshVolume reads the volume of the mixer.
@@ -576,6 +587,8 @@ async function refreshVolume() {
   const value = await systemVolumePercent();
   if (value === null) return false;
   systemVolume = value;
+  // The mute is read with the volume, because it is the same answer.
+  systemMuted = await systemVolumeMuted();
   // The state is sent whatever the value is. The overlay is destroyed and
   // made again while the drawer is shut, so a drawer that was not there
   // when the volume was last read has never been told what it is.
@@ -606,10 +619,12 @@ function watchVolume() {
   volumeWatcher = setInterval(async () => {
     const value = await systemVolumePercent();
     if (value === null) return;
+    const muted = await systemVolumeMuted();
     // The panel's own change is not a change from outside, and it has
     // already been sent.
-    if (value === systemVolume) return;
+    if (value === systemVolume && muted === systemMuted) return;
     systemVolume = value;
+    systemMuted = muted;
     sendState(true);
   }, volumeWatchInterval);
   // The watcher is not what should keep the app alive.
@@ -664,9 +679,32 @@ async function setBrightness(value) {
 async function setVolume(value) {
   const percent = Math.max(0, Math.min(100, Number(value)));
   if (!Number.isFinite(percent)) return;
+  // Reaching for the volume is reaching for the sound, so a muted
+  // mixer is unmuted. A person who wants it quiet can mute it again.
+  //
+  // The mute is read first, because the panel may not know it yet: the
+  // mixer may have been muted by something else while the drawer was
+  // shut.
+  const muted = await systemVolumeMuted();
+  if (muted) {
+    systemMuted = false;
+    await setSystemVolumeMuted(false);
+  }
   await setSystemVolume(percent);
   // The drawer shows the volume, so it has to be told.
   await refreshVolume();
+}
+
+// setMute mutes the system, or unmutes it.
+//
+// The mute is the system's own, because the volume is: a person who
+// reaches for the volume on a panel expects the volume of the room.
+async function setMute(muted) {
+  const value = Boolean(muted);
+  await setSystemVolumeMuted(value);
+  systemMuted = value;
+  // The drawer shows the mute, so it has to be told.
+  sendState(true);
 }
 
 // handleCommand acts on a command.
@@ -1252,6 +1290,7 @@ function registerIpc() {
   ipcMain.on("app:keyboard", (event, visible) => { assertOverlaySender(event); setKeyboardVisible(visible); });
   ipcMain.handle("app:set-brightness", (event, value) => { assertOverlaySender(event); return setBrightness(value); });
   ipcMain.handle("app:set-volume", (event, value) => { assertOverlaySender(event); return setVolume(value); });
+  ipcMain.handle("app:set-mute", (event, value) => { assertOverlaySender(event); return setMute(value); });
   ipcMain.on("app:keyboard-key", (event, key) => { assertOverlaySender(event); sendKeyboardKey(key); });
   ipcMain.on("remote:text-input", (event, focused) => {
     if (event.sender !== win?.webContents) return;

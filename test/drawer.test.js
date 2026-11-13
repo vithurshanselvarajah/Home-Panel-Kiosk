@@ -119,18 +119,24 @@ function page() {
   mediaPanel.appendChild(sourceHome);
   mediaPanel.appendChild(scrubber);
 
+  // The quick controls, with the volume's mute button.
+  const quick = element("section", { class: "quick-controls" });
+  const mute = element("button", { id: "volume-mute" });
+  quick.appendChild(mute);
+
   // The drawer's own actions.
   const dashboard = element("button", { id: "dashboard-button", dataset: { action: "dashboard" } });
   const settings = element("button", { id: "settings-button" });
   const displayMode = element("button", { id: "display-mode-button" });
   const exit = element("button", { id: "exit-button" });
   drawer.appendChild(mediaPanel);
+  drawer.appendChild(quick);
   drawer.appendChild(dashboard);
   drawer.appendChild(settings);
   drawer.appendChild(displayMode);
   drawer.appendChild(exit);
 
-  return { drawer, backdrop, mediaPanel, previous, play, next, sourceServer, sourceHome, scrubber, dashboard, settings, displayMode, exit };
+  return { drawer, backdrop, mediaPanel, previous, play, next, sourceServer, sourceHome, scrubber, quick, mute, dashboard, settings, displayMode, exit };
 }
 
 // press clicks a button.
@@ -236,6 +242,15 @@ test("the music's scrubber leaves the drawer open", () => {
     fn({ target: page.scrubber, preventDefault() {}, stopPropagation() {} });
   }
   assert.equal(closed.length, 0, "the drawer closed when the music was scrubbed");
+});
+
+test("the mute button leaves the drawer open", () => {
+  // The mute is a button inside the drawer, and the drawer used to
+  // close on every button.
+  const page = build();
+  const { closed } = handler(page);
+  press(page.mute);
+  assert.equal(closed.length, 0, "the drawer closed when the sound was muted");
 });
 
 test("the settings button closes the drawer", () => {

@@ -35,6 +35,15 @@ function parseFraction(text) {
   return Math.round(Math.max(0, Math.min(1, value)) * 100);
 }
 
+// Whether the mixer says it is muted.
+//
+// PipeWire and PulseAudio both put "[MUTED]" after the volume when the
+// sink is muted, so the mute is read from the same answer as the
+// volume rather than by asking again.
+function parseMuted(text) {
+  return /\[MUTED\]/i.test(text || "");
+}
+
 // The volume from amixer, which prints a percentage.
 function parseAlsa(text) {
   const match = /\[(\d+)%\]/.exec(text || "");
@@ -62,6 +71,15 @@ async function findMixer() {
     mixer = {
       read: async () => parseFraction(await run("wpctl", ["get-volume", "@DEFAULT_AUDIO_SINK@"])),
       write: (percent) => run("wpctl", ["set-volume", "@DEFAULT_AUDIO_SINK@", `${(percent / 100).toFixed(2)}`]),
+      // The mute is read from the volume, because that is where it is
+      // written: PipeWire prints "Volume: 0.65 [MUTED]" for a muted
+      // sink. There is no command that says it on its own.
+      readMuted: async () => {
+        const answer = await run("wpctl", ["get-volume", "@DEFAULT_AUDIO_SINK@"]);
+        if (answer === null) return null;
+        return parseMuted(answer);
+      },
+      writeMuted: (muted) => run("wpctl", ["set-mute", "@DEFAULT_AUDIO_SINK@", muted ? "1" : "0"]),
     };
     return mixer;
   }
@@ -72,6 +90,15 @@ async function findMixer() {
     mixer = {
       read: async () => parseFraction(await run("pactl", ["get-sink-volume", "@DEFAULT_SINK@"])),
       write: (percent) => run("pactl", ["set-sink-volume", "@DEFAULT_SINK@", `${(percent / 100).toFixed(2)}`]),
+      // The mute is read from the volume, because that is where it is
+      // written: PulseAudio prints "Volume: 0.65 [MUTED]" for a muted
+      // sink, the same as PipeWire does.
+      readMuted: async () => {
+        const answer = await run("pactl", ["get-sink-volume", "@DEFAULT_SINK@"]);
+        if (answer === null) return null;
+        return parseMuted(answer);
+      },
+      writeMuted: (muted) => run("pactl", ["set-sink-mute", "@DEFAULT_SINK@", muted ? "1" : "0"]),
     };
     return mixer;
   }
@@ -83,6 +110,12 @@ async function findMixer() {
     mixer = {
       read: async () => parseAlsa(await run("amixer", ["sget", "Master"])),
       write: (percent) => run("amixer", ["sset", "Master", `${percent}%`]),
+      readMuted: async () => {
+        const answer = await run("amixer", ["sget", "Master"]);
+        if (answer === null) return null;
+        return /\[off\]/.test(answer);
+      },
+      writeMuted: (muted) => run("amixer", ["sset", "Master", muted ? "off" : "on"]),
     };
     return mixer;
   }
@@ -114,4 +147,29 @@ async function setSystemVolume(percent) {
   return true;
 }
 
-module.exports = { systemVolumePercent, setSystemVolume };
+// systemVolumeMuted says whether the system is muted.
+//
+// It is null when the mixer cannot say, which is a mixer that does not
+// know about muting rather than a system that is not muted.
+async function systemVolumeMuted() {
+  const found = await findMixer();
+  if (!found || !found.readMuted) return null;
+  return found.readMuted();
+}
+
+// setSystemVolumeMuted mutes the system, or unmutes it.
+//
+// It is best effort, like the volume itself.
+async function setSystemVolumeMuted(muted) {
+  const found = await findMixer();
+  if (!found || !found.writeMuted) return false;
+  await found.writeMuted(Boolean(muted));
+  return true;
+}
+
+module.exports = {
+  systemVolumePercent,
+  setSystemVolume,
+  systemVolumeMuted,
+  setSystemVolumeMuted,
+};

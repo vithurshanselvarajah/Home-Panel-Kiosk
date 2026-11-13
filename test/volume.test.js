@@ -16,6 +16,7 @@ const vm = require("node:vm");
 
 // The mixer the test pretends is there.
 let mixerValue = 50;
+let mixerMuted = false;
 
 // The main process's source.
 const root = path.join(__dirname, "..");
@@ -38,6 +39,8 @@ function run() {
   const sandbox = {
     systemVolumePercent: async () => mixerValue,
     setSystemVolume: async (percent) => { mixerValue = percent; return true; },
+    systemVolumeMuted: async () => mixerMuted,
+    setSystemVolumeMuted: async (muted) => { mixerMuted = muted; return true; },
     sendState: (force) => sent.push({ force }),
     console,
     setInterval: (fn, ms) => { timers.push({ fn, ms, alive: true }); return timers.length - 1; },
@@ -98,6 +101,41 @@ test("the panel does not chase a volume it set itself", async () => {
   sent.length = 0;
   await sandbox.tick();
   assert.equal(sent.length, 0, "the panel chased its own change");
+});
+
+test("the mute is read with the volume", async () => {
+  mixerValue = 50;
+  mixerMuted = true;
+  const { sandbox } = run();
+  await sandbox.refreshVolume();
+  assert.equal(sandbox.currentMute(), true, "the mute was not read");
+});
+
+test("the drawer follows a mute changed outside the panel", async () => {
+  mixerValue = 50;
+  mixerMuted = false;
+  const { sandbox, sent } = run();
+
+  sandbox.watchVolume();
+  sent.length = 0;
+
+  // Something outside the panel mutes the system.
+  mixerMuted = true;
+  await sandbox.tick();
+
+  assert.equal(sandbox.currentMute(), true, "the panel did not follow the mute");
+  assert.equal(sent.length, 1, "the drawer was not told about the mute");
+});
+
+test("reaching for the volume unmutes the system", async () => {
+  mixerValue = 50;
+  mixerMuted = true;
+  const { sandbox } = run();
+
+  await sandbox.setVolume(70);
+
+  assert.equal(mixerMuted, false, "the system was left muted");
+  assert.equal(sandbox.currentMute(), false, "the panel still says it is muted");
 });
 
 test("the watcher stops when the drawer closes", async () => {
