@@ -257,9 +257,14 @@ func runChaosPlan(t *testing.T, d *device, plan chaosPlan) {
 
 	// The panel is still connected. A transport command that takes the
 	// connection down is a fault in its own right.
-	state, _ := d.lastState()
-	if state.Connection != "connected" {
-		t.Errorf("the panel dropped its connection: %s", state.Connection)
+	//
+	// The connection is waited for rather than looked at, because
+	// Home Assistant reloads its entry from time to time and the panel
+	// is reconnected when it does. A panel that is reconnecting is not
+	// a panel whose transport broke the connection.
+	_, connected := d.waitForConnected(20 * time.Second)
+	if !connected {
+		t.Errorf("the panel dropped its connection")
 		for _, line := range d.logs() {
 			t.Logf("the device said: %s", line)
 		}
@@ -352,4 +357,22 @@ func TestTheTransportCommandsAreAllUnderstood(t *testing.T) {
 		}
 	}
 	t.Logf("the device program said %d things about the transport", len(logs))
+}
+
+// waitForConnected waits for the panel to be connected.
+//
+// It says whether it connected. The panel is reconnected when Home
+// Assistant reloads its entry, so a panel that is not connected at one
+// moment is not a panel that has broken.
+func (d *device) waitForConnected(within time.Duration) (deviceState, bool) {
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		state, found := d.lastState()
+		if found && state.Connection == "connected" {
+			return state, true
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	state, _ := d.lastState()
+	return state, false
 }
