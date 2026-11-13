@@ -129,3 +129,40 @@ func livePlayer(t *testing.T) string {
 	t.Fatalf("Home Assistant has no panel media player that is available: %v", haEntities(t, "media_player"))
 	return ""
 }
+
+// TestThePanelSurvivesTheMediaPlaying checks that the panel stays
+// connected to Home Assistant while the music plays.
+//
+// The music goes through the panel's own proxy, and a panel that drops
+// its connection when the music starts is a panel that cannot be
+// controlled while the music is playing.
+func TestThePanelSurvivesTheMediaPlaying(t *testing.T) {
+	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
+
+	d := startDevice(t, "")
+	d.waitFor("connected to Home Assistant", 90*time.Second, func(s deviceState) bool {
+		return s.Connection == "connected"
+	})
+
+	player := livePlayer(t)
+	post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
+		"entity_id":          player,
+		"media_content_id":   "media-source://radio_browser/" + liveStation(t),
+		"media_content_type": "music",
+	})
+
+	// The music plays for a while, and the panel stays connected.
+	d.waitFor("playing the station", 90*time.Second, func(s deviceState) bool {
+		return s.MediaState == "playing"
+	})
+
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		state, _ := d.lastState()
+		if state.Connection != "connected" {
+			t.Fatalf("the panel dropped its connection while the music was playing: %s", state.Connection)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Log("the panel stayed connected while the music played")
+}
