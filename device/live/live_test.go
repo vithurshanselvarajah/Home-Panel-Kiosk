@@ -128,7 +128,10 @@ func post(t *testing.T, url, token string, body any) map[string]any {
 // would fail for a reason that has nothing to do with what it is
 // testing.
 func waitForFreePort(port int) {
-	for attempt := 0; attempt < 30; attempt++ {
+	// A device that has just been stopped takes a moment to let go of
+	// its ports, so the wait is a few seconds rather than a few
+	// attempts.
+	for attempt := 0; attempt < 100; attempt++ {
 		listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 		if err == nil {
 			_ = listener.Close()
