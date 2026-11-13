@@ -74,6 +74,11 @@ function displayMode(value) {
   return DISPLAY_MODES.includes(value) ? value : "fullscreen";
 }
 
+function hostIdentity(value) {
+  const hostname = String(value || "").trim();
+  return hostname || "home-panel";
+}
+
 // The bounds of the window in windowed mode.
 //
 // A window that fills the screen is a fullscreen window with a title bar, so
@@ -94,4 +99,4 @@ function windowBounds(bounds) {
   };
 }
 
-module.exports = { safeUrl, editFieldValue, settingNumber, settingBoolean, displayMode, windowBounds, DISPLAY_MODES };
+module.exports = { safeUrl, editFieldValue, settingNumber, settingBoolean, displayMode, windowBounds, hostIdentity, DISPLAY_MODES };
