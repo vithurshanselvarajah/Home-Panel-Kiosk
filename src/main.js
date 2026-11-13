@@ -583,6 +583,56 @@ async function refreshVolume() {
   return true;
 }
 
+// The volume watcher.
+//
+// The volume can be changed by something other than the panel: the
+// keyboard's media keys, a desktop's own control, an automation. So the
+// panel watches the mixer while the drawer is open and follows it.
+//
+// It watches only while the drawer is open, because a drawer that is
+// shut does not show the volume, and a command every few hundred
+// milliseconds for nothing is a machine doing work for no reason.
+//
+// It stops when the panel is shutting down.
+let volumeWatcher = null;
+
+// watchVolume follows the mixer's volume while the drawer is open.
+//
+// It is called when the drawer opens and stopped when it closes. The
+// first reading is not a change, so it does not send the state: the
+// drawer has just been given the volume.
+function watchVolume() {
+  stopWatchingVolume();
+  volumeWatcher = setInterval(async () => {
+    const value = await systemVolumePercent();
+    if (value === null) return;
+    // The panel's own change is not a change from outside, and it has
+    // already been sent.
+    if (value === systemVolume) return;
+    systemVolume = value;
+    sendState(true);
+  }, volumeWatchInterval);
+  // The watcher is not what should keep the app alive.
+  if (typeof volumeWatcher.unref === "function") volumeWatcher.unref();
+}
+
+// stopWatchingVolume stops following the mixer.
+function stopWatchingVolume() {
+  // The check is against null and not for truthiness: a timer's number
+  // may be zero, and zero is a timer like any other.
+  if (volumeWatcher !== null) {
+    clearInterval(volumeWatcher);
+    volumeWatcher = null;
+  }
+}
+
+// volumeWatchInterval is how often the mixer is read while the drawer
+// is open.
+//
+// It is quick enough that a change is seen as it happens and slow
+// enough that it is not a busy loop.
+const volumeWatchInterval = 500;
+
 async function setBrightness(value) {
   const percent = Math.max(0, Math.min(100, Number(value)));
   if (!Number.isFinite(percent)) return;
@@ -1193,6 +1243,11 @@ function registerIpc() {
     // new one a moment later, which is the delay this is here to remove.
     if (open) await refreshVolume();
     setSidePanel(open);
+    // The drawer shows the volume, and the volume can be changed by
+    // something other than the panel, so the mixer is followed while the
+    // drawer is open.
+    if (open) watchVolume();
+    else stopWatchingVolume();
   });
   ipcMain.on("app:keyboard", (event, visible) => { assertOverlaySender(event); setKeyboardVisible(visible); });
   ipcMain.handle("app:set-brightness", (event, value) => { assertOverlaySender(event); return setBrightness(value); });
@@ -1334,6 +1389,7 @@ app.whenReady().then(async () => {
 app.on("before-quit", (event) => {
   if (quitting) return;
   healthChecker.stop();
+  stopWatchingVolume();
   cancelIdleTimers(); clearTimeout(urlTimer); clearTimeout(viewRetryTimer); clearTimeout(notificationTimer);
   // The sidecar holds the microphone and the speaker, so it is stopped
   // before the process that owns it goes away. Otherwise the system waits

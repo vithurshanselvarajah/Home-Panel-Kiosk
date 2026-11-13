@@ -278,10 +278,18 @@ drawer.addEventListener("click", (event) => {
     window.homePanel.setDisplayMode(displayMode === "fullscreen" ? "window" : "fullscreen");
     return;
   }
-  // The music's transport buttons are theirs: the drawer stays open
-  // while the music is being driven, because closing it on every press
-  // makes the music impossible to control.
-  if (button.dataset.transport) return;
+  // The media panel's controls are theirs: the drawer stays open while
+  // the music is being driven, because closing it on every press makes
+  // the music impossible to control.
+  //
+  // The sliders do not come here at all — they are inputs rather than
+  // buttons — so the volume and the brightness have always left the
+  // drawer open. The media panel has buttons, so it has to say that its
+  // buttons are not drawer actions.
+  if (button.dataset.transport || button.dataset.source) return;
+  // A control inside the media panel is not a drawer action, whatever
+  // it is.
+  if (button.closest(".media-panel")) return;
   const action = button.dataset.action;
   if (action) window.homePanel.command({ action });
   else if (button.id === "settings-button") openSettings();
