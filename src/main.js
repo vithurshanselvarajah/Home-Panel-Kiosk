@@ -746,9 +746,16 @@ async function setBrightness(value) {
 async function setVolume(value) {
   const percent = Math.max(0, Math.min(100, Number(value)));
   if (!Number.isFinite(percent)) return;
-  await setSystemVolume(percent);
-  // The drawer shows the volume, so it has to be told.
-  await refreshVolume();
+  return withMuteLock(async () => {
+    if (!await setSystemVolume(percent)) return false;
+    const reading = await systemVolumeAndMicMute();
+    if (reading.volume !== null) systemVolume = reading.volume;
+    micMuted = reading.muted;
+    // A remote volume command is reflected in the drawer and published back
+    // to Home Assistant after the system mixer confirms its actual level.
+    sendState(true);
+    return true;
+  });
 }
 
 // followDeviceMute makes the system microphone follow the device's.
@@ -916,15 +923,9 @@ async function handleCommand(command) {
       openMode("url", command.url || command.target || command.value || "", command.duration);
       break;
     case "brightness": recordActivity("home-assistant"); setBrightness(command.value); break;
-    // The volume the device program sends is the speaker's volume, and
-    // the speaker's volume follows the mixer. So the mixer is read and
-    // not written: the device program is telling the panel what the
-    // mixer is saying, and the panel writing it back would be the panel
-    // arguing with itself.
-    //
-    // The one thing that writes the mixer is a person reaching for the
-    // volume, or Home Assistant asking for it.
-    case "volume": recordActivity("home-assistant"); await refreshVolume(); break;
+    // A remote volume change (Music Assistant or Home Assistant) is
+    // applied to the system mixer, then read back into the panel state.
+    case "volume": recordActivity("home-assistant"); await setVolume(command.value); break;
     case "notification": recordActivity("home-assistant"); showNotice(command); break;
     case "dismiss_notification": sendToOverlay("app:dismiss-notification"); break;
     case "set_mode":
