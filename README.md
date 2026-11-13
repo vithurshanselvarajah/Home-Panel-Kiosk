@@ -35,6 +35,8 @@ Copy the key into Home Assistant when the panel is added: it asks for it.
 
 The key is kept out of the settings file and encrypted with Electron `safeStorage`, the same way a password would be.
 
+The key also protects Sendspin pairing: the device withholds its Sendspin pairing token unless the ESPHome API has a configured encryption key. Sendspin itself always encrypts its session with Noise. The Home Assistant **Music · Allow unpaired servers** setting controls guest access; turning guest access off requires a server to pair, but does not turn encryption on or off.
+
 ### The entities
 
 | Entity | Kind | What it does |

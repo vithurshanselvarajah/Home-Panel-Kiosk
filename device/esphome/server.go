@@ -866,6 +866,13 @@ func (s *Server) sendspinClientID() string {
 // better than saying "not ready" for ever, because the music server
 // asks again later.
 func (s *Server) sendspinPairingToken() *SendspinPairingTokenResponse {
+	// The token contains the Sendspin pre-shared key. Do not send it over
+	// an ESPHome connection that is merely using the public provisioning key.
+	if s.encryptionKey == "" {
+		return &SendspinPairingTokenResponse{
+			Status: SendspinPairingTokenStatus_SENDSPIN_PAIRING_TOKEN_STATUS_ENCRYPTION_REQUIRED,
+		}
+	}
 	player := s.sendspinPlayer()
 	if player == nil || !player.Enabled() {
 		return &SendspinPairingTokenResponse{

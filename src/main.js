@@ -871,9 +871,13 @@ async function handleCommand(command) {
     case "camera_capture": {
       let cameraData = "";
       let cameraError = "";
+      let cameraView;
       try {
-        if (!overlayView?.webContents || overlayView.webContents.isDestroyed()) throw new Error("Panel camera view is unavailable");
-        const dataURL = await overlayView.webContents.executeJavaScript(`(async () => {
+        ensureOverlayView();
+        cameraView = overlayView?.webContents;
+        if (!cameraView || cameraView.isDestroyed()) throw new Error("Panel camera view is unavailable");
+        if (cameraView.isLoadingMainFrame()) await waitForOverlayLoad(cameraView);
+        const dataURL = await cameraView.executeJavaScript(`(async () => {
           if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera capture is unavailable");
           const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 2, max: 5 } }, audio: false });
           try {
@@ -888,7 +892,11 @@ async function handleCommand(command) {
         })()`);
         cameraData = typeof dataURL === "string" && dataURL.startsWith("data:image/jpeg;base64,") ? dataURL.slice(23) : "";
         if (!cameraData) throw new Error("The camera returned no JPEG image");
-      } catch (error) { cameraError = error.message || "Camera capture failed"; }
+      } catch (error) {
+        cameraError = error?.message || String(error || "Camera capture failed");
+        console.warn("Panel camera capture failed:", cameraError);
+      }
+      if (!overlayExpanded && !sidePanelOpen && !keyboardVisible && mode !== "url" && !voiceOverlayFull) scheduleOverlayRecycle();
       controlClient?.sendCameraFrame(command.cameraRequestId, cameraData, cameraError);
       break;
     }
@@ -1277,6 +1285,26 @@ function createOverlayView() {
   overlayView.setBackgroundColor("#00000000");
   overlayView.webContents.loadFile(path.join(__dirname, "ui", "index.html"));
   overlayView.webContents.on("did-finish-load", sendState);
+}
+
+function waitForOverlayLoad(webContents) {
+  return new Promise((resolve, reject) => {
+    const finish = () => { cleanup(); resolve(); };
+    const fail = (_event, code, description, _url, isMainFrame) => {
+      if (!isMainFrame) return;
+      cleanup();
+      reject(new Error(`Panel camera view failed to load (${code}): ${description}`));
+    };
+    const destroyed = () => { cleanup(); reject(new Error("Panel camera view was closed")); };
+    const cleanup = () => {
+      webContents.removeListener("did-finish-load", finish);
+      webContents.removeListener("did-fail-load", fail);
+      webContents.removeListener("destroyed", destroyed);
+    };
+    webContents.once("did-finish-load", finish);
+    webContents.on("did-fail-load", fail);
+    webContents.once("destroyed", destroyed);
+  });
 }
 
 function destroyOverlayView() {
