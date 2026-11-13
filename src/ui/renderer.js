@@ -11,9 +11,13 @@ const voiceUI = window.VoiceUI ? window.VoiceUI.create({
     overlayWasUp = false;
     window.homePanel.voiceOverlay(false);
   },
-  row: $("#voice-row"),
-  state: $("#voice-state"),
-  led: document.querySelector('[data-service="voice"]'),
+  // The drawer has one row for the device's link to Home Assistant, so
+  // there is no separate row for the voice assistant: it is the same
+  // link and it says the same thing.
+  //
+  // The settings page has its own, because that is where the voice
+  // assistant's settings are and a person looking at them wants to
+  // know the assistant is there.
   statusLed: document.querySelector('[data-service="voice-settings"]'),
   statusLabel: $("#voice-status-label"),
   statusReason: $("#voice-status-reason"),
@@ -396,7 +400,7 @@ if (voiceForm) {
 
 const brightnessSlider = $("#brightness-slider");
 const volumeSlider = $("#volume-slider");
-const volumeMute = $("#volume-mute");
+const micMute = $("#mic-mute");
 const brightnessValue = $("#brightness-value");
 const volumeValue = $("#volume-value");
 const brightnessControl = $("#brightness-control");
@@ -424,17 +428,20 @@ function paintVolume(value) {
   if (volumeValue) volumeValue.textContent = `${percent}%`;
 }
 
-// paintMute shows whether the system is muted.
+// paintMute shows whether the microphone is muted.
 //
-// The icon is the same either way and the state is carried by the
-// button, because the icon is what the stylesheet draws and the state
-// is what a screen reader reads.
+// The microphone and not the speaker: a person who mutes the panel
+// wants the room to stop hearing them, and they still want to hear the
+// music.
+//
+// The button is green when the microphone is open and red when it is
+// muted, so the state is seen rather than read.
 function paintMute(muted) {
-  if (!volumeMute) return;
+  if (!micMute) return;
   const on = Boolean(muted);
-  volumeMute.classList.toggle("is-muted", on);
-  volumeMute.setAttribute("aria-pressed", String(on));
-  volumeMute.setAttribute("aria-label", on ? "Unmute" : "Mute");
+  micMute.classList.toggle("is-muted", on);
+  micMute.setAttribute("aria-pressed", String(on));
+  micMute.setAttribute("aria-label", on ? "Unmute the microphone" : "Mute the microphone");
 }
 
 // The slider is set on release rather than on every movement, because a
@@ -459,13 +466,14 @@ bindSlider(volumeSlider, (value) => {
   window.homePanel.setVolume(value);
 });
 
-// The mute button mutes the system, or unmutes it.
+// The mute button mutes the microphone, or unmutes it.
 //
-// The mute is the system's own, because the volume is: a person who
-// reaches for the volume on a panel expects the volume of the room.
-if (volumeMute) {
-  volumeMute.addEventListener("click", () => {
-    const muted = volumeMute.getAttribute("aria-pressed") !== "true";
+// The microphone and not the speaker: a person who mutes the panel
+// wants the room to stop hearing them, and they still want to hear the
+// music.
+if (micMute) {
+  micMute.addEventListener("click", () => {
+    const muted = micMute.getAttribute("aria-pressed") !== "true";
     window.homePanel.setMute(muted);
   });
 }
@@ -764,6 +772,18 @@ window.homePanel.onState((state) => {
     const led = document.querySelector(`[data-service="${service}"]`);
     led.dataset.status = value;
     $(`#${service}-state`).textContent = statusLabels[value] || "Unknown";
+  }
+  // The ESPHome row says when the microphone is muted.
+  //
+  // The mute is the microphone's, and the microphone belongs to the
+  // device, so it is the device's row that says so. A row that said
+  // "online" while the microphone was muted would be saying the device
+  // was working while it could not hear.
+  const controlState = $("#control-state");
+  if (controlState) {
+    const online = state.serviceStatus?.control === "online";
+    const muted = state.muted === true;
+    controlState.textContent = muted ? (online ? "Muted" : "Muted (offline)") : (statusLabels[state.serviceStatus?.control] || "Unknown");
   }
   // The keyboard follows what the main process says, because that is where
   // the setting is applied. A keyboard the main process has vetoed is

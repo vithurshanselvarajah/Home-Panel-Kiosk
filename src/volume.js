@@ -74,12 +74,15 @@ async function findMixer() {
       // The mute is read from the volume, because that is where it is
       // written: PipeWire prints "Volume: 0.65 [MUTED]" for a muted
       // sink. There is no command that says it on its own.
-      readMuted: async () => {
-        const answer = await run("wpctl", ["get-volume", "@DEFAULT_AUDIO_SINK@"]);
+      // The microphone is muted on the source, which is where the room
+      // comes in. Muting the sink would only silence the output, and the
+      // mute is the microphone's.
+      readMicMuted: async () => {
+        const answer = await run("wpctl", ["get-volume", "@DEFAULT_AUDIO_SOURCE@"]);
         if (answer === null) return null;
         return parseMuted(answer);
       },
-      writeMuted: (muted) => run("wpctl", ["set-mute", "@DEFAULT_AUDIO_SINK@", muted ? "1" : "0"]),
+      writeMicMuted: (muted) => run("wpctl", ["set-mute", "@DEFAULT_AUDIO_SOURCE@", muted ? "1" : "0"]),
     };
     return mixer;
   }
@@ -93,12 +96,12 @@ async function findMixer() {
       // The mute is read from the volume, because that is where it is
       // written: PulseAudio prints "Volume: 0.65 [MUTED]" for a muted
       // sink, the same as PipeWire does.
-      readMuted: async () => {
-        const answer = await run("pactl", ["get-sink-volume", "@DEFAULT_SINK@"]);
+      readMicMuted: async () => {
+        const answer = await run("pactl", ["get-source-volume", "@DEFAULT_SOURCE@"]);
         if (answer === null) return null;
         return parseMuted(answer);
       },
-      writeMuted: (muted) => run("pactl", ["set-sink-mute", "@DEFAULT_SINK@", muted ? "1" : "0"]),
+      writeMicMuted: (muted) => run("pactl", ["set-source-mute", "@DEFAULT_SOURCE@", muted ? "1" : "0"]),
     };
     return mixer;
   }
@@ -110,12 +113,15 @@ async function findMixer() {
     mixer = {
       read: async () => parseAlsa(await run("amixer", ["sget", "Master"])),
       write: (percent) => run("amixer", ["sset", "Master", `${percent}%`]),
-      readMuted: async () => {
-        const answer = await run("amixer", ["sget", "Master"]);
+      // ALSA has no one control for the microphone, so the capture
+      // controls are looked for: the first one that can be switched is
+      // the microphone.
+      readMicMuted: async () => {
+        const answer = await run("amixer", ["sget", "Capture"]);
         if (answer === null) return null;
         return /\[off\]/.test(answer);
       },
-      writeMuted: (muted) => run("amixer", ["sset", "Master", muted ? "off" : "on"]),
+      writeMicMuted: (muted) => run("amixer", ["sset", "Capture", muted ? "off" : "on"]),
     };
     return mixer;
   }
@@ -147,29 +153,29 @@ async function setSystemVolume(percent) {
   return true;
 }
 
-// systemVolumeMuted says whether the system is muted.
+// systemMicMuted says whether the system microphone is muted.
 //
 // It is null when the mixer cannot say, which is a mixer that does not
-// know about muting rather than a system that is not muted.
-async function systemVolumeMuted() {
+// know about the microphone rather than a microphone that is open.
+async function systemMicMuted() {
   const found = await findMixer();
-  if (!found || !found.readMuted) return null;
-  return found.readMuted();
+  if (!found || !found.readMicMuted) return null;
+  return found.readMicMuted();
 }
 
-// setSystemVolumeMuted mutes the system, or unmutes it.
+// setSystemMicMuted mutes the system microphone, or unmutes it.
 //
 // It is best effort, like the volume itself.
-async function setSystemVolumeMuted(muted) {
+async function setSystemMicMuted(muted) {
   const found = await findMixer();
-  if (!found || !found.writeMuted) return false;
-  await found.writeMuted(Boolean(muted));
+  if (!found || !found.writeMicMuted) return false;
+  await found.writeMicMuted(Boolean(muted));
   return true;
 }
 
 module.exports = {
   systemVolumePercent,
   setSystemVolume,
-  systemVolumeMuted,
-  setSystemVolumeMuted,
+  systemMicMuted,
+  setSystemMicMuted,
 };

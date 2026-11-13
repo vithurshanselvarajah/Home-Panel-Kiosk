@@ -703,8 +703,20 @@ func main() {
 		speaker_.setDuckDb(db)
 		log.Info("the ducking was set", "decibels", db)
 	})
+	// The mute is switched on or off.
+	//
+	// It is switched from two places: Home Assistant's switch on the
+	// device, and the panel's own button. They are the same thing, so
+	// they are handled the same way, and the entity is published either
+	// way — so that what Home Assistant shows is what the microphone is
+	// really doing.
+	//
+	// The mute is the microphone's and not the speaker's: a person who
+	// mutes the panel wants the room to stop hearing them, and they
+	// still want to hear the music.
 	control.OnMuted(func(muted bool) {
 		speaker_.setMuted(muted)
+		reporter.setMuted(muted)
 		log.Info("the mute was switched", "muted", muted)
 	})
 
@@ -919,6 +931,15 @@ func (r *stateReporter) setSpeaking(speaking bool) {
 	if speaking {
 		r.state.SetPhase(state.PhaseSpeaking, "")
 	}
+}
+
+// setMuted records that the microphone is muted.
+//
+// It goes into the state, because the panel shows it: the drawer says
+// when the device is muted, and a panel that is muted and says it is
+// online is saying the device is working while it cannot hear.
+func (r *stateReporter) setMuted(muted bool) {
+	r.state.SetMuted(muted)
 }
 
 // wakeLevel returns the microphone level, as a percentage.

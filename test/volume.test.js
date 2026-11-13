@@ -16,7 +16,7 @@ const vm = require("node:vm");
 
 // The mixer the test pretends is there.
 let mixerValue = 50;
-let mixerMuted = false;
+let micMuted = false;
 
 // The main process's source.
 const root = path.join(__dirname, "..");
@@ -39,9 +39,12 @@ function run() {
   const sandbox = {
     systemVolumePercent: async () => mixerValue,
     setSystemVolume: async (percent) => { mixerValue = percent; return true; },
-    systemVolumeMuted: async () => mixerMuted,
-    setSystemVolumeMuted: async (muted) => { mixerMuted = muted; return true; },
+    systemMicMuted: async () => micMuted,
+    setSystemMicMuted: async (muted) => { micMuted = muted; return true; },
     sendState: (force) => sent.push({ force }),
+    // The control client is what tells the device program, and it is
+    // not there when the panel is not connected.
+    controlClient: null,
     console,
     setInterval: (fn, ms) => { timers.push({ fn, ms, alive: true }); return timers.length - 1; },
     clearInterval: (id) => { if (timers[id]) timers[id].alive = false; },
@@ -105,7 +108,7 @@ test("the panel does not chase a volume it set itself", async () => {
 
 test("the mute is read with the volume", async () => {
   mixerValue = 50;
-  mixerMuted = true;
+  micMuted = true;
   const { sandbox } = run();
   await sandbox.refreshVolume();
   assert.equal(sandbox.currentMute(), true, "the mute was not read");
@@ -113,29 +116,31 @@ test("the mute is read with the volume", async () => {
 
 test("the drawer follows a mute changed outside the panel", async () => {
   mixerValue = 50;
-  mixerMuted = false;
+  micMuted = false;
   const { sandbox, sent } = run();
 
   sandbox.watchVolume();
   sent.length = 0;
 
-  // Something outside the panel mutes the system.
-  mixerMuted = true;
+  // Something outside the panel mutes the microphone.
+  micMuted = true;
   await sandbox.tick();
 
   assert.equal(sandbox.currentMute(), true, "the panel did not follow the mute");
   assert.equal(sent.length, 1, "the drawer was not told about the mute");
 });
 
-test("reaching for the volume unmutes the system", async () => {
+test("the mute is the microphone's", async () => {
+  // A person who mutes the panel wants the room to stop hearing them,
+  // and they still want to hear the music.
   mixerValue = 50;
-  mixerMuted = true;
+  micMuted = false;
   const { sandbox } = run();
 
-  await sandbox.setVolume(70);
+  await sandbox.setMute(true);
 
-  assert.equal(mixerMuted, false, "the system was left muted");
-  assert.equal(sandbox.currentMute(), false, "the panel still says it is muted");
+  assert.equal(micMuted, true, "the microphone was not muted");
+  assert.equal(sandbox.currentMute(), true, "the panel does not say it is muted");
 });
 
 test("the watcher stops when the drawer closes", async () => {
