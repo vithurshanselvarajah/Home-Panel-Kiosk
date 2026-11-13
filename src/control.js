@@ -160,6 +160,17 @@ class ControlClient {
     }
   }
 
+  sendCameraFrame(cameraRequestId, cameraData = "", cameraError = "") {
+    if (!this.connection || !this.connected) return false;
+    try {
+      this.connection.write(`${JSON.stringify({ action: "camera_frame", cameraRequestId, cameraData, cameraError })}\n`);
+      return true;
+    } catch (error) {
+      this.onLog(`the camera frame could not be sent: ${error.message}`);
+      return false;
+    }
+  }
+
   /**
    * Asks the device program to drive the music transport.
    *

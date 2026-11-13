@@ -1,10 +1,13 @@
 package esphome
 
 import (
+	"context"
 	"errors"
 	"net"
 	"strings"
 	"testing"
+
+	"google.golang.org/protobuf/proto"
 )
 
 // TestServerListsEntities checks that a client is told what the device
@@ -21,11 +24,12 @@ func TestServerListsEntities(t *testing.T) {
 	registry.Add(&Entity{Kind: KindButton, Name: "Wake", ObjectID: "wake", DeviceClass: "restart"})
 
 	server := NewServer(ServerOptions{
-		Name:         "home-panel",
-		FriendlyName: "Home Panel",
-		MAC:          "aabbccddeeff",
-		Version:      "0.0.2",
-		Registry:     registry,
+		Name:          "home-panel",
+		FriendlyName:  "Home Panel",
+		MAC:           "aabbccddeeff",
+		Version:       "0.0.2",
+		Registry:      registry,
+		CameraCapture: func(context.Context) ([]byte, error) { return []byte{0xff, 0xd8, 0xff}, nil },
 	})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -48,11 +52,11 @@ func TestServerListsEntities(t *testing.T) {
 			entities = append(entities, strings.TrimPrefix(line, "entity:"))
 		}
 	}
-	if len(entities) != 5 {
-		t.Fatalf("the client was told about %d entities, it should be 5: %v", len(entities), lines)
+	if len(entities) != 6 {
+		t.Fatalf("the client was told about %d entities, it should be 6: %v", len(entities), lines)
 	}
 	joined := strings.Join(entities, " ")
-	for _, want := range []string{"Screen", "Brightness", "View", "Notification", "Wake"} {
+	for _, want := range []string{"Screen", "Brightness", "View", "Notification", "Wake", "Camera"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the entity %q was not listed: %v", want, lines)
 		}
@@ -63,6 +67,56 @@ func TestServerListsEntities(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the entity kind %q was not what was expected: %v", want, lines)
 		}
+	}
+}
+
+func TestCameraImageRequestReturnsBoundedJPEGChunks(t *testing.T) {
+	image := make([]byte, 40*1024)
+	for index := range image {
+		image[index] = byte(index)
+	}
+	server := NewServer(ServerOptions{Registry: NewRegistry(), CameraCapture: func(context.Context) ([]byte, error) { return image, nil }})
+	device, peer := net.Pipe()
+	defer device.Close()
+	defer peer.Close()
+	client := &Client{conn: device}
+	payload, err := proto.Marshal(&CameraImageRequest{Single: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- server.handle(client, Frame{Type: TypeCameraImageRequest, Payload: payload}) }()
+	var received []byte
+	chunks := 0
+	for {
+		frame, err := readFrame(peer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if frame.Type != TypeCameraImageResponse {
+			t.Fatalf("got frame type %d, want camera image", frame.Type)
+		}
+		response := &CameraImageResponse{}
+		if err := proto.Unmarshal(frame.Payload, response); err != nil {
+			t.Fatal(err)
+		}
+		if response.Key != server.cameraKey() {
+			t.Fatalf("camera key %d does not match", response.Key)
+		}
+		if len(response.Data) > 32*1024 {
+			t.Fatalf("camera chunk has %d bytes", len(response.Data))
+		}
+		chunks++
+		received = append(received, response.Data...)
+		if response.Done {
+			break
+		}
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if chunks != 2 || string(received) != string(image) {
+		t.Fatalf("got %d chunks and %d bytes, want 2 and %d", chunks, len(received), len(image))
 	}
 }
 
