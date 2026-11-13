@@ -170,8 +170,11 @@ test("the position is carried on between the server's updates", () => {
 test("the drawer shows the music's transport without closing", () => {
   // The music's buttons are inside the drawer, and the drawer used to
   // close on every button: the music was impossible to control.
+  //
+  // The behaviour is checked in drawer.test.js, by pressing the real
+  // buttons. This is here so that the check is not lost.
   assert.ok(
-    renderer.includes("if (button.dataset.transport) return;"),
+    renderer.includes("if (button.dataset.transport"),
     "the drawer closes when the music's buttons are pressed",
   );
 });
