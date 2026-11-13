@@ -16,9 +16,32 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const path = require("node:path");
 
-// How often the state file is read. The sidecar writes it when the state
-// changes, so this is only how quickly a change is noticed.
-const POLL_INTERVAL_MS = 250;
+// How often the state file is read when it cannot be watched.
+//
+// The sidecar writes it when the state changes, so this is only how
+// quickly a change is noticed. The watch notices it at once, so the
+// poll is the backstop for a file system that does not report changes,
+// and it is slow because it is only a backstop.
+//
+// The level is a different matter: it moves constantly and the panel
+// draws it as a meter, so it is read at its own rate.
+const POLL_INTERVAL_MS = 1000;
+
+// How often the level is read.
+//
+// The level moves with every block of audio and the panel draws it as a
+// meter, so it is read often. It is a file of a few bytes in memory,
+// and reading it is cheap.
+const LEVEL_INTERVAL_MS = 100;
+
+// How long to wait after a change before reading the file.
+//
+// The sidecar writes the file atomically: it writes a temporary file and
+// renames it over the one being read. A watch fires on the rename, and
+// by then the file is whole. The wait is for the case where the watch
+// fires on the temporary file instead, which would be a file that is
+// not the state.
+const WATCH_SETTLE_MS = 20;
 
 // Where the sidecar lives. It is beside the Electron binary when the app is
 // packaged, and in the repository's vendor directory when it is not.
@@ -206,8 +229,41 @@ class DeviceClient {
       this.onLog(`the device program could not be started: ${error.message}`);
     });
 
+    // The state file is watched rather than polled.
+    //
+    // Polling means reading the file four times a second for as long as
+    // the panel is running, and most of those reads find nothing new.
+    // The watch is told when the file changes, so the file is read when
+    // there is something to read.
+    //
+    // The watch is not trusted on its own: a file system that does not
+    // report changes would leave the panel showing a state that is not
+    // the device's, so the poll goes on beside it as a backstop.
+    this.watch();
     this.timer = setInterval(() => this.read(), POLL_INTERVAL_MS);
+    this.levelTimer = setInterval(() => this.readLevel(), LEVEL_INTERVAL_MS);
     return true;
+  }
+
+  /**
+   * Watches the state file for changes.
+   *
+   * The watch is best effort: a file system that cannot be watched
+   * leaves the poll to do the work, and a panel that cannot watch is
+   * still a panel that works.
+   */
+  watch() {
+    try {
+      this.watcher = fs.watch(path.dirname(this.stateFile), (_event, name) => {
+        if (name && name !== path.basename(this.stateFile)) return;
+        if (this.settle) clearTimeout(this.settle);
+        this.settle = setTimeout(() => this.read(), WATCH_SETTLE_MS);
+      });
+      this.watcher.unref?.();
+    } catch {
+      // The poll is the backstop, so a file system that cannot be
+      // watched is not a failure.
+    }
   }
 
   /**
@@ -258,7 +314,6 @@ class DeviceClient {
    * eMMC.
    */
   async read() {
-    await this.readLevel();
     let raw;
     try {
       raw = await fsp.readFile(this.stateFile, "utf8");
@@ -333,6 +388,14 @@ class DeviceClient {
   async stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.levelTimer) clearInterval(this.levelTimer);
+    this.levelTimer = null;
+    // The watch is closed with the poll, so that a stopped device
+    // leaves nothing behind that would read a file that is not there.
+    if (this.watcher) this.watcher.close();
+    this.watcher = null;
+    if (this.settle) clearTimeout(this.settle);
+    this.settle = null;
     const child = this.child;
     if (!child) return;
     this.child = null;
