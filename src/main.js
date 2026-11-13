@@ -1228,6 +1228,8 @@ async function startDeviceProgram() {
   // restart: a player that forgets its identity is a new player, and the
   // server has to pair with it again.
   const dataDirectory = path.join(app.getPath("userData"), "device");
+  const cameraAvailable = await detectCameraAvailable();
+  console.info(`Panel camera ${cameraAvailable ? "detected" : "not detected"}`);
 
   deviceClient = new DeviceClient({
     binary,
@@ -1253,6 +1255,7 @@ async function startDeviceProgram() {
     // needs the key and the name the panel is known by.
     esphomeKey: settings.esphomeEncryptionKey || "",
     esphomeName: HOSTNAME,
+    cameraAvailable,
     onState: () => {
       sendDeviceState();
       // The device's mute is the microphone's, and it is the panel's
@@ -1274,6 +1277,33 @@ async function startDeviceProgram() {
   // change. Otherwise a device that was configured yesterday would run
   // today with the defaults.
   sendDeviceConfig();
+}
+
+async function detectCameraAvailable() {
+  try {
+    ensureOverlayView();
+    const cameraView = overlayView?.webContents;
+    if (!cameraView || cameraView.isDestroyed()) return false;
+    if (cameraView.isLoadingMainFrame()) {
+      await Promise.race([
+        waitForOverlayLoad(cameraView),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("camera probe timed out")), 5000)),
+      ]);
+    }
+    return await cameraView.executeJavaScript(`(async () => {
+      if (!navigator.mediaDevices?.getUserMedia) return false;
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        return stream.getVideoTracks().some((track) => track.readyState === "live");
+      } finally {
+        stream?.getTracks().forEach((track) => track.stop());
+      }
+    })()`);
+  } catch (error) {
+    console.info("Panel camera detection failed:", error?.message || String(error));
+    return false;
+  }
 }
 
 function createOverlayView() {

@@ -97,6 +97,7 @@ func startControlPlane(
 	name string,
 	board string,
 	socket string,
+	cameraAvailable bool,
 	audio *deviceAudio,
 ) *ControlPlane {
 	plane := &ControlPlane{log: log, audio: audio}
@@ -110,7 +111,7 @@ func startControlPlane(
 	// them and change them.
 	voiceEntities(registry)
 
-	api := esphome.NewServer(esphome.ServerOptions{
+	serverOptions := esphome.ServerOptions{
 		Name:          name,
 		FriendlyName:  board,
 		MAC:           panelMAC(name),
@@ -118,13 +119,16 @@ func startControlPlane(
 		EncryptionKey: key,
 		Registry:      registry,
 		Log:           log,
-		CameraCapture: func(ctx context.Context) ([]byte, error) {
+	}
+	if cameraAvailable {
+		serverOptions.CameraCapture = func(ctx context.Context) ([]byte, error) {
 			if plane.server == nil {
 				return nil, fmt.Errorf("panel camera is not connected")
 			}
 			return plane.server.CaptureCamera(ctx)
-		},
-	})
+		}
+	}
+	api := esphome.NewServer(serverOptions)
 	plane.api = api
 
 	// The voice assistant makes the panel a voice satellite.
