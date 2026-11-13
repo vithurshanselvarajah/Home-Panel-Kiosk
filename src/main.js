@@ -866,6 +866,30 @@ async function handleCommand(command) {
   if (!command || typeof command !== "object" || typeof command.action !== "string") return;
   const action = command.action;
   switch (action) {
+    case "camera_capture": {
+      let cameraData = "";
+      let cameraError = "";
+      try {
+        if (!overlayView?.webContents || overlayView.webContents.isDestroyed()) throw new Error("Panel camera view is unavailable");
+        const dataURL = await overlayView.webContents.executeJavaScript(`(async () => {
+          if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera capture is unavailable");
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 2, max: 5 } }, audio: false });
+          try {
+            const video = document.createElement("video"); video.srcObject = stream; video.muted = true; await video.play();
+            await new Promise((resolve, reject) => { if (video.videoWidth) resolve(); else { video.onloadedmetadata = resolve; video.onerror = reject; } });
+            const scale = Math.min(1, 1280 / video.videoWidth, 720 / video.videoHeight);
+            const canvas = document.createElement("canvas"); canvas.width = Math.round(video.videoWidth * scale); canvas.height = Math.round(video.videoHeight * scale);
+            canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+            video.pause(); video.srcObject = null;
+            return canvas.toDataURL("image/jpeg", 0.78);
+          } finally { stream.getTracks().forEach((track) => track.stop()); }
+        })()`);
+        cameraData = typeof dataURL === "string" && dataURL.startsWith("data:image/jpeg;base64,") ? dataURL.slice(23) : "";
+        if (!cameraData) throw new Error("The camera returned no JPEG image");
+      } catch (error) { cameraError = error.message || "Camera capture failed"; }
+      controlClient?.sendCameraFrame(command.cameraRequestId, cameraData, cameraError);
+      break;
+    }
     case "wake": {
       const wasOff = displayIsOff || requestedDisplayStatus === "off";
       recordActivity("home-assistant");
@@ -1566,6 +1590,10 @@ app.commandLine.appendSwitch("no-default-browser-check");
 app.whenReady().then(async () => {
   if (!hasLock) return;
   disableSpellChecker();
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const allowed = webContents === overlayView?.webContents && permission === "media" && (details.mediaTypes || []).includes("video");
+    callback(allowed);
+  });
   await loadSettings();
   // The flag wins over the saved setting, but only for this run.
   const flagMode = readDisplayModeFlag();

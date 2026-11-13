@@ -78,6 +78,30 @@ test("the client gives a command to the peer", async () => {
   fs.rmSync(socket, { force: true });
 });
 
+test("the client returns a camera frame with its request id", async () => {
+  const socket = socketPath();
+  const received = [];
+  const server = net.createServer((conn) => {
+    conn.on("data", (chunk) => {
+      for (const line of chunk.toString("utf8").split("\n")) {
+        if (line.trim()) received.push(JSON.parse(line));
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(socket, resolve));
+  const client = new ControlClient({ socket });
+  client.start();
+  await waitFor(() => client.connected);
+  assert.equal(client.sendCameraFrame("request-7", "an-image", ""), true);
+  await waitFor(() => received.some((message) => message.action === "camera_frame"));
+  assert.deepEqual(received.find((message) => message.action === "camera_frame"), {
+    action: "camera_frame", cameraRequestId: "request-7", cameraData: "an-image", cameraError: "",
+  });
+  client.stop();
+  server.close();
+  fs.rmSync(socket, { force: true });
+});
+
 test("the client reports offline when the socket is not there", async () => {
   const status = [];
   const client = new ControlClient({

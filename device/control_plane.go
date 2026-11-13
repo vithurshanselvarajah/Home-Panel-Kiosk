@@ -118,6 +118,12 @@ func startControlPlane(
 		EncryptionKey: key,
 		Registry:      registry,
 		Log:           log,
+		CameraCapture: func(ctx context.Context) ([]byte, error) {
+			if plane.server == nil {
+				return nil, fmt.Errorf("panel camera is not connected")
+			}
+			return plane.server.CaptureCamera(ctx)
+		},
 	})
 	plane.api = api
 
