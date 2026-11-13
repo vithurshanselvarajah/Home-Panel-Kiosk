@@ -2151,13 +2151,21 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 			Product:  "Home Panel",
 			Version:  "0.1.0",
 			Unpaired: unpaired,
-			// The lead and the jitter buffer are the Echo firmware's
-			// own figures. The server holds back the audio it sends by
-			// this much and more, and the buffer is what the group is
-			// played in step with, so it is the server's figure and
-			// not ours to choose.
-			RequiredLeadTime: 2000 * time.Millisecond,
-			MinBuffer:        2000 * time.Millisecond,
+			// The lead and the jitter buffer are how far ahead of the
+			// clock the server sends, and how much audio is kept queued.
+			//
+			// They are small, and that is deliberate. The server holds
+			// the audio back by the buffer before it sends it, so a
+			// big buffer is a big delay before anything is heard — and
+			// the player then compares the audio's own time with the
+			// clock and finds the audio is not due yet, so it waits,
+			// and the panel is silent for as long as the buffer is.
+			//
+			// The buffer only has to be big enough that the network
+			// cannot outrun the speaker, and a quarter of a second is
+			// enough for that.
+			RequiredLeadTime: 250 * time.Millisecond,
+			MinBuffer:        250 * time.Millisecond,
 		})
 		if err != nil {
 			a.log.Error("the music player could not be started", "error", err)

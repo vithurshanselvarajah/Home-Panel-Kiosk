@@ -1,6 +1,8 @@
 package live
 
 import (
+	"bufio"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -38,48 +40,87 @@ func TestTheMusicServerPlaysToThePanel(t *testing.T) {
 	t.Logf("the music player is %q", state.MusicState)
 
 	// The server connects and plays.
-	peer := startSendspinPeer(t, "play")
+	peer, peerOutput := startSendspinPeer(t, "play", d)
 	defer func() {
 		if peer != nil && peer.Process != nil {
 			_ = peer.Process.Kill()
 		}
 	}()
 
+	// The server says what happened.
+	go func() {
+		scanner := bufio.NewScanner(peerOutput)
+		for scanner.Scan() {
+			if line := strings.TrimSpace(scanner.Text()); line != "" {
+				t.Logf("the server: %s", line)
+			}
+		}
+	}()
+
 	// The panel plays the audio.
-	played := d.waitFor("playing the server's music", 60*time.Second, func(s deviceState) bool {
+	d.waitFor("playing the server's music", 60*time.Second, func(s deviceState) bool {
 		return d.speakerBytes() > 10000
 	})
-	_ = played
 	t.Logf("the panel has played %d bytes", d.speakerBytes())
-
-	// And the peer said it sent it.
-	out, err := peer.Output()
-	if err != nil {
-		t.Logf("the peer said: %s", err)
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.TrimSpace(line) != "" {
-			t.Logf("the server: %s", strings.TrimSpace(line))
-		}
-	}
 }
 
 // startSendspinPeer starts the music server peer.
 //
 // It is aiosendspin's own server, which is what Music Assistant speaks
 // the protocol with.
-func startSendspinPeer(t *testing.T, mode string) *exec.Cmd {
+func startSendspinPeer(t *testing.T, mode string, d *device) (*exec.Cmd, io.Reader) {
 	t.Helper()
 	clientID := os.Getenv("LIVE_SENDSPIN_CLIENT_ID")
 	if clientID == "" {
-		clientID = "test-client"
+		// The panel's own identity, so the server trusts it.
+		//
+		// The server will not play to a client it has not been told to
+		// trust, and the client is the panel: the panel is the player.
+		clientID = liveClientID(t, d)
 	}
 	cmd := exec.Command("python3", "-c", sendspinPeer, mode, "127.0.0.1:8928", clientID)
 	cmd.Env = append(os.Environ(), "PYTHONPATH="+aiosendspinPath())
+	output, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The server's mistakes are on its error output, and they are what
+	// says why the audio did not arrive.
+	errors, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("the music server could not be started: %v", err)
 	}
-	return cmd
+	go func() {
+		scanner := bufio.NewScanner(errors)
+		for scanner.Scan() {
+			if line := strings.TrimSpace(scanner.Text()); line != "" {
+				t.Logf("the server said: %s", line)
+			}
+		}
+	}()
+	return cmd, output
+}
+
+// liveClientID is the panel's identity as a player.
+//
+// It is the base64url of the panel's public key, and it is what a music
+// server calls the player. The panel is asked for it, because that is
+// the same answer the music server gets.
+func liveClientID(t *testing.T, d *device) string {
+	t.Helper()
+	lines, err := d.peer("capabilities", "")
+	if err != nil {
+		t.Fatalf("the capabilities could not be asked for: %v", err)
+	}
+	for _, line := range lines {
+		if strings.HasPrefix(line, "sendspin_client:") {
+			return strings.TrimPrefix(line, "sendspin_client:")
+		}
+	}
+	return ""
 }
 
 // aiosendspinPath is where aiosendspin is.
@@ -155,7 +196,6 @@ async def main():
         bit_depth = 16
         channels = 2
         fmt = AudioFormat(
-            codec="pcm_s16le",
             sample_rate=rate,
             channels=channels,
             bit_depth=bit_depth,

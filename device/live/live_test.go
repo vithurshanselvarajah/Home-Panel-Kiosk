@@ -121,6 +121,16 @@ func post(t *testing.T, url, token string, body any) map[string]any {
 	return out
 }
 
+// liveSendspinPort is the port the music player is served on.
+func liveSendspinPort() int {
+	if port := os.Getenv("LIVE_SENDSPIN_PORT"); port != "" {
+		if number, err := strconv.Atoi(port); err == nil {
+			return number
+		}
+	}
+	return 8928
+}
+
 // livePort is the port the panel is served on.
 //
 // It is the panel's own port, because Home Assistant finds the device

@@ -78,11 +78,21 @@ func New(cfg Config) (*Client, error) {
 	if cfg.Port == 0 {
 		cfg.Port = DefaultPort
 	}
+	// The lead and the buffer are small, and that is deliberate.
+	//
+	// The server holds the audio back by the buffer before it sends it,
+	// so a big buffer is a big delay before anything is heard. And the
+	// player compares the audio's own time with the clock and plays it
+	// when it is due, so an audio that is a whole buffer in the future
+	// is an audio that is not played until the buffer has passed.
+	//
+	// A quarter of a second is enough for the network not to outrun
+	// the speaker.
 	if cfg.RequiredLeadTime <= 0 {
-		cfg.RequiredLeadTime = 2 * time.Second
+		cfg.RequiredLeadTime = 250 * time.Millisecond
 	}
 	if cfg.MinBuffer <= 0 {
-		cfg.MinBuffer = 2 * time.Second
+		cfg.MinBuffer = 250 * time.Millisecond
 	}
 	st, err := openStore(cfg.StorePath)
 	if err != nil {
@@ -473,12 +483,13 @@ func (c *Client) hello() clientHello {
 			SoftwareVersion: c.cfg.Version,
 		},
 		PlayerSupport: &playerSupport{
-			SupportedFormats:  []audioFormat{{Codec: "flac", Channels: outChannels, SampleRate: outRate, BitDepth: outBits}},
-			BufferCapacity:    bufferCapacity,
-			SupportedCommands: []string{"volume", "mute"},
+			SupportedFormats: []audioFormat{{Codec: "flac", Channels: outChannels, SampleRate: outRate, BitDepth: outBits}},
+			BufferCapacity:   bufferCapacity,
 		},
-		SupportedPairMethods: []pairMethod{{Method: methodPSK}},
-		UnpairedAccess:       unpairedAccess{Enabled: c.unpairedAccess()},
+		SupportedPairMethods: pairMethods{
+			PairingPSK: &pairMethod{Locations: []string{"home_assistant"}},
+		},
+		UnpairedAccess: unpairedAccess{Enabled: c.unpairedAccess()},
 	}
 }
 

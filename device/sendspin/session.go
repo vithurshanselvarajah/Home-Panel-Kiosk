@@ -456,10 +456,10 @@ func (s *session) sendState() {
 		Player: &playerState{
 			Volume:            set.Volume,
 			Muted:             set.Muted,
-			StaticDelayMs:     set.StaticDelayMs,
+			OutputDelayMs:     set.StaticDelayMs,
 			RequiredLeadMs:    s.c.requiredLeadMs,
 			MinBufferMs:       s.c.minBufferMs(),
-			SupportedCommands: []string{"set_static_delay"},
+			SupportedCommands: []string{"set_output_delay"},
 		},
 	})
 }
