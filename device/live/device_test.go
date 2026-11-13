@@ -242,6 +242,9 @@ func startDevice(t *testing.T, recording string) *device {
 
 	t.Cleanup(d.stop)
 	t.Cleanup(unlockPorts)
+	// The entry is put back when the tests are done, so that the panel
+	// that is really there is the one Home Assistant is talking to.
+	t.Cleanup(func() { restoreHomeAssistant(t) })
 
 	// Home Assistant does not always take the device the first time.
 	//
@@ -285,6 +288,28 @@ func (d *device) retryUntilConnected() {
 			pointHomeAssistantHere(d.t)
 		}
 		time.Sleep(2 * time.Second)
+	}
+}
+
+// restoreHomeAssistant puts Home Assistant's entry back.
+//
+// The tests point the entry at the machine they run on, because a
+// machine whose address has changed is a panel Home Assistant cannot
+// reach. The entry is put back when the tests are done, because the
+// entry belongs to the panel that is really there.
+func restoreHomeAssistant(t *testing.T) {
+	t.Helper()
+	address := originalEsphomeAddress(t)
+	if address == "" {
+		return
+	}
+	entries := configEntries(t, "esphome")
+	for _, entry := range entries {
+		if entry.title != "Home Panel" {
+			continue
+		}
+		reconfigureEsphomeEntry(t, entry.id, address, livePort())
+		return
 	}
 }
 
@@ -584,6 +609,9 @@ func pointHomeAssistantHere(t *testing.T) {
 		if entry.title != "Home Panel" {
 			continue
 		}
+		// The address the entry was pointed at before the tests
+		// changed it is remembered, so that it can be put back.
+		//
 		// The entry is only reconfigured when the panel has not
 		// connected, which is what this is only called for.
 		//
@@ -594,6 +622,9 @@ func pointHomeAssistantHere(t *testing.T) {
 		// changed.
 		if lastEsphomeAddress(t) == address {
 			return
+		}
+		if !esphomeAddressRemembered() {
+			rememberEsphomeAddress(t, currentEsphomeAddress(t))
 		}
 		reconfigureEsphomeEntry(t, entry.id, address, livePort())
 		rememberEsphomeAddress(t, address)
@@ -608,6 +639,10 @@ func pointHomeAssistantHere(t *testing.T) {
 // It is a file rather than a variable because the live tests are run
 // one at a time but in separate processes, and a variable would be
 // forgotten between them.
+//
+// The file holds two addresses: the one the entry was pointed at before
+// the tests changed it, which is put back at the end, and the one the
+// tests pointed it at, which says whether it needs changing at all.
 func esphomeAddressFile() string {
 	return filepath.Join(os.TempDir(), "homepanel-live-esphome-address")
 }
@@ -619,14 +654,63 @@ func lastEsphomeAddress(t *testing.T) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(data))
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(lines[1])
+}
+
+// originalEsphomeAddress is the address the entry was pointed at
+// before the tests changed it.
+func originalEsphomeAddress(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(esphomeAddressFile())
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 1 {
+		return ""
+	}
+	return strings.TrimSpace(lines[0])
+}
+
+// esphomeAddressRemembered says whether the address has been
+// remembered already.
+func esphomeAddressRemembered() bool {
+	_, err := os.Stat(esphomeAddressFile())
+	return err == nil
+}
+
+// currentEsphomeAddress is the address the entry is pointed at now.
+//
+// Home Assistant's list of the entries does not say where the entry is
+// pointing, so the environment says it: the address the panel is
+// really at.
+func currentEsphomeAddress(t *testing.T) string {
+	t.Helper()
+	if address := os.Getenv("LIVE_ESPHOME_ADDRESS"); address != "" {
+		return address
+	}
+	return ""
 }
 
 // rememberEsphomeAddress remembers the address the entry was pointed
 // at.
+//
+// The first address remembered is the one to put back, and the second
+// is the one the tests pointed it at.
 func rememberEsphomeAddress(t *testing.T, address string) {
 	t.Helper()
-	if err := os.WriteFile(esphomeAddressFile(), []byte(address), 0o600); err != nil {
+	original := originalEsphomeAddress(t)
+	if original == "" {
+		original = currentEsphomeAddress(t)
+	}
+	if original == "" {
+		original = address
+	}
+	if err := os.WriteFile(esphomeAddressFile(), []byte(original+"\n"+address), 0o600); err != nil {
 		t.Logf("the address could not be remembered: %v", err)
 	}
 }
