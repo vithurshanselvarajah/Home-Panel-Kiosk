@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"net"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -28,7 +31,7 @@ import (
 func TestTheVoiceTurnAgainstLiveHomeAssistant(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
-	recording := liveRecording(t)
+	recording := liveConvertedRecording(t, liveRecording(t))
 	question := liveQuestion()
 
 	// What Home Assistant answers to the same question, asked as text.
@@ -92,6 +95,10 @@ func TestTheVoiceTurnAgainstLiveHomeAssistant(t *testing.T) {
 //
 // It is a wav file at sixteen kilohertz, mono, sixteen bit, which is
 // what the microphone produces.
+//
+// The recording is converted here rather than being asked for ready
+// made, so a test does not depend on a file somebody made by hand and
+// then deleted.
 func liveRecording(t *testing.T) string {
 	t.Helper()
 	path := os.Getenv("LIVE_RECORDING")
@@ -102,6 +109,30 @@ func liveRecording(t *testing.T) string {
 		t.Fatalf("the recording is not there: %v", err)
 	}
 	return path
+}
+
+// liveConvertedRecording converts a recording to what the microphone
+// produces.
+//
+// The microphone is sixteen kilohertz, mono, sixteen bit, and a
+// recording in any other shape has to be converted before it is
+// played into it.
+func liveConvertedRecording(t *testing.T, source string) string {
+	t.Helper()
+	if strings.HasSuffix(source, ".wav") {
+		return source
+	}
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skipf("ffmpeg is not there, so the recording cannot be converted: %v", err)
+	}
+	out := filepath.Join(t.TempDir(), "recording.wav")
+	cmd := exec.Command(ffmpeg, "-y", "-loglevel", "error",
+		"-i", source, "-ar", "16000", "-ac", "1", "-acodec", "pcm_s16le", out)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("the recording could not be converted: %v (%s)", err, strings.TrimSpace(string(output)))
+	}
+	return out
 }
 
 // liveQuestion is what the recording is asking.
