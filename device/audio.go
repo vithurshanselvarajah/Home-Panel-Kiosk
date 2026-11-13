@@ -2159,6 +2159,7 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 		player, err := sendspin.New(sendspin.Config{
 			StorePath: a.sendspinStore(),
 			Name:      name,
+			Addresses: panelAddresses(),
 			// The instance is the player's name on the network, and it
 			// has to be unique there: two players with the same
 			// instance name are the same player as far as a music

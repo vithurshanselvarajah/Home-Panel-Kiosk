@@ -222,21 +222,22 @@ func main() {
 		hostName = "home-panel"
 	}
 	var (
-		deviceID      = flag.String("device-id", hostName, "stable device identity")
-		board         = flag.String("board", hostName, "board name, shown in Home Assistant")
-		creds         = flag.String("credentials-dir", "", "where the link credential lives")
-		stateFile     = flag.String("state-file", "", "write the state here as JSON")
-		levelFile     = flag.String("level-file", "", "write the live microphone level here; empty derives it from the state file")
-		configFile    = flag.String("config-file", "", "read the device configuration from here")
-		mic           = flag.String("mic", "", "the microphone to use; empty is the system default")
-		speaker       = flag.String("speaker", "", "the speaker to use; empty is the system default")
-		micFile       = flag.String("mic-file", "", "play this recording as the microphone instead of using a sound card")
-		speakerFile   = flag.String("speaker-file", "", "write the speaker's audio to this file instead of using a sound card")
-		verbose       = flag.Bool("verbose", false, "log at debug level")
-		esphomePort   = flag.Int("esphome-port", 0, "the port the Home Assistant API is on; zero picks one")
-		esphomeKey    = flag.String("esphome-key", "", "the base64 encryption key for the Home Assistant API")
-		esphomeName   = flag.String("esphome-name", hostName, "the name Home Assistant knows the panel by")
-		controlSocket = flag.String("control-socket", "", "the socket the panel talks to this program over")
+		deviceID        = flag.String("device-id", hostName, "stable device identity")
+		board           = flag.String("board", hostName, "board name, shown in Home Assistant")
+		creds           = flag.String("credentials-dir", "", "where the link credential lives")
+		stateFile       = flag.String("state-file", "", "write the state here as JSON")
+		levelFile       = flag.String("level-file", "", "write the live microphone level here; empty derives it from the state file")
+		configFile      = flag.String("config-file", "", "read the device configuration from here")
+		mic             = flag.String("mic", "", "the microphone to use; empty is the system default")
+		speaker         = flag.String("speaker", "", "the speaker to use; empty is the system default")
+		micFile         = flag.String("mic-file", "", "play this recording as the microphone instead of using a sound card")
+		speakerFile     = flag.String("speaker-file", "", "write the speaker's audio to this file instead of using a sound card")
+		verbose         = flag.Bool("verbose", false, "log at debug level")
+		esphomePort     = flag.Int("esphome-port", 0, "the port the Home Assistant API is on; zero picks one")
+		esphomeKey      = flag.String("esphome-key", "", "the base64 encryption key for the Home Assistant API")
+		esphomeName     = flag.String("esphome-name", hostName, "the name Home Assistant knows the panel by")
+		controlSocket   = flag.String("control-socket", "", "the socket the panel talks to this program over")
+		cameraAvailable = flag.Bool("camera-available", true, "advertise the camera entity when a camera was detected")
 	)
 	flag.Parse()
 
@@ -366,7 +367,7 @@ func main() {
 
 	// The control plane: the Home Assistant connection and the socket
 	// the panel talks over.
-	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket, speaker_)
+	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket, *cameraAvailable, speaker_)
 	defer control.Close()
 
 	// The drawer says whether the panel can reach Home Assistant, and
