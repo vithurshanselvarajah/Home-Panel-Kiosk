@@ -378,17 +378,18 @@ func (s *CameraService) startCapture() error {
 	}
 	args = append(args, "-framerate", strconv.Itoa(s.fpsValue), "-video_size", fmt.Sprintf("%dx%d", w, h), "-i", s.input.device,
 		"-an", "-c:v", s.encoder)
+	fpsFilter := fmt.Sprintf("fps=%d", s.fpsValue)
 	switch s.encoder {
 	case "h264_vaapi":
-		args = append(args, "-vf", "format=nv12,hwupload", "-qp", "24", "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
+		args = append(args, "-vf", fpsFilter+",format=nv12,hwupload", "-qp", "24", "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
 	case "h264_v4l2m2m":
-		args = append(args, "-b:v", cameraBitrate(w, h), "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
+		args = append(args, "-vf", fpsFilter, "-b:v", cameraBitrate(w, h), "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
 	case "h264_nvenc":
-		args = append(args, "-preset", "p1", "-tune", "ull", "-profile:v", "baseline", "-bf", "0", "-b:v", cameraBitrate(w, h), "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
+		args = append(args, "-vf", fpsFilter, "-preset", "p1", "-tune", "ull", "-profile:v", "baseline", "-bf", "0", "-b:v", cameraBitrate(w, h), "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
 	case "h264_qsv":
-		args = append(args, "-preset", "veryfast", "-profile:v", "baseline", "-bf", "0", "-b:v", cameraBitrate(w, h), "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
+		args = append(args, "-vf", fpsFilter, "-preset", "veryfast", "-profile:v", "baseline", "-bf", "0", "-b:v", cameraBitrate(w, h), "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
 	default:
-		args = append(args, "-preset", "ultrafast", "-tune", "zerolatency", "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-b:v", cameraBitrate(w, h), "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
+		args = append(args, "-vf", fpsFilter, "-preset", "ultrafast", "-tune", "zerolatency", "-profile:v", "baseline", "-pix_fmt", "yuv420p", "-b:v", cameraBitrate(w, h), "-g", strconv.Itoa(cameraGOP(s.fpsValue)))
 	}
 	args = append(args, "-f", "rtsp", "-rtsp_transport", "tcp", fmt.Sprintf("rtsp://%s:%s@127.0.0.1:%d/homepanel", s.handler.writeUser, s.handler.writePass, cameraRTSPPort))
 	cmd := exec.Command(s.input.ffmpegPath, args...)
