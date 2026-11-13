@@ -40,6 +40,7 @@ const DEFAULTS = {
   musicEnabled: true,
   musicName: HOSTNAME,
   musicUnpaired: false,
+  cameraEnabled: false,
   cameraPassword: "",
 };
 
@@ -923,12 +924,13 @@ async function handleCommand(command) {
         startup_volume: "voiceStartupVolume",
         music_enabled: "musicEnabled",
         music_unpaired: "musicUnpaired",
+        camera_enabled: "cameraEnabled",
       }[command.setting];
       if (!setting) {
         console.warn("Ignored unknown Home Assistant setting:", command.setting);
         break;
       }
-      const value = ["touch_keyboard_enabled", "music_enabled", "music_unpaired"].includes(command.setting)
+      const value = ["touch_keyboard_enabled", "music_enabled", "music_unpaired", "camera_enabled"].includes(command.setting)
         ? Boolean(command.value)
         : Math.max(0, Math.min(command.setting === "startup_volume" ? 100 : 1440, Math.round(Number(command.value) || 0)));
       saveSettings({ [setting]: value }).catch((error) => console.error("Home Assistant setting could not be saved:", error.message));
@@ -1011,6 +1013,7 @@ async function saveSettings(next) {
   clean.voiceStartupVolume = settingNumber(clean.voiceStartupVolume) ?? DEFAULTS.voiceStartupVolume;
   clean.musicEnabled = Boolean(clean.musicEnabled);
   clean.musicUnpaired = Boolean(clean.musicUnpaired);
+  clean.cameraEnabled = Boolean(clean.cameraEnabled);
   // The audio devices are named by the sidecar, so the names are kept as
   // they are. An empty name is the system default.
   clean.voiceAudioInput = String(clean.voiceAudioInput || "").trim();
@@ -1080,7 +1083,7 @@ async function saveSettings(next) {
   }
   const restartDevice = ["voiceAudioInput", "voiceAudioOutput", "esphomeEncryptionEnabled", "esphomeEncryptionKey"]
     .some((key) => previous[key] !== settings[key]);
-  const deviceConfigChanged = ["voiceStartupVolume", "musicEnabled", "musicUnpaired"]
+  const deviceConfigChanged = ["voiceStartupVolume", "musicEnabled", "musicUnpaired", "cameraEnabled"]
     .some((key) => previous[key] !== settings[key]);
   if (restartDevice) await startDeviceProgram();
   else if (deviceConfigChanged) sendDeviceConfig();
@@ -1103,6 +1106,7 @@ function sendDeviceConfig() {
     sendspinEnabled: settingBoolean(settings.musicEnabled),
     sendspinName: settings.musicName || "",
     sendspinUnpaired: settingBoolean(settings.musicUnpaired),
+    cameraEnabled: settingBoolean(settings.cameraEnabled),
     audioInput: settings.voiceAudioInput || "",
     audioOutput: settings.voiceAudioOutput || "",
     monitorMic: voiceMonitorMic,

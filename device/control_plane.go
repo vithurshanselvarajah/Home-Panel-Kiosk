@@ -337,6 +337,8 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, plane *Cont
 						if entity.Kind == esphome.KindSwitch {
 							registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false})
 						}
+					} else {
+						send(ControlCommand{Action: "setting", Setting: "camera_enabled", Value: value.Bool})
 					}
 				}
 			case "camera_fps":
@@ -552,6 +554,16 @@ func (p *ControlPlane) SendCommand(command ControlCommand) {
 		return
 	}
 	p.server.SendCommand(command)
+}
+
+// SetCameraEnabled applies the camera preference restored from panel settings.
+func (p *ControlPlane) SetCameraEnabled(enabled bool) {
+	if p.camera == nil {
+		return
+	}
+	if err := p.camera.SetEnabled(enabled); err != nil {
+		p.log.Warn("the saved camera preference could not be applied", "error", err)
+	}
 }
 
 // SetMediaPlayerVolume records the speaker's level.
