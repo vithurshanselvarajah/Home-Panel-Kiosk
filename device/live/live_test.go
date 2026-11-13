@@ -21,6 +21,7 @@ package live
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -119,6 +120,22 @@ func post(t *testing.T, url, token string, body any) map[string]any {
 		t.Fatalf("%s: %v", url, err)
 	}
 	return out
+}
+
+// waitForFreePort waits for a port to be free.
+//
+// A port that is not free is a device that cannot start, and the test
+// would fail for a reason that has nothing to do with what it is
+// testing.
+func waitForFreePort(port int) {
+	for attempt := 0; attempt < 30; attempt++ {
+		listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+		if err == nil {
+			_ = listener.Close()
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 }
 
 // liveSendspinPort is the port the music player is served on.

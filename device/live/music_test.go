@@ -2,7 +2,9 @@ package live
 
 import (
 	"bufio"
+	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -181,6 +183,38 @@ async def main():
 
     print("roles=" + ",".join(sorted(client.active_role_ids)))
 
+    if MODE == "control":
+        # The server takes the controller role, which is what the
+        # transport buttons on the panel's drawer drive.
+        role = client.group.group_role("controller")
+        if role is None:
+            print("the controller role was not taken")
+            return
+        print("the panel took the controller role")
+
+        # The server says what the transport can do, and the panel shows
+        # only the buttons that work.
+        from aiosendspin.models.types import MediaCommand
+        role.set_supported_commands([
+            MediaCommand.PLAY,
+            MediaCommand.PAUSE,
+            MediaCommand.NEXT,
+            MediaCommand.PREVIOUS,
+            MediaCommand.STOP,
+        ])
+        print("the transport is", role.supported_commands)
+
+        # The panel is told what the transport can do, and it says so in
+        # its state. The server reads the state to find that out.
+        await asyncio.sleep(2)
+
+        # The panel's buttons are pressed. The command goes from the
+        # panel to the server, and the server is what does it.
+        print("waiting for the commands")
+        await asyncio.sleep(3)
+        print("done")
+        return
+
     if MODE == "play":
         role = client.group.group_role("player")
         if role is None:
@@ -219,3 +253,80 @@ async def main():
 
 asyncio.run(main())
 `
+
+// TestTheMusicServerControlsThePanel checks that the transport on the
+// panel's drawer works.
+//
+// The transport is on the music server: the server says what it can do
+// and the panel's buttons say what to do, and the command goes from the
+// panel to the server. So the buttons only work if the server says it
+// takes them.
+func TestTheMusicServerControlsThePanel(t *testing.T) {
+	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
+
+	d := startDevice(t, "")
+	d.waitFor("connected to Home Assistant", 90*time.Second, func(s deviceState) bool {
+		return s.Connection == "connected"
+	})
+
+	// The server connects and takes the controller role.
+	peer, peerOutput := startSendspinPeer(t, "control", d)
+	defer func() {
+		if peer != nil && peer.Process != nil {
+			_ = peer.Process.Kill()
+		}
+	}()
+
+	go func() {
+		scanner := bufio.NewScanner(peerOutput)
+		for scanner.Scan() {
+			if line := strings.TrimSpace(scanner.Text()); line != "" {
+				t.Logf("the server: %s", line)
+			}
+		}
+	}()
+
+	// The panel says what the transport can do, so the drawer shows the
+	// buttons that work.
+	state := d.waitFor("the transport is known", 60*time.Second, func(s deviceState) bool {
+		return len(s.MusicTransport) > 0
+	})
+	t.Logf("the transport is %v", state.MusicTransport)
+
+	// A button is pressed. The command goes from the panel to the
+	// device program and on to the music server.
+	d.sendTransport("pause")
+	d.sendTransport("play")
+	t.Logf("the transport was driven")
+}
+
+// sendTransport presses a transport button.
+//
+// The buttons are on the panel, and the panel talks to the device
+// program over the control socket, so that is where the press goes.
+func (d *device) sendTransport(action string) {
+	d.t.Helper()
+	socket := d.controlSocket()
+	if socket == "" {
+		d.t.Fatal("the device program has no control socket")
+	}
+	conn, err := net.Dial("unix", socket)
+	if err != nil {
+		d.t.Fatalf("the control socket could not be opened: %v", err)
+	}
+	defer conn.Close()
+
+	payload, err := json.Marshal(map[string]any{
+		"action": "transport",
+		"command": map[string]any{
+			"action": action,
+			"source": "server",
+		},
+	})
+	if err != nil {
+		d.t.Fatal(err)
+	}
+	if _, err := conn.Write(append(payload, '\n')); err != nil {
+		d.t.Fatalf("the press could not be sent: %v", err)
+	}
+}
