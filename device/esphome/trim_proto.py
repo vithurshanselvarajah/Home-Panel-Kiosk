@@ -71,9 +71,6 @@ NEEDED = [
     # a voice turn comes back as audio on this entity.
     "ListEntitiesMediaPlayerResponse", "MediaPlayerSupportedFormat",
     "MediaPlayerCommandRequest", "MediaPlayerStateResponse",
-    # The camera.
-    "ListEntitiesCameraResponse",
-    "CameraImageRequest", "CameraImageResponse",
     # Events, for things that are pressed rather than set.
     "ListEntitiesEventResponse",
     # The music player's pairing token.

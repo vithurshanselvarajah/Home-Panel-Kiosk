@@ -1159,126 +1159,6 @@ func (x *ButtonCommandRequest) GetDeviceId() uint32 {
 	return 0
 }
 
-type CameraImageRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Single        bool                   `protobuf:"varint,1,opt,name=single,proto3" json:"single,omitempty"`
-	Stream        bool                   `protobuf:"varint,2,opt,name=stream,proto3" json:"stream,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CameraImageRequest) Reset() {
-	*x = CameraImageRequest{}
-	mi := &file_esphome_api_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CameraImageRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CameraImageRequest) ProtoMessage() {}
-
-func (x *CameraImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CameraImageRequest.ProtoReflect.Descriptor instead.
-func (*CameraImageRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *CameraImageRequest) GetSingle() bool {
-	if x != nil {
-		return x.Single
-	}
-	return false
-}
-
-func (x *CameraImageRequest) GetStream() bool {
-	if x != nil {
-		return x.Stream
-	}
-	return false
-}
-
-type CameraImageResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           uint32                 `protobuf:"fixed32,1,opt,name=key,proto3" json:"key,omitempty"`
-	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	Done          bool                   `protobuf:"varint,3,opt,name=done,proto3" json:"done,omitempty"`
-	DeviceId      uint32                 `protobuf:"varint,4,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CameraImageResponse) Reset() {
-	*x = CameraImageResponse{}
-	mi := &file_esphome_api_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CameraImageResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CameraImageResponse) ProtoMessage() {}
-
-func (x *CameraImageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CameraImageResponse.ProtoReflect.Descriptor instead.
-func (*CameraImageResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *CameraImageResponse) GetKey() uint32 {
-	if x != nil {
-		return x.Key
-	}
-	return 0
-}
-
-func (x *CameraImageResponse) GetData() []byte {
-	if x != nil {
-		return x.Data
-	}
-	return nil
-}
-
-func (x *CameraImageResponse) GetDone() bool {
-	if x != nil {
-		return x.Done
-	}
-	return false
-}
-
-func (x *CameraImageResponse) GetDeviceId() uint32 {
-	if x != nil {
-		return x.DeviceId
-	}
-	return 0
-}
-
 type CrashReportCapabilities struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Bitmask of CrashReportFlag. ESP32 checks BUILD_MATCHES against the build time stored with the record;
@@ -1290,7 +1170,7 @@ type CrashReportCapabilities struct {
 
 func (x *CrashReportCapabilities) Reset() {
 	*x = CrashReportCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[6]
+	mi := &file_esphome_api_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1302,7 +1182,7 @@ func (x *CrashReportCapabilities) String() string {
 func (*CrashReportCapabilities) ProtoMessage() {}
 
 func (x *CrashReportCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[6]
+	mi := &file_esphome_api_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1315,7 +1195,7 @@ func (x *CrashReportCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CrashReportCapabilities.ProtoReflect.Descriptor instead.
 func (*CrashReportCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{6}
+	return file_esphome_api_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CrashReportCapabilities) GetFlags() uint32 {
@@ -1333,7 +1213,7 @@ type DeviceCapabilitiesRequest struct {
 
 func (x *DeviceCapabilitiesRequest) Reset() {
 	*x = DeviceCapabilitiesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[7]
+	mi := &file_esphome_api_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1345,7 +1225,7 @@ func (x *DeviceCapabilitiesRequest) String() string {
 func (*DeviceCapabilitiesRequest) ProtoMessage() {}
 
 func (x *DeviceCapabilitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[7]
+	mi := &file_esphome_api_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1358,7 +1238,7 @@ func (x *DeviceCapabilitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceCapabilitiesRequest.ProtoReflect.Descriptor instead.
 func (*DeviceCapabilitiesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{7}
+	return file_esphome_api_proto_rawDescGZIP(), []int{5}
 }
 
 type DeviceCapabilitiesResponse struct {
@@ -1377,7 +1257,7 @@ type DeviceCapabilitiesResponse struct {
 
 func (x *DeviceCapabilitiesResponse) Reset() {
 	*x = DeviceCapabilitiesResponse{}
-	mi := &file_esphome_api_proto_msgTypes[8]
+	mi := &file_esphome_api_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1389,7 +1269,7 @@ func (x *DeviceCapabilitiesResponse) String() string {
 func (*DeviceCapabilitiesResponse) ProtoMessage() {}
 
 func (x *DeviceCapabilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[8]
+	mi := &file_esphome_api_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1402,7 +1282,7 @@ func (x *DeviceCapabilitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceCapabilitiesResponse.ProtoReflect.Descriptor instead.
 func (*DeviceCapabilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{8}
+	return file_esphome_api_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DeviceCapabilitiesResponse) GetBluetoothProxy() *BluetoothProxyCapabilities {
@@ -1474,7 +1354,7 @@ type DeviceInfo struct {
 
 func (x *DeviceInfo) Reset() {
 	*x = DeviceInfo{}
-	mi := &file_esphome_api_proto_msgTypes[9]
+	mi := &file_esphome_api_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1486,7 +1366,7 @@ func (x *DeviceInfo) String() string {
 func (*DeviceInfo) ProtoMessage() {}
 
 func (x *DeviceInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[9]
+	mi := &file_esphome_api_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1499,7 +1379,7 @@ func (x *DeviceInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceInfo.ProtoReflect.Descriptor instead.
 func (*DeviceInfo) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{9}
+	return file_esphome_api_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DeviceInfo) GetDeviceId() uint32 {
@@ -1538,7 +1418,7 @@ type DeviceInfoRequest struct {
 
 func (x *DeviceInfoRequest) Reset() {
 	*x = DeviceInfoRequest{}
-	mi := &file_esphome_api_proto_msgTypes[10]
+	mi := &file_esphome_api_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1550,7 +1430,7 @@ func (x *DeviceInfoRequest) String() string {
 func (*DeviceInfoRequest) ProtoMessage() {}
 
 func (x *DeviceInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[10]
+	mi := &file_esphome_api_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1563,7 +1443,7 @@ func (x *DeviceInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceInfoRequest.ProtoReflect.Descriptor instead.
 func (*DeviceInfoRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{10}
+	return file_esphome_api_proto_rawDescGZIP(), []int{8}
 }
 
 type DeviceInfoResponse struct {
@@ -1631,7 +1511,7 @@ type DeviceInfoResponse struct {
 
 func (x *DeviceInfoResponse) Reset() {
 	*x = DeviceInfoResponse{}
-	mi := &file_esphome_api_proto_msgTypes[11]
+	mi := &file_esphome_api_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1643,7 +1523,7 @@ func (x *DeviceInfoResponse) String() string {
 func (*DeviceInfoResponse) ProtoMessage() {}
 
 func (x *DeviceInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[11]
+	mi := &file_esphome_api_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1656,7 +1536,7 @@ func (x *DeviceInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceInfoResponse.ProtoReflect.Descriptor instead.
 func (*DeviceInfoResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{11}
+	return file_esphome_api_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeviceInfoResponse) GetUsesPassword() bool {
@@ -1856,7 +1736,7 @@ type DeviceWizardRequest struct {
 
 func (x *DeviceWizardRequest) Reset() {
 	*x = DeviceWizardRequest{}
-	mi := &file_esphome_api_proto_msgTypes[12]
+	mi := &file_esphome_api_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1868,7 +1748,7 @@ func (x *DeviceWizardRequest) String() string {
 func (*DeviceWizardRequest) ProtoMessage() {}
 
 func (x *DeviceWizardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[12]
+	mi := &file_esphome_api_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1881,7 +1761,7 @@ func (x *DeviceWizardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceWizardRequest.ProtoReflect.Descriptor instead.
 func (*DeviceWizardRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{12}
+	return file_esphome_api_proto_rawDescGZIP(), []int{10}
 }
 
 type DisconnectRequest struct {
@@ -1895,7 +1775,7 @@ type DisconnectRequest struct {
 
 func (x *DisconnectRequest) Reset() {
 	*x = DisconnectRequest{}
-	mi := &file_esphome_api_proto_msgTypes[13]
+	mi := &file_esphome_api_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1907,7 +1787,7 @@ func (x *DisconnectRequest) String() string {
 func (*DisconnectRequest) ProtoMessage() {}
 
 func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[13]
+	mi := &file_esphome_api_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1920,7 +1800,7 @@ func (x *DisconnectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectRequest.ProtoReflect.Descriptor instead.
 func (*DisconnectRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{13}
+	return file_esphome_api_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DisconnectRequest) GetReason() DisconnectReason {
@@ -1938,7 +1818,7 @@ type DisconnectResponse struct {
 
 func (x *DisconnectResponse) Reset() {
 	*x = DisconnectResponse{}
-	mi := &file_esphome_api_proto_msgTypes[14]
+	mi := &file_esphome_api_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1950,7 +1830,7 @@ func (x *DisconnectResponse) String() string {
 func (*DisconnectResponse) ProtoMessage() {}
 
 func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[14]
+	mi := &file_esphome_api_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1963,7 +1843,7 @@ func (x *DisconnectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectResponse.ProtoReflect.Descriptor instead.
 func (*DisconnectResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{14}
+	return file_esphome_api_proto_rawDescGZIP(), []int{12}
 }
 
 type ExecuteServiceArgument struct {
@@ -1984,7 +1864,7 @@ type ExecuteServiceArgument struct {
 
 func (x *ExecuteServiceArgument) Reset() {
 	*x = ExecuteServiceArgument{}
-	mi := &file_esphome_api_proto_msgTypes[15]
+	mi := &file_esphome_api_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1996,7 +1876,7 @@ func (x *ExecuteServiceArgument) String() string {
 func (*ExecuteServiceArgument) ProtoMessage() {}
 
 func (x *ExecuteServiceArgument) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[15]
+	mi := &file_esphome_api_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2009,7 +1889,7 @@ func (x *ExecuteServiceArgument) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteServiceArgument.ProtoReflect.Descriptor instead.
 func (*ExecuteServiceArgument) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{15}
+	return file_esphome_api_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ExecuteServiceArgument) GetBool_() bool {
@@ -2087,7 +1967,7 @@ type ExecuteServiceRequest struct {
 
 func (x *ExecuteServiceRequest) Reset() {
 	*x = ExecuteServiceRequest{}
-	mi := &file_esphome_api_proto_msgTypes[16]
+	mi := &file_esphome_api_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2099,7 +1979,7 @@ func (x *ExecuteServiceRequest) String() string {
 func (*ExecuteServiceRequest) ProtoMessage() {}
 
 func (x *ExecuteServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[16]
+	mi := &file_esphome_api_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2112,7 +1992,7 @@ func (x *ExecuteServiceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteServiceRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteServiceRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{16}
+	return file_esphome_api_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ExecuteServiceRequest) GetKey() uint32 {
@@ -2155,7 +2035,7 @@ type ExecuteServiceResponse struct {
 
 func (x *ExecuteServiceResponse) Reset() {
 	*x = ExecuteServiceResponse{}
-	mi := &file_esphome_api_proto_msgTypes[17]
+	mi := &file_esphome_api_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2167,7 +2047,7 @@ func (x *ExecuteServiceResponse) String() string {
 func (*ExecuteServiceResponse) ProtoMessage() {}
 
 func (x *ExecuteServiceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[17]
+	mi := &file_esphome_api_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2180,7 +2060,7 @@ func (x *ExecuteServiceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteServiceResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteServiceResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{17}
+	return file_esphome_api_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ExecuteServiceResponse) GetCallId() uint32 {
@@ -2230,7 +2110,7 @@ type HelloRequest struct {
 
 func (x *HelloRequest) Reset() {
 	*x = HelloRequest{}
-	mi := &file_esphome_api_proto_msgTypes[18]
+	mi := &file_esphome_api_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2242,7 +2122,7 @@ func (x *HelloRequest) String() string {
 func (*HelloRequest) ProtoMessage() {}
 
 func (x *HelloRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[18]
+	mi := &file_esphome_api_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2255,7 +2135,7 @@ func (x *HelloRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloRequest.ProtoReflect.Descriptor instead.
 func (*HelloRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{18}
+	return file_esphome_api_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *HelloRequest) GetClientInfo() string {
@@ -2307,7 +2187,7 @@ type HelloResponse struct {
 
 func (x *HelloResponse) Reset() {
 	*x = HelloResponse{}
-	mi := &file_esphome_api_proto_msgTypes[19]
+	mi := &file_esphome_api_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2319,7 +2199,7 @@ func (x *HelloResponse) String() string {
 func (*HelloResponse) ProtoMessage() {}
 
 func (x *HelloResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[19]
+	mi := &file_esphome_api_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2332,7 +2212,7 @@ func (x *HelloResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloResponse.ProtoReflect.Descriptor instead.
 func (*HelloResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{19}
+	return file_esphome_api_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *HelloResponse) GetApiVersionMajor() uint32 {
@@ -2374,7 +2254,7 @@ type HomeAssistantStateResponse struct {
 
 func (x *HomeAssistantStateResponse) Reset() {
 	*x = HomeAssistantStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[20]
+	mi := &file_esphome_api_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2386,7 +2266,7 @@ func (x *HomeAssistantStateResponse) String() string {
 func (*HomeAssistantStateResponse) ProtoMessage() {}
 
 func (x *HomeAssistantStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[20]
+	mi := &file_esphome_api_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2399,7 +2279,7 @@ func (x *HomeAssistantStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HomeAssistantStateResponse.ProtoReflect.Descriptor instead.
 func (*HomeAssistantStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{20}
+	return file_esphome_api_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *HomeAssistantStateResponse) GetEntityId() string {
@@ -2439,7 +2319,7 @@ type HomeassistantActionRequest struct {
 
 func (x *HomeassistantActionRequest) Reset() {
 	*x = HomeassistantActionRequest{}
-	mi := &file_esphome_api_proto_msgTypes[21]
+	mi := &file_esphome_api_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2451,7 +2331,7 @@ func (x *HomeassistantActionRequest) String() string {
 func (*HomeassistantActionRequest) ProtoMessage() {}
 
 func (x *HomeassistantActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[21]
+	mi := &file_esphome_api_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2464,7 +2344,7 @@ func (x *HomeassistantActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HomeassistantActionRequest.ProtoReflect.Descriptor instead.
 func (*HomeassistantActionRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{21}
+	return file_esphome_api_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *HomeassistantActionRequest) GetService() string {
@@ -2533,7 +2413,7 @@ type HomeassistantServiceMap struct {
 
 func (x *HomeassistantServiceMap) Reset() {
 	*x = HomeassistantServiceMap{}
-	mi := &file_esphome_api_proto_msgTypes[22]
+	mi := &file_esphome_api_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2545,7 +2425,7 @@ func (x *HomeassistantServiceMap) String() string {
 func (*HomeassistantServiceMap) ProtoMessage() {}
 
 func (x *HomeassistantServiceMap) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[22]
+	mi := &file_esphome_api_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2558,7 +2438,7 @@ func (x *HomeassistantServiceMap) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HomeassistantServiceMap.ProtoReflect.Descriptor instead.
 func (*HomeassistantServiceMap) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{22}
+	return file_esphome_api_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *HomeassistantServiceMap) GetKey() string {
@@ -2592,7 +2472,7 @@ type ListEntitiesBinarySensorResponse struct {
 
 func (x *ListEntitiesBinarySensorResponse) Reset() {
 	*x = ListEntitiesBinarySensorResponse{}
-	mi := &file_esphome_api_proto_msgTypes[23]
+	mi := &file_esphome_api_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2604,7 +2484,7 @@ func (x *ListEntitiesBinarySensorResponse) String() string {
 func (*ListEntitiesBinarySensorResponse) ProtoMessage() {}
 
 func (x *ListEntitiesBinarySensorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[23]
+	mi := &file_esphome_api_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2617,7 +2497,7 @@ func (x *ListEntitiesBinarySensorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesBinarySensorResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesBinarySensorResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{23}
+	return file_esphome_api_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListEntitiesBinarySensorResponse) GetObjectId() string {
@@ -2699,7 +2579,7 @@ type ListEntitiesButtonResponse struct {
 
 func (x *ListEntitiesButtonResponse) Reset() {
 	*x = ListEntitiesButtonResponse{}
-	mi := &file_esphome_api_proto_msgTypes[24]
+	mi := &file_esphome_api_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2711,7 +2591,7 @@ func (x *ListEntitiesButtonResponse) String() string {
 func (*ListEntitiesButtonResponse) ProtoMessage() {}
 
 func (x *ListEntitiesButtonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[24]
+	mi := &file_esphome_api_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2724,7 +2604,7 @@ func (x *ListEntitiesButtonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesButtonResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesButtonResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{24}
+	return file_esphome_api_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListEntitiesButtonResponse) GetObjectId() string {
@@ -2783,98 +2663,6 @@ func (x *ListEntitiesButtonResponse) GetDeviceId() uint32 {
 	return 0
 }
 
-type ListEntitiesCameraResponse struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	ObjectId          string                 `protobuf:"bytes,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	Key               uint32                 `protobuf:"fixed32,2,opt,name=key,proto3" json:"key,omitempty"`
-	Name              string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	DisabledByDefault bool                   `protobuf:"varint,5,opt,name=disabled_by_default,json=disabledByDefault,proto3" json:"disabled_by_default,omitempty"`
-	Icon              string                 `protobuf:"bytes,6,opt,name=icon,proto3" json:"icon,omitempty"`
-	EntityCategory    EntityCategory         `protobuf:"varint,7,opt,name=entity_category,json=entityCategory,proto3,enum=esphome.EntityCategory" json:"entity_category,omitempty"`
-	DeviceId          uint32                 `protobuf:"varint,8,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *ListEntitiesCameraResponse) Reset() {
-	*x = ListEntitiesCameraResponse{}
-	mi := &file_esphome_api_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListEntitiesCameraResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListEntitiesCameraResponse) ProtoMessage() {}
-
-func (x *ListEntitiesCameraResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListEntitiesCameraResponse.ProtoReflect.Descriptor instead.
-func (*ListEntitiesCameraResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *ListEntitiesCameraResponse) GetObjectId() string {
-	if x != nil {
-		return x.ObjectId
-	}
-	return ""
-}
-
-func (x *ListEntitiesCameraResponse) GetKey() uint32 {
-	if x != nil {
-		return x.Key
-	}
-	return 0
-}
-
-func (x *ListEntitiesCameraResponse) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ListEntitiesCameraResponse) GetDisabledByDefault() bool {
-	if x != nil {
-		return x.DisabledByDefault
-	}
-	return false
-}
-
-func (x *ListEntitiesCameraResponse) GetIcon() string {
-	if x != nil {
-		return x.Icon
-	}
-	return ""
-}
-
-func (x *ListEntitiesCameraResponse) GetEntityCategory() EntityCategory {
-	if x != nil {
-		return x.EntityCategory
-	}
-	return EntityCategory_ENTITY_CATEGORY_NONE
-}
-
-func (x *ListEntitiesCameraResponse) GetDeviceId() uint32 {
-	if x != nil {
-		return x.DeviceId
-	}
-	return 0
-}
-
 type ListEntitiesDoneResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2883,7 +2671,7 @@ type ListEntitiesDoneResponse struct {
 
 func (x *ListEntitiesDoneResponse) Reset() {
 	*x = ListEntitiesDoneResponse{}
-	mi := &file_esphome_api_proto_msgTypes[26]
+	mi := &file_esphome_api_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2895,7 +2683,7 @@ func (x *ListEntitiesDoneResponse) String() string {
 func (*ListEntitiesDoneResponse) ProtoMessage() {}
 
 func (x *ListEntitiesDoneResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[26]
+	mi := &file_esphome_api_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2908,7 +2696,7 @@ func (x *ListEntitiesDoneResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesDoneResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesDoneResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{26}
+	return file_esphome_api_proto_rawDescGZIP(), []int{23}
 }
 
 type ListEntitiesEventResponse struct {
@@ -2928,7 +2716,7 @@ type ListEntitiesEventResponse struct {
 
 func (x *ListEntitiesEventResponse) Reset() {
 	*x = ListEntitiesEventResponse{}
-	mi := &file_esphome_api_proto_msgTypes[27]
+	mi := &file_esphome_api_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2940,7 +2728,7 @@ func (x *ListEntitiesEventResponse) String() string {
 func (*ListEntitiesEventResponse) ProtoMessage() {}
 
 func (x *ListEntitiesEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[27]
+	mi := &file_esphome_api_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2953,7 +2741,7 @@ func (x *ListEntitiesEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesEventResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesEventResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{27}
+	return file_esphome_api_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListEntitiesEventResponse) GetObjectId() string {
@@ -3038,7 +2826,7 @@ type ListEntitiesMediaPlayerResponse struct {
 
 func (x *ListEntitiesMediaPlayerResponse) Reset() {
 	*x = ListEntitiesMediaPlayerResponse{}
-	mi := &file_esphome_api_proto_msgTypes[28]
+	mi := &file_esphome_api_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3050,7 +2838,7 @@ func (x *ListEntitiesMediaPlayerResponse) String() string {
 func (*ListEntitiesMediaPlayerResponse) ProtoMessage() {}
 
 func (x *ListEntitiesMediaPlayerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[28]
+	mi := &file_esphome_api_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3063,7 +2851,7 @@ func (x *ListEntitiesMediaPlayerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesMediaPlayerResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesMediaPlayerResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{28}
+	return file_esphome_api_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListEntitiesMediaPlayerResponse) GetObjectId() string {
@@ -3157,7 +2945,7 @@ type ListEntitiesNumberResponse struct {
 
 func (x *ListEntitiesNumberResponse) Reset() {
 	*x = ListEntitiesNumberResponse{}
-	mi := &file_esphome_api_proto_msgTypes[29]
+	mi := &file_esphome_api_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3169,7 +2957,7 @@ func (x *ListEntitiesNumberResponse) String() string {
 func (*ListEntitiesNumberResponse) ProtoMessage() {}
 
 func (x *ListEntitiesNumberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[29]
+	mi := &file_esphome_api_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3182,7 +2970,7 @@ func (x *ListEntitiesNumberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesNumberResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesNumberResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{29}
+	return file_esphome_api_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListEntitiesNumberResponse) GetObjectId() string {
@@ -3284,7 +3072,7 @@ type ListEntitiesRequest struct {
 
 func (x *ListEntitiesRequest) Reset() {
 	*x = ListEntitiesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[30]
+	mi := &file_esphome_api_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3296,7 +3084,7 @@ func (x *ListEntitiesRequest) String() string {
 func (*ListEntitiesRequest) ProtoMessage() {}
 
 func (x *ListEntitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[30]
+	mi := &file_esphome_api_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3309,7 +3097,7 @@ func (x *ListEntitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesRequest.ProtoReflect.Descriptor instead.
 func (*ListEntitiesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{30}
+	return file_esphome_api_proto_rawDescGZIP(), []int{27}
 }
 
 type ListEntitiesSelectResponse struct {
@@ -3328,7 +3116,7 @@ type ListEntitiesSelectResponse struct {
 
 func (x *ListEntitiesSelectResponse) Reset() {
 	*x = ListEntitiesSelectResponse{}
-	mi := &file_esphome_api_proto_msgTypes[31]
+	mi := &file_esphome_api_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3340,7 +3128,7 @@ func (x *ListEntitiesSelectResponse) String() string {
 func (*ListEntitiesSelectResponse) ProtoMessage() {}
 
 func (x *ListEntitiesSelectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[31]
+	mi := &file_esphome_api_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3353,7 +3141,7 @@ func (x *ListEntitiesSelectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesSelectResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesSelectResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{31}
+	return file_esphome_api_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListEntitiesSelectResponse) GetObjectId() string {
@@ -3435,7 +3223,7 @@ type ListEntitiesSensorResponse struct {
 
 func (x *ListEntitiesSensorResponse) Reset() {
 	*x = ListEntitiesSensorResponse{}
-	mi := &file_esphome_api_proto_msgTypes[32]
+	mi := &file_esphome_api_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3447,7 +3235,7 @@ func (x *ListEntitiesSensorResponse) String() string {
 func (*ListEntitiesSensorResponse) ProtoMessage() {}
 
 func (x *ListEntitiesSensorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[32]
+	mi := &file_esphome_api_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3460,7 +3248,7 @@ func (x *ListEntitiesSensorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesSensorResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesSensorResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{32}
+	return file_esphome_api_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListEntitiesSensorResponse) GetObjectId() string {
@@ -3570,7 +3358,7 @@ type ListEntitiesServicesArgument struct {
 
 func (x *ListEntitiesServicesArgument) Reset() {
 	*x = ListEntitiesServicesArgument{}
-	mi := &file_esphome_api_proto_msgTypes[33]
+	mi := &file_esphome_api_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3582,7 +3370,7 @@ func (x *ListEntitiesServicesArgument) String() string {
 func (*ListEntitiesServicesArgument) ProtoMessage() {}
 
 func (x *ListEntitiesServicesArgument) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[33]
+	mi := &file_esphome_api_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3595,7 +3383,7 @@ func (x *ListEntitiesServicesArgument) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesServicesArgument.ProtoReflect.Descriptor instead.
 func (*ListEntitiesServicesArgument) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{33}
+	return file_esphome_api_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ListEntitiesServicesArgument) GetName() string {
@@ -3653,7 +3441,7 @@ type ListEntitiesServicesResponse struct {
 
 func (x *ListEntitiesServicesResponse) Reset() {
 	*x = ListEntitiesServicesResponse{}
-	mi := &file_esphome_api_proto_msgTypes[34]
+	mi := &file_esphome_api_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3665,7 +3453,7 @@ func (x *ListEntitiesServicesResponse) String() string {
 func (*ListEntitiesServicesResponse) ProtoMessage() {}
 
 func (x *ListEntitiesServicesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[34]
+	mi := &file_esphome_api_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3678,7 +3466,7 @@ func (x *ListEntitiesServicesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesServicesResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesServicesResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{34}
+	return file_esphome_api_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListEntitiesServicesResponse) GetName() string {
@@ -3733,7 +3521,7 @@ type ListEntitiesSwitchResponse struct {
 
 func (x *ListEntitiesSwitchResponse) Reset() {
 	*x = ListEntitiesSwitchResponse{}
-	mi := &file_esphome_api_proto_msgTypes[35]
+	mi := &file_esphome_api_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3745,7 +3533,7 @@ func (x *ListEntitiesSwitchResponse) String() string {
 func (*ListEntitiesSwitchResponse) ProtoMessage() {}
 
 func (x *ListEntitiesSwitchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[35]
+	mi := &file_esphome_api_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3758,7 +3546,7 @@ func (x *ListEntitiesSwitchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesSwitchResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesSwitchResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{35}
+	return file_esphome_api_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListEntitiesSwitchResponse) GetObjectId() string {
@@ -3843,7 +3631,7 @@ type ListEntitiesTextResponse struct {
 
 func (x *ListEntitiesTextResponse) Reset() {
 	*x = ListEntitiesTextResponse{}
-	mi := &file_esphome_api_proto_msgTypes[36]
+	mi := &file_esphome_api_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3855,7 +3643,7 @@ func (x *ListEntitiesTextResponse) String() string {
 func (*ListEntitiesTextResponse) ProtoMessage() {}
 
 func (x *ListEntitiesTextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[36]
+	mi := &file_esphome_api_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3868,7 +3656,7 @@ func (x *ListEntitiesTextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesTextResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesTextResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{36}
+	return file_esphome_api_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListEntitiesTextResponse) GetObjectId() string {
@@ -3964,7 +3752,7 @@ type ListEntitiesTextSensorResponse struct {
 
 func (x *ListEntitiesTextSensorResponse) Reset() {
 	*x = ListEntitiesTextSensorResponse{}
-	mi := &file_esphome_api_proto_msgTypes[37]
+	mi := &file_esphome_api_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3976,7 +3764,7 @@ func (x *ListEntitiesTextSensorResponse) String() string {
 func (*ListEntitiesTextSensorResponse) ProtoMessage() {}
 
 func (x *ListEntitiesTextSensorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[37]
+	mi := &file_esphome_api_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3989,7 +3777,7 @@ func (x *ListEntitiesTextSensorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEntitiesTextSensorResponse.ProtoReflect.Descriptor instead.
 func (*ListEntitiesTextSensorResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{37}
+	return file_esphome_api_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListEntitiesTextSensorResponse) GetObjectId() string {
@@ -4066,7 +3854,7 @@ type MediaPlayerCommandRequest struct {
 
 func (x *MediaPlayerCommandRequest) Reset() {
 	*x = MediaPlayerCommandRequest{}
-	mi := &file_esphome_api_proto_msgTypes[38]
+	mi := &file_esphome_api_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4078,7 +3866,7 @@ func (x *MediaPlayerCommandRequest) String() string {
 func (*MediaPlayerCommandRequest) ProtoMessage() {}
 
 func (x *MediaPlayerCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[38]
+	mi := &file_esphome_api_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4091,7 +3879,7 @@ func (x *MediaPlayerCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaPlayerCommandRequest.ProtoReflect.Descriptor instead.
 func (*MediaPlayerCommandRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{38}
+	return file_esphome_api_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *MediaPlayerCommandRequest) GetKey() uint32 {
@@ -4177,7 +3965,7 @@ type MediaPlayerStateResponse struct {
 
 func (x *MediaPlayerStateResponse) Reset() {
 	*x = MediaPlayerStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[39]
+	mi := &file_esphome_api_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4189,7 +3977,7 @@ func (x *MediaPlayerStateResponse) String() string {
 func (*MediaPlayerStateResponse) ProtoMessage() {}
 
 func (x *MediaPlayerStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[39]
+	mi := &file_esphome_api_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4202,7 +3990,7 @@ func (x *MediaPlayerStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaPlayerStateResponse.ProtoReflect.Descriptor instead.
 func (*MediaPlayerStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{39}
+	return file_esphome_api_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *MediaPlayerStateResponse) GetKey() uint32 {
@@ -4255,7 +4043,7 @@ type MediaPlayerSupportedFormat struct {
 
 func (x *MediaPlayerSupportedFormat) Reset() {
 	*x = MediaPlayerSupportedFormat{}
-	mi := &file_esphome_api_proto_msgTypes[40]
+	mi := &file_esphome_api_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4267,7 +4055,7 @@ func (x *MediaPlayerSupportedFormat) String() string {
 func (*MediaPlayerSupportedFormat) ProtoMessage() {}
 
 func (x *MediaPlayerSupportedFormat) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[40]
+	mi := &file_esphome_api_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4280,7 +4068,7 @@ func (x *MediaPlayerSupportedFormat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaPlayerSupportedFormat.ProtoReflect.Descriptor instead.
 func (*MediaPlayerSupportedFormat) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{40}
+	return file_esphome_api_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *MediaPlayerSupportedFormat) GetFormat() string {
@@ -4336,7 +4124,7 @@ type NumberCommandRequest struct {
 
 func (x *NumberCommandRequest) Reset() {
 	*x = NumberCommandRequest{}
-	mi := &file_esphome_api_proto_msgTypes[41]
+	mi := &file_esphome_api_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4348,7 +4136,7 @@ func (x *NumberCommandRequest) String() string {
 func (*NumberCommandRequest) ProtoMessage() {}
 
 func (x *NumberCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[41]
+	mi := &file_esphome_api_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4361,7 +4149,7 @@ func (x *NumberCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NumberCommandRequest.ProtoReflect.Descriptor instead.
 func (*NumberCommandRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{41}
+	return file_esphome_api_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *NumberCommandRequest) GetKey() uint32 {
@@ -4399,7 +4187,7 @@ type NumberStateResponse struct {
 
 func (x *NumberStateResponse) Reset() {
 	*x = NumberStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[42]
+	mi := &file_esphome_api_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4411,7 +4199,7 @@ func (x *NumberStateResponse) String() string {
 func (*NumberStateResponse) ProtoMessage() {}
 
 func (x *NumberStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[42]
+	mi := &file_esphome_api_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4424,7 +4212,7 @@ func (x *NumberStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NumberStateResponse.ProtoReflect.Descriptor instead.
 func (*NumberStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{42}
+	return file_esphome_api_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *NumberStateResponse) GetKey() uint32 {
@@ -4463,7 +4251,7 @@ type PingRequest struct {
 
 func (x *PingRequest) Reset() {
 	*x = PingRequest{}
-	mi := &file_esphome_api_proto_msgTypes[43]
+	mi := &file_esphome_api_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4475,7 +4263,7 @@ func (x *PingRequest) String() string {
 func (*PingRequest) ProtoMessage() {}
 
 func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[43]
+	mi := &file_esphome_api_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4488,7 +4276,7 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{43}
+	return file_esphome_api_proto_rawDescGZIP(), []int{40}
 }
 
 type PingResponse struct {
@@ -4499,7 +4287,7 @@ type PingResponse struct {
 
 func (x *PingResponse) Reset() {
 	*x = PingResponse{}
-	mi := &file_esphome_api_proto_msgTypes[44]
+	mi := &file_esphome_api_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4511,7 +4299,7 @@ func (x *PingResponse) String() string {
 func (*PingResponse) ProtoMessage() {}
 
 func (x *PingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[44]
+	mi := &file_esphome_api_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4524,7 +4312,7 @@ func (x *PingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingResponse.ProtoReflect.Descriptor instead.
 func (*PingResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{44}
+	return file_esphome_api_proto_rawDescGZIP(), []int{41}
 }
 
 type SelectCommandRequest struct {
@@ -4538,7 +4326,7 @@ type SelectCommandRequest struct {
 
 func (x *SelectCommandRequest) Reset() {
 	*x = SelectCommandRequest{}
-	mi := &file_esphome_api_proto_msgTypes[45]
+	mi := &file_esphome_api_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4550,7 +4338,7 @@ func (x *SelectCommandRequest) String() string {
 func (*SelectCommandRequest) ProtoMessage() {}
 
 func (x *SelectCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[45]
+	mi := &file_esphome_api_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4563,7 +4351,7 @@ func (x *SelectCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectCommandRequest.ProtoReflect.Descriptor instead.
 func (*SelectCommandRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{45}
+	return file_esphome_api_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *SelectCommandRequest) GetKey() uint32 {
@@ -4601,7 +4389,7 @@ type SelectStateResponse struct {
 
 func (x *SelectStateResponse) Reset() {
 	*x = SelectStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[46]
+	mi := &file_esphome_api_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4613,7 +4401,7 @@ func (x *SelectStateResponse) String() string {
 func (*SelectStateResponse) ProtoMessage() {}
 
 func (x *SelectStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[46]
+	mi := &file_esphome_api_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4626,7 +4414,7 @@ func (x *SelectStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectStateResponse.ProtoReflect.Descriptor instead.
 func (*SelectStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{46}
+	return file_esphome_api_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SelectStateResponse) GetKey() uint32 {
@@ -4670,7 +4458,7 @@ type SendspinCapabilities struct {
 
 func (x *SendspinCapabilities) Reset() {
 	*x = SendspinCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[47]
+	mi := &file_esphome_api_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4682,7 +4470,7 @@ func (x *SendspinCapabilities) String() string {
 func (*SendspinCapabilities) ProtoMessage() {}
 
 func (x *SendspinCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[47]
+	mi := &file_esphome_api_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4695,7 +4483,7 @@ func (x *SendspinCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendspinCapabilities.ProtoReflect.Descriptor instead.
 func (*SendspinCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{47}
+	return file_esphome_api_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *SendspinCapabilities) GetFeatureFlags() uint32 {
@@ -4720,7 +4508,7 @@ type SendspinPairingTokenRequest struct {
 
 func (x *SendspinPairingTokenRequest) Reset() {
 	*x = SendspinPairingTokenRequest{}
-	mi := &file_esphome_api_proto_msgTypes[48]
+	mi := &file_esphome_api_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4732,7 +4520,7 @@ func (x *SendspinPairingTokenRequest) String() string {
 func (*SendspinPairingTokenRequest) ProtoMessage() {}
 
 func (x *SendspinPairingTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[48]
+	mi := &file_esphome_api_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4745,7 +4533,7 @@ func (x *SendspinPairingTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendspinPairingTokenRequest.ProtoReflect.Descriptor instead.
 func (*SendspinPairingTokenRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{48}
+	return file_esphome_api_proto_rawDescGZIP(), []int{45}
 }
 
 type SendspinPairingTokenResponse struct {
@@ -4759,7 +4547,7 @@ type SendspinPairingTokenResponse struct {
 
 func (x *SendspinPairingTokenResponse) Reset() {
 	*x = SendspinPairingTokenResponse{}
-	mi := &file_esphome_api_proto_msgTypes[49]
+	mi := &file_esphome_api_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4771,7 +4559,7 @@ func (x *SendspinPairingTokenResponse) String() string {
 func (*SendspinPairingTokenResponse) ProtoMessage() {}
 
 func (x *SendspinPairingTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[49]
+	mi := &file_esphome_api_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4784,7 +4572,7 @@ func (x *SendspinPairingTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendspinPairingTokenResponse.ProtoReflect.Descriptor instead.
 func (*SendspinPairingTokenResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{49}
+	return file_esphome_api_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *SendspinPairingTokenResponse) GetStatus() SendspinPairingTokenStatus {
@@ -4815,7 +4603,7 @@ type SensorStateResponse struct {
 
 func (x *SensorStateResponse) Reset() {
 	*x = SensorStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[50]
+	mi := &file_esphome_api_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4827,7 +4615,7 @@ func (x *SensorStateResponse) String() string {
 func (*SensorStateResponse) ProtoMessage() {}
 
 func (x *SensorStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[50]
+	mi := &file_esphome_api_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4840,7 +4628,7 @@ func (x *SensorStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SensorStateResponse.ProtoReflect.Descriptor instead.
 func (*SensorStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{50}
+	return file_esphome_api_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *SensorStateResponse) GetKey() uint32 {
@@ -4882,7 +4670,7 @@ type SerialProxyInfo struct {
 
 func (x *SerialProxyInfo) Reset() {
 	*x = SerialProxyInfo{}
-	mi := &file_esphome_api_proto_msgTypes[51]
+	mi := &file_esphome_api_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4894,7 +4682,7 @@ func (x *SerialProxyInfo) String() string {
 func (*SerialProxyInfo) ProtoMessage() {}
 
 func (x *SerialProxyInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[51]
+	mi := &file_esphome_api_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4907,7 +4695,7 @@ func (x *SerialProxyInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SerialProxyInfo.ProtoReflect.Descriptor instead.
 func (*SerialProxyInfo) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{51}
+	return file_esphome_api_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *SerialProxyInfo) GetName() string {
@@ -4941,7 +4729,7 @@ type StoreYamlCapabilities struct {
 
 func (x *StoreYamlCapabilities) Reset() {
 	*x = StoreYamlCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[52]
+	mi := &file_esphome_api_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4953,7 +4741,7 @@ func (x *StoreYamlCapabilities) String() string {
 func (*StoreYamlCapabilities) ProtoMessage() {}
 
 func (x *StoreYamlCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[52]
+	mi := &file_esphome_api_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4966,7 +4754,7 @@ func (x *StoreYamlCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreYamlCapabilities.ProtoReflect.Descriptor instead.
 func (*StoreYamlCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{52}
+	return file_esphome_api_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *StoreYamlCapabilities) GetSupported() bool {
@@ -4987,7 +4775,7 @@ type SubscribeHomeAssistantStateResponse struct {
 
 func (x *SubscribeHomeAssistantStateResponse) Reset() {
 	*x = SubscribeHomeAssistantStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[53]
+	mi := &file_esphome_api_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4999,7 +4787,7 @@ func (x *SubscribeHomeAssistantStateResponse) String() string {
 func (*SubscribeHomeAssistantStateResponse) ProtoMessage() {}
 
 func (x *SubscribeHomeAssistantStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[53]
+	mi := &file_esphome_api_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5012,7 +4800,7 @@ func (x *SubscribeHomeAssistantStateResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SubscribeHomeAssistantStateResponse.ProtoReflect.Descriptor instead.
 func (*SubscribeHomeAssistantStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{53}
+	return file_esphome_api_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *SubscribeHomeAssistantStateResponse) GetEntityId() string {
@@ -5044,7 +4832,7 @@ type SubscribeHomeAssistantStatesRequest struct {
 
 func (x *SubscribeHomeAssistantStatesRequest) Reset() {
 	*x = SubscribeHomeAssistantStatesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[54]
+	mi := &file_esphome_api_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5056,7 +4844,7 @@ func (x *SubscribeHomeAssistantStatesRequest) String() string {
 func (*SubscribeHomeAssistantStatesRequest) ProtoMessage() {}
 
 func (x *SubscribeHomeAssistantStatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[54]
+	mi := &file_esphome_api_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5069,7 +4857,7 @@ func (x *SubscribeHomeAssistantStatesRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use SubscribeHomeAssistantStatesRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeHomeAssistantStatesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{54}
+	return file_esphome_api_proto_rawDescGZIP(), []int{51}
 }
 
 type SubscribeHomeassistantServicesRequest struct {
@@ -5080,7 +4868,7 @@ type SubscribeHomeassistantServicesRequest struct {
 
 func (x *SubscribeHomeassistantServicesRequest) Reset() {
 	*x = SubscribeHomeassistantServicesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[55]
+	mi := &file_esphome_api_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5092,7 +4880,7 @@ func (x *SubscribeHomeassistantServicesRequest) String() string {
 func (*SubscribeHomeassistantServicesRequest) ProtoMessage() {}
 
 func (x *SubscribeHomeassistantServicesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[55]
+	mi := &file_esphome_api_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5105,7 +4893,7 @@ func (x *SubscribeHomeassistantServicesRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use SubscribeHomeassistantServicesRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeHomeassistantServicesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{55}
+	return file_esphome_api_proto_rawDescGZIP(), []int{52}
 }
 
 type SubscribeStatesRequest struct {
@@ -5116,7 +4904,7 @@ type SubscribeStatesRequest struct {
 
 func (x *SubscribeStatesRequest) Reset() {
 	*x = SubscribeStatesRequest{}
-	mi := &file_esphome_api_proto_msgTypes[56]
+	mi := &file_esphome_api_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5128,7 +4916,7 @@ func (x *SubscribeStatesRequest) String() string {
 func (*SubscribeStatesRequest) ProtoMessage() {}
 
 func (x *SubscribeStatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[56]
+	mi := &file_esphome_api_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5141,7 +4929,7 @@ func (x *SubscribeStatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeStatesRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeStatesRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{56}
+	return file_esphome_api_proto_rawDescGZIP(), []int{53}
 }
 
 type SubscribeVoiceAssistantRequest struct {
@@ -5154,7 +4942,7 @@ type SubscribeVoiceAssistantRequest struct {
 
 func (x *SubscribeVoiceAssistantRequest) Reset() {
 	*x = SubscribeVoiceAssistantRequest{}
-	mi := &file_esphome_api_proto_msgTypes[57]
+	mi := &file_esphome_api_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5166,7 +4954,7 @@ func (x *SubscribeVoiceAssistantRequest) String() string {
 func (*SubscribeVoiceAssistantRequest) ProtoMessage() {}
 
 func (x *SubscribeVoiceAssistantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[57]
+	mi := &file_esphome_api_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5179,7 +4967,7 @@ func (x *SubscribeVoiceAssistantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeVoiceAssistantRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeVoiceAssistantRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{57}
+	return file_esphome_api_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *SubscribeVoiceAssistantRequest) GetSubscribe() bool {
@@ -5207,7 +4995,7 @@ type SwitchCommandRequest struct {
 
 func (x *SwitchCommandRequest) Reset() {
 	*x = SwitchCommandRequest{}
-	mi := &file_esphome_api_proto_msgTypes[58]
+	mi := &file_esphome_api_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5219,7 +5007,7 @@ func (x *SwitchCommandRequest) String() string {
 func (*SwitchCommandRequest) ProtoMessage() {}
 
 func (x *SwitchCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[58]
+	mi := &file_esphome_api_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5232,7 +5020,7 @@ func (x *SwitchCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwitchCommandRequest.ProtoReflect.Descriptor instead.
 func (*SwitchCommandRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{58}
+	return file_esphome_api_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *SwitchCommandRequest) GetKey() uint32 {
@@ -5270,7 +5058,7 @@ type SwitchStateResponse struct {
 
 func (x *SwitchStateResponse) Reset() {
 	*x = SwitchStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[59]
+	mi := &file_esphome_api_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5282,7 +5070,7 @@ func (x *SwitchStateResponse) String() string {
 func (*SwitchStateResponse) ProtoMessage() {}
 
 func (x *SwitchStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[59]
+	mi := &file_esphome_api_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5295,7 +5083,7 @@ func (x *SwitchStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwitchStateResponse.ProtoReflect.Descriptor instead.
 func (*SwitchStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{59}
+	return file_esphome_api_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *SwitchStateResponse) GetKey() uint32 {
@@ -5337,7 +5125,7 @@ type TextCommandRequest struct {
 
 func (x *TextCommandRequest) Reset() {
 	*x = TextCommandRequest{}
-	mi := &file_esphome_api_proto_msgTypes[60]
+	mi := &file_esphome_api_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5349,7 +5137,7 @@ func (x *TextCommandRequest) String() string {
 func (*TextCommandRequest) ProtoMessage() {}
 
 func (x *TextCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[60]
+	mi := &file_esphome_api_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5362,7 +5150,7 @@ func (x *TextCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextCommandRequest.ProtoReflect.Descriptor instead.
 func (*TextCommandRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{60}
+	return file_esphome_api_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *TextCommandRequest) GetKey() uint32 {
@@ -5400,7 +5188,7 @@ type TextSensorStateResponse struct {
 
 func (x *TextSensorStateResponse) Reset() {
 	*x = TextSensorStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[61]
+	mi := &file_esphome_api_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5412,7 +5200,7 @@ func (x *TextSensorStateResponse) String() string {
 func (*TextSensorStateResponse) ProtoMessage() {}
 
 func (x *TextSensorStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[61]
+	mi := &file_esphome_api_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5425,7 +5213,7 @@ func (x *TextSensorStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextSensorStateResponse.ProtoReflect.Descriptor instead.
 func (*TextSensorStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{61}
+	return file_esphome_api_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *TextSensorStateResponse) GetKey() uint32 {
@@ -5470,7 +5258,7 @@ type TextStateResponse struct {
 
 func (x *TextStateResponse) Reset() {
 	*x = TextStateResponse{}
-	mi := &file_esphome_api_proto_msgTypes[62]
+	mi := &file_esphome_api_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5482,7 +5270,7 @@ func (x *TextStateResponse) String() string {
 func (*TextStateResponse) ProtoMessage() {}
 
 func (x *TextStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[62]
+	mi := &file_esphome_api_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5495,7 +5283,7 @@ func (x *TextStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextStateResponse.ProtoReflect.Descriptor instead.
 func (*TextStateResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{62}
+	return file_esphome_api_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *TextStateResponse) GetKey() uint32 {
@@ -5535,7 +5323,7 @@ type VoiceAssistantAnnounceFinished struct {
 
 func (x *VoiceAssistantAnnounceFinished) Reset() {
 	*x = VoiceAssistantAnnounceFinished{}
-	mi := &file_esphome_api_proto_msgTypes[63]
+	mi := &file_esphome_api_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5547,7 +5335,7 @@ func (x *VoiceAssistantAnnounceFinished) String() string {
 func (*VoiceAssistantAnnounceFinished) ProtoMessage() {}
 
 func (x *VoiceAssistantAnnounceFinished) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[63]
+	mi := &file_esphome_api_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5560,7 +5348,7 @@ func (x *VoiceAssistantAnnounceFinished) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantAnnounceFinished.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantAnnounceFinished) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{63}
+	return file_esphome_api_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *VoiceAssistantAnnounceFinished) GetSuccess() bool {
@@ -5582,7 +5370,7 @@ type VoiceAssistantAnnounceRequest struct {
 
 func (x *VoiceAssistantAnnounceRequest) Reset() {
 	*x = VoiceAssistantAnnounceRequest{}
-	mi := &file_esphome_api_proto_msgTypes[64]
+	mi := &file_esphome_api_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5594,7 +5382,7 @@ func (x *VoiceAssistantAnnounceRequest) String() string {
 func (*VoiceAssistantAnnounceRequest) ProtoMessage() {}
 
 func (x *VoiceAssistantAnnounceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[64]
+	mi := &file_esphome_api_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5607,7 +5395,7 @@ func (x *VoiceAssistantAnnounceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantAnnounceRequest.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantAnnounceRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{64}
+	return file_esphome_api_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *VoiceAssistantAnnounceRequest) GetMediaId() string {
@@ -5649,7 +5437,7 @@ type VoiceAssistantAudio struct {
 
 func (x *VoiceAssistantAudio) Reset() {
 	*x = VoiceAssistantAudio{}
-	mi := &file_esphome_api_proto_msgTypes[65]
+	mi := &file_esphome_api_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5661,7 +5449,7 @@ func (x *VoiceAssistantAudio) String() string {
 func (*VoiceAssistantAudio) ProtoMessage() {}
 
 func (x *VoiceAssistantAudio) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[65]
+	mi := &file_esphome_api_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5674,7 +5462,7 @@ func (x *VoiceAssistantAudio) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantAudio.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantAudio) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{65}
+	return file_esphome_api_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *VoiceAssistantAudio) GetData() []byte {
@@ -5709,7 +5497,7 @@ type VoiceAssistantAudioSettings struct {
 
 func (x *VoiceAssistantAudioSettings) Reset() {
 	*x = VoiceAssistantAudioSettings{}
-	mi := &file_esphome_api_proto_msgTypes[66]
+	mi := &file_esphome_api_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5721,7 +5509,7 @@ func (x *VoiceAssistantAudioSettings) String() string {
 func (*VoiceAssistantAudioSettings) ProtoMessage() {}
 
 func (x *VoiceAssistantAudioSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[66]
+	mi := &file_esphome_api_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5734,7 +5522,7 @@ func (x *VoiceAssistantAudioSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantAudioSettings.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantAudioSettings) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{66}
+	return file_esphome_api_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *VoiceAssistantAudioSettings) GetNoiseSuppressionLevel() uint32 {
@@ -5768,7 +5556,7 @@ type VoiceAssistantCapabilities struct {
 
 func (x *VoiceAssistantCapabilities) Reset() {
 	*x = VoiceAssistantCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[67]
+	mi := &file_esphome_api_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5780,7 +5568,7 @@ func (x *VoiceAssistantCapabilities) String() string {
 func (*VoiceAssistantCapabilities) ProtoMessage() {}
 
 func (x *VoiceAssistantCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[67]
+	mi := &file_esphome_api_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5793,7 +5581,7 @@ func (x *VoiceAssistantCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantCapabilities.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{67}
+	return file_esphome_api_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *VoiceAssistantCapabilities) GetFeatureFlags() uint32 {
@@ -5812,7 +5600,7 @@ type VoiceAssistantConfigurationRequest struct {
 
 func (x *VoiceAssistantConfigurationRequest) Reset() {
 	*x = VoiceAssistantConfigurationRequest{}
-	mi := &file_esphome_api_proto_msgTypes[68]
+	mi := &file_esphome_api_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5824,7 +5612,7 @@ func (x *VoiceAssistantConfigurationRequest) String() string {
 func (*VoiceAssistantConfigurationRequest) ProtoMessage() {}
 
 func (x *VoiceAssistantConfigurationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[68]
+	mi := &file_esphome_api_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5837,7 +5625,7 @@ func (x *VoiceAssistantConfigurationRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use VoiceAssistantConfigurationRequest.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantConfigurationRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{68}
+	return file_esphome_api_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *VoiceAssistantConfigurationRequest) GetExternalWakeWords() []*VoiceAssistantExternalWakeWord {
@@ -5858,7 +5646,7 @@ type VoiceAssistantConfigurationResponse struct {
 
 func (x *VoiceAssistantConfigurationResponse) Reset() {
 	*x = VoiceAssistantConfigurationResponse{}
-	mi := &file_esphome_api_proto_msgTypes[69]
+	mi := &file_esphome_api_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5870,7 +5658,7 @@ func (x *VoiceAssistantConfigurationResponse) String() string {
 func (*VoiceAssistantConfigurationResponse) ProtoMessage() {}
 
 func (x *VoiceAssistantConfigurationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[69]
+	mi := &file_esphome_api_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5883,7 +5671,7 @@ func (x *VoiceAssistantConfigurationResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use VoiceAssistantConfigurationResponse.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantConfigurationResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{69}
+	return file_esphome_api_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *VoiceAssistantConfigurationResponse) GetAvailableWakeWords() []*VoiceAssistantWakeWord {
@@ -5917,7 +5705,7 @@ type VoiceAssistantEventData struct {
 
 func (x *VoiceAssistantEventData) Reset() {
 	*x = VoiceAssistantEventData{}
-	mi := &file_esphome_api_proto_msgTypes[70]
+	mi := &file_esphome_api_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5929,7 +5717,7 @@ func (x *VoiceAssistantEventData) String() string {
 func (*VoiceAssistantEventData) ProtoMessage() {}
 
 func (x *VoiceAssistantEventData) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[70]
+	mi := &file_esphome_api_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5942,7 +5730,7 @@ func (x *VoiceAssistantEventData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantEventData.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantEventData) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{70}
+	return file_esphome_api_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *VoiceAssistantEventData) GetName() string {
@@ -5969,7 +5757,7 @@ type VoiceAssistantEventResponse struct {
 
 func (x *VoiceAssistantEventResponse) Reset() {
 	*x = VoiceAssistantEventResponse{}
-	mi := &file_esphome_api_proto_msgTypes[71]
+	mi := &file_esphome_api_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5981,7 +5769,7 @@ func (x *VoiceAssistantEventResponse) String() string {
 func (*VoiceAssistantEventResponse) ProtoMessage() {}
 
 func (x *VoiceAssistantEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[71]
+	mi := &file_esphome_api_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5994,7 +5782,7 @@ func (x *VoiceAssistantEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantEventResponse.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantEventResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{71}
+	return file_esphome_api_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *VoiceAssistantEventResponse) GetEventType() VoiceAssistantEvent {
@@ -6026,7 +5814,7 @@ type VoiceAssistantExternalWakeWord struct {
 
 func (x *VoiceAssistantExternalWakeWord) Reset() {
 	*x = VoiceAssistantExternalWakeWord{}
-	mi := &file_esphome_api_proto_msgTypes[72]
+	mi := &file_esphome_api_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6038,7 +5826,7 @@ func (x *VoiceAssistantExternalWakeWord) String() string {
 func (*VoiceAssistantExternalWakeWord) ProtoMessage() {}
 
 func (x *VoiceAssistantExternalWakeWord) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[72]
+	mi := &file_esphome_api_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6051,7 +5839,7 @@ func (x *VoiceAssistantExternalWakeWord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantExternalWakeWord.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantExternalWakeWord) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{72}
+	return file_esphome_api_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *VoiceAssistantExternalWakeWord) GetId() string {
@@ -6121,7 +5909,7 @@ type VoiceAssistantRequest struct {
 
 func (x *VoiceAssistantRequest) Reset() {
 	*x = VoiceAssistantRequest{}
-	mi := &file_esphome_api_proto_msgTypes[73]
+	mi := &file_esphome_api_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6133,7 +5921,7 @@ func (x *VoiceAssistantRequest) String() string {
 func (*VoiceAssistantRequest) ProtoMessage() {}
 
 func (x *VoiceAssistantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[73]
+	mi := &file_esphome_api_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6146,7 +5934,7 @@ func (x *VoiceAssistantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantRequest.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantRequest) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{73}
+	return file_esphome_api_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *VoiceAssistantRequest) GetStart() bool {
@@ -6229,7 +6017,7 @@ type VoiceAssistantResponse struct {
 
 func (x *VoiceAssistantResponse) Reset() {
 	*x = VoiceAssistantResponse{}
-	mi := &file_esphome_api_proto_msgTypes[74]
+	mi := &file_esphome_api_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6241,7 +6029,7 @@ func (x *VoiceAssistantResponse) String() string {
 func (*VoiceAssistantResponse) ProtoMessage() {}
 
 func (x *VoiceAssistantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[74]
+	mi := &file_esphome_api_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6254,7 +6042,7 @@ func (x *VoiceAssistantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantResponse.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{74}
+	return file_esphome_api_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *VoiceAssistantResponse) GetPort() uint32 {
@@ -6280,7 +6068,7 @@ type VoiceAssistantSetConfiguration struct {
 
 func (x *VoiceAssistantSetConfiguration) Reset() {
 	*x = VoiceAssistantSetConfiguration{}
-	mi := &file_esphome_api_proto_msgTypes[75]
+	mi := &file_esphome_api_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6292,7 +6080,7 @@ func (x *VoiceAssistantSetConfiguration) String() string {
 func (*VoiceAssistantSetConfiguration) ProtoMessage() {}
 
 func (x *VoiceAssistantSetConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[75]
+	mi := &file_esphome_api_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6305,7 +6093,7 @@ func (x *VoiceAssistantSetConfiguration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantSetConfiguration.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantSetConfiguration) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{75}
+	return file_esphome_api_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *VoiceAssistantSetConfiguration) GetActiveWakeWords() []string {
@@ -6329,7 +6117,7 @@ type VoiceAssistantTimerEventResponse struct {
 
 func (x *VoiceAssistantTimerEventResponse) Reset() {
 	*x = VoiceAssistantTimerEventResponse{}
-	mi := &file_esphome_api_proto_msgTypes[76]
+	mi := &file_esphome_api_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6341,7 +6129,7 @@ func (x *VoiceAssistantTimerEventResponse) String() string {
 func (*VoiceAssistantTimerEventResponse) ProtoMessage() {}
 
 func (x *VoiceAssistantTimerEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[76]
+	mi := &file_esphome_api_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6354,7 +6142,7 @@ func (x *VoiceAssistantTimerEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantTimerEventResponse.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantTimerEventResponse) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{76}
+	return file_esphome_api_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *VoiceAssistantTimerEventResponse) GetEventType() VoiceAssistantTimerEvent {
@@ -6410,7 +6198,7 @@ type VoiceAssistantWakeWord struct {
 
 func (x *VoiceAssistantWakeWord) Reset() {
 	*x = VoiceAssistantWakeWord{}
-	mi := &file_esphome_api_proto_msgTypes[77]
+	mi := &file_esphome_api_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6422,7 +6210,7 @@ func (x *VoiceAssistantWakeWord) String() string {
 func (*VoiceAssistantWakeWord) ProtoMessage() {}
 
 func (x *VoiceAssistantWakeWord) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[77]
+	mi := &file_esphome_api_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6435,7 +6223,7 @@ func (x *VoiceAssistantWakeWord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VoiceAssistantWakeWord.ProtoReflect.Descriptor instead.
 func (*VoiceAssistantWakeWord) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{77}
+	return file_esphome_api_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *VoiceAssistantWakeWord) GetId() string {
@@ -6469,7 +6257,7 @@ type WizardCapabilities struct {
 
 func (x *WizardCapabilities) Reset() {
 	*x = WizardCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[78]
+	mi := &file_esphome_api_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6481,7 +6269,7 @@ func (x *WizardCapabilities) String() string {
 func (*WizardCapabilities) ProtoMessage() {}
 
 func (x *WizardCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[78]
+	mi := &file_esphome_api_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6494,7 +6282,7 @@ func (x *WizardCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WizardCapabilities.ProtoReflect.Descriptor instead.
 func (*WizardCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{78}
+	return file_esphome_api_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *WizardCapabilities) GetConfigured() bool {
@@ -6515,7 +6303,7 @@ type ZWaveProxyCapabilities struct {
 
 func (x *ZWaveProxyCapabilities) Reset() {
 	*x = ZWaveProxyCapabilities{}
-	mi := &file_esphome_api_proto_msgTypes[79]
+	mi := &file_esphome_api_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6527,7 +6315,7 @@ func (x *ZWaveProxyCapabilities) String() string {
 func (*ZWaveProxyCapabilities) ProtoMessage() {}
 
 func (x *ZWaveProxyCapabilities) ProtoReflect() protoreflect.Message {
-	mi := &file_esphome_api_proto_msgTypes[79]
+	mi := &file_esphome_api_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6540,7 +6328,7 @@ func (x *ZWaveProxyCapabilities) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ZWaveProxyCapabilities.ProtoReflect.Descriptor instead.
 func (*ZWaveProxyCapabilities) Descriptor() ([]byte, []int) {
-	return file_esphome_api_proto_rawDescGZIP(), []int{79}
+	return file_esphome_api_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *ZWaveProxyCapabilities) GetFeatureFlags() uint32 {
@@ -6576,15 +6364,7 @@ const file_esphome_api_proto_rawDesc = "" +
 	"macAddress\"E\n" +
 	"\x14ButtonCommandRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\aR\x03key\x12\x1b\n" +
-	"\tdevice_id\x18\x02 \x01(\rR\bdeviceId\"D\n" +
-	"\x12CameraImageRequest\x12\x16\n" +
-	"\x06single\x18\x01 \x01(\bR\x06single\x12\x16\n" +
-	"\x06stream\x18\x02 \x01(\bR\x06stream\"l\n" +
-	"\x13CameraImageResponse\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\aR\x03key\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data\x12\x12\n" +
-	"\x04done\x18\x03 \x01(\bR\x04done\x12\x1b\n" +
-	"\tdevice_id\x18\x04 \x01(\rR\bdeviceId\"/\n" +
+	"\tdevice_id\x18\x02 \x01(\rR\bdeviceId\"/\n" +
 	"\x17CrashReportCapabilities\x12\x14\n" +
 	"\x05flags\x18\x01 \x01(\rR\x05flags\"\x1b\n" +
 	"\x19DeviceCapabilitiesRequest\"\xaf\x04\n" +
@@ -6711,15 +6491,7 @@ const file_esphome_api_proto_rawDesc = "" +
 	"\x13disabled_by_default\x18\x06 \x01(\bR\x11disabledByDefault\x12@\n" +
 	"\x0fentity_category\x18\a \x01(\x0e2\x17.esphome.EntityCategoryR\x0eentityCategory\x12!\n" +
 	"\fdevice_class\x18\b \x01(\tR\vdeviceClass\x12\x1b\n" +
-	"\tdevice_id\x18\t \x01(\rR\bdeviceIdJ\x04\b\x04\x10\x05\"\x88\x02\n" +
-	"\x1aListEntitiesCameraResponse\x12\x1b\n" +
-	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\aR\x03key\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12.\n" +
-	"\x13disabled_by_default\x18\x05 \x01(\bR\x11disabledByDefault\x12\x12\n" +
-	"\x04icon\x18\x06 \x01(\tR\x04icon\x12@\n" +
-	"\x0fentity_category\x18\a \x01(\x0e2\x17.esphome.EntityCategoryR\x0eentityCategory\x12\x1b\n" +
-	"\tdevice_id\x18\b \x01(\rR\bdeviceIdJ\x04\b\x04\x10\x05\"\x1a\n" +
+	"\tdevice_id\x18\t \x01(\rR\bdeviceIdJ\x04\b\x04\x10\x05\"\x1a\n" +
 	"\x18ListEntitiesDoneResponse\"\xcb\x02\n" +
 	"\x19ListEntitiesEventResponse\x12\x1b\n" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x10\n" +
@@ -7129,7 +6901,7 @@ func file_esphome_api_proto_rawDescGZIP() []byte {
 }
 
 var file_esphome_api_proto_enumTypes = make([]protoimpl.EnumInfo, 16)
-var file_esphome_api_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
+var file_esphome_api_proto_msgTypes = make([]protoimpl.MessageInfo, 77)
 var file_esphome_api_proto_goTypes = []any{
 	(DeviceRelation)(0),                           // 0: esphome.DeviceRelation
 	(DisconnectReason)(0),                         // 1: esphome.DisconnectReason
@@ -7151,137 +6923,133 @@ var file_esphome_api_proto_goTypes = []any{
 	(*BinarySensorStateResponse)(nil),             // 17: esphome.BinarySensorStateResponse
 	(*BluetoothProxyCapabilities)(nil),            // 18: esphome.BluetoothProxyCapabilities
 	(*ButtonCommandRequest)(nil),                  // 19: esphome.ButtonCommandRequest
-	(*CameraImageRequest)(nil),                    // 20: esphome.CameraImageRequest
-	(*CameraImageResponse)(nil),                   // 21: esphome.CameraImageResponse
-	(*CrashReportCapabilities)(nil),               // 22: esphome.CrashReportCapabilities
-	(*DeviceCapabilitiesRequest)(nil),             // 23: esphome.DeviceCapabilitiesRequest
-	(*DeviceCapabilitiesResponse)(nil),            // 24: esphome.DeviceCapabilitiesResponse
-	(*DeviceInfo)(nil),                            // 25: esphome.DeviceInfo
-	(*DeviceInfoRequest)(nil),                     // 26: esphome.DeviceInfoRequest
-	(*DeviceInfoResponse)(nil),                    // 27: esphome.DeviceInfoResponse
-	(*DeviceWizardRequest)(nil),                   // 28: esphome.DeviceWizardRequest
-	(*DisconnectRequest)(nil),                     // 29: esphome.DisconnectRequest
-	(*DisconnectResponse)(nil),                    // 30: esphome.DisconnectResponse
-	(*ExecuteServiceArgument)(nil),                // 31: esphome.ExecuteServiceArgument
-	(*ExecuteServiceRequest)(nil),                 // 32: esphome.ExecuteServiceRequest
-	(*ExecuteServiceResponse)(nil),                // 33: esphome.ExecuteServiceResponse
-	(*HelloRequest)(nil),                          // 34: esphome.HelloRequest
-	(*HelloResponse)(nil),                         // 35: esphome.HelloResponse
-	(*HomeAssistantStateResponse)(nil),            // 36: esphome.HomeAssistantStateResponse
-	(*HomeassistantActionRequest)(nil),            // 37: esphome.HomeassistantActionRequest
-	(*HomeassistantServiceMap)(nil),               // 38: esphome.HomeassistantServiceMap
-	(*ListEntitiesBinarySensorResponse)(nil),      // 39: esphome.ListEntitiesBinarySensorResponse
-	(*ListEntitiesButtonResponse)(nil),            // 40: esphome.ListEntitiesButtonResponse
-	(*ListEntitiesCameraResponse)(nil),            // 41: esphome.ListEntitiesCameraResponse
-	(*ListEntitiesDoneResponse)(nil),              // 42: esphome.ListEntitiesDoneResponse
-	(*ListEntitiesEventResponse)(nil),             // 43: esphome.ListEntitiesEventResponse
-	(*ListEntitiesMediaPlayerResponse)(nil),       // 44: esphome.ListEntitiesMediaPlayerResponse
-	(*ListEntitiesNumberResponse)(nil),            // 45: esphome.ListEntitiesNumberResponse
-	(*ListEntitiesRequest)(nil),                   // 46: esphome.ListEntitiesRequest
-	(*ListEntitiesSelectResponse)(nil),            // 47: esphome.ListEntitiesSelectResponse
-	(*ListEntitiesSensorResponse)(nil),            // 48: esphome.ListEntitiesSensorResponse
-	(*ListEntitiesServicesArgument)(nil),          // 49: esphome.ListEntitiesServicesArgument
-	(*ListEntitiesServicesResponse)(nil),          // 50: esphome.ListEntitiesServicesResponse
-	(*ListEntitiesSwitchResponse)(nil),            // 51: esphome.ListEntitiesSwitchResponse
-	(*ListEntitiesTextResponse)(nil),              // 52: esphome.ListEntitiesTextResponse
-	(*ListEntitiesTextSensorResponse)(nil),        // 53: esphome.ListEntitiesTextSensorResponse
-	(*MediaPlayerCommandRequest)(nil),             // 54: esphome.MediaPlayerCommandRequest
-	(*MediaPlayerStateResponse)(nil),              // 55: esphome.MediaPlayerStateResponse
-	(*MediaPlayerSupportedFormat)(nil),            // 56: esphome.MediaPlayerSupportedFormat
-	(*NumberCommandRequest)(nil),                  // 57: esphome.NumberCommandRequest
-	(*NumberStateResponse)(nil),                   // 58: esphome.NumberStateResponse
-	(*PingRequest)(nil),                           // 59: esphome.PingRequest
-	(*PingResponse)(nil),                          // 60: esphome.PingResponse
-	(*SelectCommandRequest)(nil),                  // 61: esphome.SelectCommandRequest
-	(*SelectStateResponse)(nil),                   // 62: esphome.SelectStateResponse
-	(*SendspinCapabilities)(nil),                  // 63: esphome.SendspinCapabilities
-	(*SendspinPairingTokenRequest)(nil),           // 64: esphome.SendspinPairingTokenRequest
-	(*SendspinPairingTokenResponse)(nil),          // 65: esphome.SendspinPairingTokenResponse
-	(*SensorStateResponse)(nil),                   // 66: esphome.SensorStateResponse
-	(*SerialProxyInfo)(nil),                       // 67: esphome.SerialProxyInfo
-	(*StoreYamlCapabilities)(nil),                 // 68: esphome.StoreYamlCapabilities
-	(*SubscribeHomeAssistantStateResponse)(nil),   // 69: esphome.SubscribeHomeAssistantStateResponse
-	(*SubscribeHomeAssistantStatesRequest)(nil),   // 70: esphome.SubscribeHomeAssistantStatesRequest
-	(*SubscribeHomeassistantServicesRequest)(nil), // 71: esphome.SubscribeHomeassistantServicesRequest
-	(*SubscribeStatesRequest)(nil),                // 72: esphome.SubscribeStatesRequest
-	(*SubscribeVoiceAssistantRequest)(nil),        // 73: esphome.SubscribeVoiceAssistantRequest
-	(*SwitchCommandRequest)(nil),                  // 74: esphome.SwitchCommandRequest
-	(*SwitchStateResponse)(nil),                   // 75: esphome.SwitchStateResponse
-	(*TextCommandRequest)(nil),                    // 76: esphome.TextCommandRequest
-	(*TextSensorStateResponse)(nil),               // 77: esphome.TextSensorStateResponse
-	(*TextStateResponse)(nil),                     // 78: esphome.TextStateResponse
-	(*VoiceAssistantAnnounceFinished)(nil),        // 79: esphome.VoiceAssistantAnnounceFinished
-	(*VoiceAssistantAnnounceRequest)(nil),         // 80: esphome.VoiceAssistantAnnounceRequest
-	(*VoiceAssistantAudio)(nil),                   // 81: esphome.VoiceAssistantAudio
-	(*VoiceAssistantAudioSettings)(nil),           // 82: esphome.VoiceAssistantAudioSettings
-	(*VoiceAssistantCapabilities)(nil),            // 83: esphome.VoiceAssistantCapabilities
-	(*VoiceAssistantConfigurationRequest)(nil),    // 84: esphome.VoiceAssistantConfigurationRequest
-	(*VoiceAssistantConfigurationResponse)(nil),   // 85: esphome.VoiceAssistantConfigurationResponse
-	(*VoiceAssistantEventData)(nil),               // 86: esphome.VoiceAssistantEventData
-	(*VoiceAssistantEventResponse)(nil),           // 87: esphome.VoiceAssistantEventResponse
-	(*VoiceAssistantExternalWakeWord)(nil),        // 88: esphome.VoiceAssistantExternalWakeWord
-	(*VoiceAssistantRequest)(nil),                 // 89: esphome.VoiceAssistantRequest
-	(*VoiceAssistantResponse)(nil),                // 90: esphome.VoiceAssistantResponse
-	(*VoiceAssistantSetConfiguration)(nil),        // 91: esphome.VoiceAssistantSetConfiguration
-	(*VoiceAssistantTimerEventResponse)(nil),      // 92: esphome.VoiceAssistantTimerEventResponse
-	(*VoiceAssistantWakeWord)(nil),                // 93: esphome.VoiceAssistantWakeWord
-	(*WizardCapabilities)(nil),                    // 94: esphome.WizardCapabilities
-	(*ZWaveProxyCapabilities)(nil),                // 95: esphome.ZWaveProxyCapabilities
+	(*CrashReportCapabilities)(nil),               // 20: esphome.CrashReportCapabilities
+	(*DeviceCapabilitiesRequest)(nil),             // 21: esphome.DeviceCapabilitiesRequest
+	(*DeviceCapabilitiesResponse)(nil),            // 22: esphome.DeviceCapabilitiesResponse
+	(*DeviceInfo)(nil),                            // 23: esphome.DeviceInfo
+	(*DeviceInfoRequest)(nil),                     // 24: esphome.DeviceInfoRequest
+	(*DeviceInfoResponse)(nil),                    // 25: esphome.DeviceInfoResponse
+	(*DeviceWizardRequest)(nil),                   // 26: esphome.DeviceWizardRequest
+	(*DisconnectRequest)(nil),                     // 27: esphome.DisconnectRequest
+	(*DisconnectResponse)(nil),                    // 28: esphome.DisconnectResponse
+	(*ExecuteServiceArgument)(nil),                // 29: esphome.ExecuteServiceArgument
+	(*ExecuteServiceRequest)(nil),                 // 30: esphome.ExecuteServiceRequest
+	(*ExecuteServiceResponse)(nil),                // 31: esphome.ExecuteServiceResponse
+	(*HelloRequest)(nil),                          // 32: esphome.HelloRequest
+	(*HelloResponse)(nil),                         // 33: esphome.HelloResponse
+	(*HomeAssistantStateResponse)(nil),            // 34: esphome.HomeAssistantStateResponse
+	(*HomeassistantActionRequest)(nil),            // 35: esphome.HomeassistantActionRequest
+	(*HomeassistantServiceMap)(nil),               // 36: esphome.HomeassistantServiceMap
+	(*ListEntitiesBinarySensorResponse)(nil),      // 37: esphome.ListEntitiesBinarySensorResponse
+	(*ListEntitiesButtonResponse)(nil),            // 38: esphome.ListEntitiesButtonResponse
+	(*ListEntitiesDoneResponse)(nil),              // 39: esphome.ListEntitiesDoneResponse
+	(*ListEntitiesEventResponse)(nil),             // 40: esphome.ListEntitiesEventResponse
+	(*ListEntitiesMediaPlayerResponse)(nil),       // 41: esphome.ListEntitiesMediaPlayerResponse
+	(*ListEntitiesNumberResponse)(nil),            // 42: esphome.ListEntitiesNumberResponse
+	(*ListEntitiesRequest)(nil),                   // 43: esphome.ListEntitiesRequest
+	(*ListEntitiesSelectResponse)(nil),            // 44: esphome.ListEntitiesSelectResponse
+	(*ListEntitiesSensorResponse)(nil),            // 45: esphome.ListEntitiesSensorResponse
+	(*ListEntitiesServicesArgument)(nil),          // 46: esphome.ListEntitiesServicesArgument
+	(*ListEntitiesServicesResponse)(nil),          // 47: esphome.ListEntitiesServicesResponse
+	(*ListEntitiesSwitchResponse)(nil),            // 48: esphome.ListEntitiesSwitchResponse
+	(*ListEntitiesTextResponse)(nil),              // 49: esphome.ListEntitiesTextResponse
+	(*ListEntitiesTextSensorResponse)(nil),        // 50: esphome.ListEntitiesTextSensorResponse
+	(*MediaPlayerCommandRequest)(nil),             // 51: esphome.MediaPlayerCommandRequest
+	(*MediaPlayerStateResponse)(nil),              // 52: esphome.MediaPlayerStateResponse
+	(*MediaPlayerSupportedFormat)(nil),            // 53: esphome.MediaPlayerSupportedFormat
+	(*NumberCommandRequest)(nil),                  // 54: esphome.NumberCommandRequest
+	(*NumberStateResponse)(nil),                   // 55: esphome.NumberStateResponse
+	(*PingRequest)(nil),                           // 56: esphome.PingRequest
+	(*PingResponse)(nil),                          // 57: esphome.PingResponse
+	(*SelectCommandRequest)(nil),                  // 58: esphome.SelectCommandRequest
+	(*SelectStateResponse)(nil),                   // 59: esphome.SelectStateResponse
+	(*SendspinCapabilities)(nil),                  // 60: esphome.SendspinCapabilities
+	(*SendspinPairingTokenRequest)(nil),           // 61: esphome.SendspinPairingTokenRequest
+	(*SendspinPairingTokenResponse)(nil),          // 62: esphome.SendspinPairingTokenResponse
+	(*SensorStateResponse)(nil),                   // 63: esphome.SensorStateResponse
+	(*SerialProxyInfo)(nil),                       // 64: esphome.SerialProxyInfo
+	(*StoreYamlCapabilities)(nil),                 // 65: esphome.StoreYamlCapabilities
+	(*SubscribeHomeAssistantStateResponse)(nil),   // 66: esphome.SubscribeHomeAssistantStateResponse
+	(*SubscribeHomeAssistantStatesRequest)(nil),   // 67: esphome.SubscribeHomeAssistantStatesRequest
+	(*SubscribeHomeassistantServicesRequest)(nil), // 68: esphome.SubscribeHomeassistantServicesRequest
+	(*SubscribeStatesRequest)(nil),                // 69: esphome.SubscribeStatesRequest
+	(*SubscribeVoiceAssistantRequest)(nil),        // 70: esphome.SubscribeVoiceAssistantRequest
+	(*SwitchCommandRequest)(nil),                  // 71: esphome.SwitchCommandRequest
+	(*SwitchStateResponse)(nil),                   // 72: esphome.SwitchStateResponse
+	(*TextCommandRequest)(nil),                    // 73: esphome.TextCommandRequest
+	(*TextSensorStateResponse)(nil),               // 74: esphome.TextSensorStateResponse
+	(*TextStateResponse)(nil),                     // 75: esphome.TextStateResponse
+	(*VoiceAssistantAnnounceFinished)(nil),        // 76: esphome.VoiceAssistantAnnounceFinished
+	(*VoiceAssistantAnnounceRequest)(nil),         // 77: esphome.VoiceAssistantAnnounceRequest
+	(*VoiceAssistantAudio)(nil),                   // 78: esphome.VoiceAssistantAudio
+	(*VoiceAssistantAudioSettings)(nil),           // 79: esphome.VoiceAssistantAudioSettings
+	(*VoiceAssistantCapabilities)(nil),            // 80: esphome.VoiceAssistantCapabilities
+	(*VoiceAssistantConfigurationRequest)(nil),    // 81: esphome.VoiceAssistantConfigurationRequest
+	(*VoiceAssistantConfigurationResponse)(nil),   // 82: esphome.VoiceAssistantConfigurationResponse
+	(*VoiceAssistantEventData)(nil),               // 83: esphome.VoiceAssistantEventData
+	(*VoiceAssistantEventResponse)(nil),           // 84: esphome.VoiceAssistantEventResponse
+	(*VoiceAssistantExternalWakeWord)(nil),        // 85: esphome.VoiceAssistantExternalWakeWord
+	(*VoiceAssistantRequest)(nil),                 // 86: esphome.VoiceAssistantRequest
+	(*VoiceAssistantResponse)(nil),                // 87: esphome.VoiceAssistantResponse
+	(*VoiceAssistantSetConfiguration)(nil),        // 88: esphome.VoiceAssistantSetConfiguration
+	(*VoiceAssistantTimerEventResponse)(nil),      // 89: esphome.VoiceAssistantTimerEventResponse
+	(*VoiceAssistantWakeWord)(nil),                // 90: esphome.VoiceAssistantWakeWord
+	(*WizardCapabilities)(nil),                    // 91: esphome.WizardCapabilities
+	(*ZWaveProxyCapabilities)(nil),                // 92: esphome.ZWaveProxyCapabilities
 }
 var file_esphome_api_proto_depIdxs = []int32{
 	18, // 0: esphome.DeviceCapabilitiesResponse.bluetooth_proxy:type_name -> esphome.BluetoothProxyCapabilities
-	83, // 1: esphome.DeviceCapabilitiesResponse.voice_assistant:type_name -> esphome.VoiceAssistantCapabilities
-	95, // 2: esphome.DeviceCapabilitiesResponse.zwave_proxy:type_name -> esphome.ZWaveProxyCapabilities
-	67, // 3: esphome.DeviceCapabilitiesResponse.serial_proxies:type_name -> esphome.SerialProxyInfo
-	94, // 4: esphome.DeviceCapabilitiesResponse.wizard:type_name -> esphome.WizardCapabilities
-	63, // 5: esphome.DeviceCapabilitiesResponse.sendspin:type_name -> esphome.SendspinCapabilities
-	68, // 6: esphome.DeviceCapabilitiesResponse.store_yaml:type_name -> esphome.StoreYamlCapabilities
-	22, // 7: esphome.DeviceCapabilitiesResponse.crash_report:type_name -> esphome.CrashReportCapabilities
+	80, // 1: esphome.DeviceCapabilitiesResponse.voice_assistant:type_name -> esphome.VoiceAssistantCapabilities
+	92, // 2: esphome.DeviceCapabilitiesResponse.zwave_proxy:type_name -> esphome.ZWaveProxyCapabilities
+	64, // 3: esphome.DeviceCapabilitiesResponse.serial_proxies:type_name -> esphome.SerialProxyInfo
+	91, // 4: esphome.DeviceCapabilitiesResponse.wizard:type_name -> esphome.WizardCapabilities
+	60, // 5: esphome.DeviceCapabilitiesResponse.sendspin:type_name -> esphome.SendspinCapabilities
+	65, // 6: esphome.DeviceCapabilitiesResponse.store_yaml:type_name -> esphome.StoreYamlCapabilities
+	20, // 7: esphome.DeviceCapabilitiesResponse.crash_report:type_name -> esphome.CrashReportCapabilities
 	0,  // 8: esphome.DeviceInfo.relation:type_name -> esphome.DeviceRelation
-	25, // 9: esphome.DeviceInfoResponse.devices:type_name -> esphome.DeviceInfo
+	23, // 9: esphome.DeviceInfoResponse.devices:type_name -> esphome.DeviceInfo
 	16, // 10: esphome.DeviceInfoResponse.areas:type_name -> esphome.AreaInfo
 	16, // 11: esphome.DeviceInfoResponse.area:type_name -> esphome.AreaInfo
-	67, // 12: esphome.DeviceInfoResponse.serial_proxies:type_name -> esphome.SerialProxyInfo
+	64, // 12: esphome.DeviceInfoResponse.serial_proxies:type_name -> esphome.SerialProxyInfo
 	1,  // 13: esphome.DisconnectRequest.reason:type_name -> esphome.DisconnectReason
-	31, // 14: esphome.ExecuteServiceRequest.args:type_name -> esphome.ExecuteServiceArgument
-	38, // 15: esphome.HomeassistantActionRequest.data:type_name -> esphome.HomeassistantServiceMap
-	38, // 16: esphome.HomeassistantActionRequest.data_template:type_name -> esphome.HomeassistantServiceMap
-	38, // 17: esphome.HomeassistantActionRequest.variables:type_name -> esphome.HomeassistantServiceMap
+	29, // 14: esphome.ExecuteServiceRequest.args:type_name -> esphome.ExecuteServiceArgument
+	36, // 15: esphome.HomeassistantActionRequest.data:type_name -> esphome.HomeassistantServiceMap
+	36, // 16: esphome.HomeassistantActionRequest.data_template:type_name -> esphome.HomeassistantServiceMap
+	36, // 17: esphome.HomeassistantActionRequest.variables:type_name -> esphome.HomeassistantServiceMap
 	2,  // 18: esphome.ListEntitiesBinarySensorResponse.entity_category:type_name -> esphome.EntityCategory
 	2,  // 19: esphome.ListEntitiesButtonResponse.entity_category:type_name -> esphome.EntityCategory
-	2,  // 20: esphome.ListEntitiesCameraResponse.entity_category:type_name -> esphome.EntityCategory
-	2,  // 21: esphome.ListEntitiesEventResponse.entity_category:type_name -> esphome.EntityCategory
-	2,  // 22: esphome.ListEntitiesMediaPlayerResponse.entity_category:type_name -> esphome.EntityCategory
-	56, // 23: esphome.ListEntitiesMediaPlayerResponse.supported_formats:type_name -> esphome.MediaPlayerSupportedFormat
-	2,  // 24: esphome.ListEntitiesNumberResponse.entity_category:type_name -> esphome.EntityCategory
-	6,  // 25: esphome.ListEntitiesNumberResponse.mode:type_name -> esphome.NumberMode
-	2,  // 26: esphome.ListEntitiesSelectResponse.entity_category:type_name -> esphome.EntityCategory
-	9,  // 27: esphome.ListEntitiesSensorResponse.state_class:type_name -> esphome.SensorStateClass
-	8,  // 28: esphome.ListEntitiesSensorResponse.legacy_last_reset_type:type_name -> esphome.SensorLastResetType
-	2,  // 29: esphome.ListEntitiesSensorResponse.entity_category:type_name -> esphome.EntityCategory
-	11, // 30: esphome.ListEntitiesServicesArgument.type:type_name -> esphome.ServiceArgType
-	49, // 31: esphome.ListEntitiesServicesResponse.args:type_name -> esphome.ListEntitiesServicesArgument
-	12, // 32: esphome.ListEntitiesServicesResponse.supports_response:type_name -> esphome.SupportsResponseType
-	2,  // 33: esphome.ListEntitiesSwitchResponse.entity_category:type_name -> esphome.EntityCategory
-	2,  // 34: esphome.ListEntitiesTextResponse.entity_category:type_name -> esphome.EntityCategory
-	13, // 35: esphome.ListEntitiesTextResponse.mode:type_name -> esphome.TextMode
-	2,  // 36: esphome.ListEntitiesTextSensorResponse.entity_category:type_name -> esphome.EntityCategory
-	3,  // 37: esphome.MediaPlayerCommandRequest.command:type_name -> esphome.MediaPlayerCommand
-	5,  // 38: esphome.MediaPlayerStateResponse.state:type_name -> esphome.MediaPlayerState
-	4,  // 39: esphome.MediaPlayerSupportedFormat.purpose:type_name -> esphome.MediaPlayerFormatPurpose
-	7,  // 40: esphome.SendspinPairingTokenResponse.status:type_name -> esphome.SendspinPairingTokenStatus
-	10, // 41: esphome.SerialProxyInfo.port_type:type_name -> esphome.SerialProxyPortType
-	88, // 42: esphome.VoiceAssistantConfigurationRequest.external_wake_words:type_name -> esphome.VoiceAssistantExternalWakeWord
-	93, // 43: esphome.VoiceAssistantConfigurationResponse.available_wake_words:type_name -> esphome.VoiceAssistantWakeWord
-	14, // 44: esphome.VoiceAssistantEventResponse.event_type:type_name -> esphome.VoiceAssistantEvent
-	86, // 45: esphome.VoiceAssistantEventResponse.data:type_name -> esphome.VoiceAssistantEventData
-	82, // 46: esphome.VoiceAssistantRequest.audio_settings:type_name -> esphome.VoiceAssistantAudioSettings
-	15, // 47: esphome.VoiceAssistantTimerEventResponse.event_type:type_name -> esphome.VoiceAssistantTimerEvent
-	48, // [48:48] is the sub-list for method output_type
-	48, // [48:48] is the sub-list for method input_type
-	48, // [48:48] is the sub-list for extension type_name
-	48, // [48:48] is the sub-list for extension extendee
-	0,  // [0:48] is the sub-list for field type_name
+	2,  // 20: esphome.ListEntitiesEventResponse.entity_category:type_name -> esphome.EntityCategory
+	2,  // 21: esphome.ListEntitiesMediaPlayerResponse.entity_category:type_name -> esphome.EntityCategory
+	53, // 22: esphome.ListEntitiesMediaPlayerResponse.supported_formats:type_name -> esphome.MediaPlayerSupportedFormat
+	2,  // 23: esphome.ListEntitiesNumberResponse.entity_category:type_name -> esphome.EntityCategory
+	6,  // 24: esphome.ListEntitiesNumberResponse.mode:type_name -> esphome.NumberMode
+	2,  // 25: esphome.ListEntitiesSelectResponse.entity_category:type_name -> esphome.EntityCategory
+	9,  // 26: esphome.ListEntitiesSensorResponse.state_class:type_name -> esphome.SensorStateClass
+	8,  // 27: esphome.ListEntitiesSensorResponse.legacy_last_reset_type:type_name -> esphome.SensorLastResetType
+	2,  // 28: esphome.ListEntitiesSensorResponse.entity_category:type_name -> esphome.EntityCategory
+	11, // 29: esphome.ListEntitiesServicesArgument.type:type_name -> esphome.ServiceArgType
+	46, // 30: esphome.ListEntitiesServicesResponse.args:type_name -> esphome.ListEntitiesServicesArgument
+	12, // 31: esphome.ListEntitiesServicesResponse.supports_response:type_name -> esphome.SupportsResponseType
+	2,  // 32: esphome.ListEntitiesSwitchResponse.entity_category:type_name -> esphome.EntityCategory
+	2,  // 33: esphome.ListEntitiesTextResponse.entity_category:type_name -> esphome.EntityCategory
+	13, // 34: esphome.ListEntitiesTextResponse.mode:type_name -> esphome.TextMode
+	2,  // 35: esphome.ListEntitiesTextSensorResponse.entity_category:type_name -> esphome.EntityCategory
+	3,  // 36: esphome.MediaPlayerCommandRequest.command:type_name -> esphome.MediaPlayerCommand
+	5,  // 37: esphome.MediaPlayerStateResponse.state:type_name -> esphome.MediaPlayerState
+	4,  // 38: esphome.MediaPlayerSupportedFormat.purpose:type_name -> esphome.MediaPlayerFormatPurpose
+	7,  // 39: esphome.SendspinPairingTokenResponse.status:type_name -> esphome.SendspinPairingTokenStatus
+	10, // 40: esphome.SerialProxyInfo.port_type:type_name -> esphome.SerialProxyPortType
+	85, // 41: esphome.VoiceAssistantConfigurationRequest.external_wake_words:type_name -> esphome.VoiceAssistantExternalWakeWord
+	90, // 42: esphome.VoiceAssistantConfigurationResponse.available_wake_words:type_name -> esphome.VoiceAssistantWakeWord
+	14, // 43: esphome.VoiceAssistantEventResponse.event_type:type_name -> esphome.VoiceAssistantEvent
+	83, // 44: esphome.VoiceAssistantEventResponse.data:type_name -> esphome.VoiceAssistantEventData
+	79, // 45: esphome.VoiceAssistantRequest.audio_settings:type_name -> esphome.VoiceAssistantAudioSettings
+	15, // 46: esphome.VoiceAssistantTimerEventResponse.event_type:type_name -> esphome.VoiceAssistantTimerEvent
+	47, // [47:47] is the sub-list for method output_type
+	47, // [47:47] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_esphome_api_proto_init() }
@@ -7295,7 +7063,7 @@ func file_esphome_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_esphome_api_proto_rawDesc), len(file_esphome_api_proto_rawDesc)),
 			NumEnums:      16,
-			NumMessages:   80,
+			NumMessages:   77,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

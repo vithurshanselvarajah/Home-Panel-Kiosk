@@ -222,21 +222,6 @@ var wireVectors = []struct {
 		"0d3200000010021d0000003f",
 	},
 	{
-		"ListEntitiesCameraResponse",
-		&ListEntitiesCameraResponse{Key: 51, Name: "Camera", ObjectId: "camera"},
-		"0a0663616d65726115330000001a0643616d657261",
-	},
-	{
-		"CameraImageRequest",
-		&CameraImageRequest{Single: true, Stream: false},
-		"0801",
-	},
-	{
-		"CameraImageResponse",
-		&CameraImageResponse{Key: 51, Data: []byte{0xff, 0xd8, 0xff}, Done: true},
-		"0d330000001203ffd8ff1801",
-	},
-	{
 		"ListEntitiesEventResponse",
 		&ListEntitiesEventResponse{Key: 52, Name: "Action Button", ObjectId: "action_button", DeviceClass: "button", EventTypes: []string{"single"}},
 		"0a0d616374696f6e5f627574746f6e15340000001a0d416374696f6e20427574746f6e4206627574746f6e4a0673696e676c65",

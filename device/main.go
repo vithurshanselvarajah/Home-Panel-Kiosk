@@ -237,7 +237,6 @@ func main() {
 		esphomeKey      = flag.String("esphome-key", "", "the base64 encryption key for the Home Assistant API")
 		esphomeName     = flag.String("esphome-name", hostName, "the name Home Assistant knows the panel by")
 		controlSocket   = flag.String("control-socket", "", "the socket the panel talks to this program over")
-		cameraAvailable = flag.Bool("camera-available", true, "advertise the camera entity when a camera was detected")
 	)
 	flag.Parse()
 
@@ -367,7 +366,7 @@ func main() {
 
 	// The control plane: the Home Assistant connection and the socket
 	// the panel talks over.
-	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket, *cameraAvailable, speaker_)
+	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket, speaker_)
 	defer control.Close()
 
 	// The drawer says whether the panel can reach Home Assistant, and

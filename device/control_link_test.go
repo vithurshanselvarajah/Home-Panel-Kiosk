@@ -1,52 +1,11 @@
 package main
 
 import (
-	"context"
-	"encoding/base64"
 	"encoding/json"
 	"net"
 	"testing"
 	"time"
 )
-
-func TestCameraCaptureRoundTripsAcrossThePanelSocket(t *testing.T) {
-	server := NewControlServer(ControlOptions{Socket: t.TempDir() + "/control.sock"})
-	if err := server.Listen(); err != nil {
-		t.Fatal(err)
-	}
-	defer server.Close()
-	conn, err := net.Dial("unix", server.socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-	readLine(t, conn)
-
-	type capture struct {
-		data []byte
-		err  error
-	}
-	result := make(chan capture, 1)
-	go func() { data, err := server.CaptureCamera(context.Background()); result <- capture{data, err} }()
-	command := readLine(t, conn)
-	if command.Action != "camera_capture" || command.CameraRequestID == "" {
-		t.Fatalf("unexpected camera request: %+v", command)
-	}
-	response, err := json.Marshal(ControlMessage{Action: "camera_frame", CameraRequestID: command.CameraRequestID, CameraData: base64.StdEncoding.EncodeToString([]byte{0xff, 0xd8, 0xff})})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := conn.Write(append(response, '\n')); err != nil {
-		t.Fatal(err)
-	}
-	got := <-result
-	if got.err != nil {
-		t.Fatal(got.err)
-	}
-	if string(got.data) != string([]byte{0xff, 0xd8, 0xff}) {
-		t.Fatalf("unexpected camera bytes: %v", got.data)
-	}
-}
 
 // TestTheLinkStateIsReported checks that the panel is told whether Home
 // Assistant is talking to the device program.

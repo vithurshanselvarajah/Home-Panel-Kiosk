@@ -140,6 +140,7 @@
 .settings-panel select option{background:#141b26;color:#f5f7fa;font:500 12px 'DM Sans',sans-serif;padding:8px 10px}
 .settings-panel select option:checked{background:#24313f;color:#f5f7fa}
 .settings-panel select option:hover{background:#1e2a37;color:#f5f7fa}
+.camera-stream-url{display:block;overflow-wrap:anywhere;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:500 13px ui-monospace,SFMono-Regular,Consolas,monospace}
 .audio-test{display:flex;align-items:center;gap:10px;margin-top:-4px}
 .audio-test__button{flex:none;padding:8px 12px;border:1px solid rgba(255,255,255,.13);border-radius:9px;background:rgba(255,255,255,.05);color:#dfe5ec;font:600 11px 'DM Sans',sans-serif;cursor:pointer}
 .audio-test__button:hover{background:rgba(143,227,194,.14);color:var(--accent);border-color:rgba(143,227,194,.4)}
