@@ -39,6 +39,8 @@ function run() {
     // The mixer answers with what it has been told, and a write that
     // has not landed yet is not what it says.
     systemMicMuted: async () => micMuted,
+    // The watch reads the volume and the mute together, in one go.
+    systemVolumeAndMicMute: async () => ({ volume: 50, muted: micMuted }),
     setSystemMicMuted: async (muted) => {
       // The write lands on the next turn of the event loop, which is
       // what a real mixer does: the command goes out and the mixer

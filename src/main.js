@@ -15,6 +15,7 @@ const {
   setSystemVolume,
   systemMicMuted,
   setSystemMicMuted,
+  systemVolumeAndMicMute,
 } = require("./volume");
 
 const DEFAULTS = {
@@ -646,9 +647,15 @@ async function watchTick() {
     // writing sees the value from before the write, and takes it for a
     // change from outside — which is a mute that turns itself off.
     await withMuteLock(async () => {
-      const value = await systemVolumePercent();
+      // The volume and the mute are read together, in one process.
+      //
+      // The watch runs for as long as the panel does, and a watch that
+      // ran a process for each of them would run a process every few
+      // hundred milliseconds for as long as the panel is up.
+      const reading = await systemVolumeAndMicMute();
+      const value = reading.volume;
       if (value === null) return;
-      const muted = await systemMicMuted();
+      const muted = reading.muted;
       // The panel's own change is not a change from outside, and it has
       // already been sent.
       if (value === systemVolume && muted === micMuted) return;
@@ -679,12 +686,17 @@ function stopWatchingVolume() {
   }
 }
 
-// volumeWatchInterval is how often the mixer is read while the drawer
-// is open.
+// volumeWatchInterval is how often the mixer is read.
+//
+// The mixer is read for as long as the panel is running, because a
+// volume changed by the keyboard's media keys has to reach the speaker
+// as well as the drawer.
 //
 // It is quick enough that a change is seen as it happens and slow
-// enough that it is not a busy loop.
-const volumeWatchInterval = 500;
+// enough that it is not a busy loop: the read runs a process, and a
+// process every few hundred milliseconds is a process every few hundred
+// milliseconds for as long as the panel is up.
+const volumeWatchInterval = 1000;
 
 async function setBrightness(value) {
   const percent = Math.max(0, Math.min(100, Number(value)));

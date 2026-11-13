@@ -40,6 +40,8 @@ function run() {
     systemVolumePercent: async () => mixerValue,
     setSystemVolume: async (percent) => { mixerValue = percent; return true; },
     systemMicMuted: async () => micMuted,
+    // The watch reads the volume and the mute together, in one go.
+    systemVolumeAndMicMute: async () => ({ volume: mixerValue, muted: micMuted }),
     setSystemMicMuted: async (muted) => { micMuted = muted; return true; },
     sendState: (force) => sent.push({ force }),
     // The control client is what tells the device program, and it is
