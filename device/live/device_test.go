@@ -166,6 +166,10 @@ func startDevice(t *testing.T, recording string) *device {
 	if config := liveConfigFile(); config != "" {
 		args = append(args, "--config-file", config)
 	}
+	// The device says more when it is asked to.
+	if os.Getenv("LIVE_VERBOSE") != "" {
+		args = append(args, "--verbose")
+	}
 	if key := os.Getenv("LIVE_HA_ESPHOME_KEY"); key != "" {
 		args = append(args, "--esphome-key", key)
 	}

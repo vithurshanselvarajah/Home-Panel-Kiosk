@@ -55,16 +55,34 @@ type audioFormat struct {
 type playerSupport struct {
 	SupportedFormats []audioFormat `json:"supported_formats"`
 	BufferCapacity   int           `json:"buffer_capacity"`
-	// 9.1.1: required here, and only "volume"/"mute" are valid. The current
-	// spec moved it into client/state.
-	SupportedCommands []string `json:"supported_commands"`
+	// The commands the player takes are in client/state, not here.
+	//
+	// They were in the hello in an earlier version of the protocol, and
+	// a server that speaks that version still accepts them there — but a
+	// server that speaks the current one says the client is not
+	// conforming, and treats it as a client from before the change,
+	// which changes how the handshake is done.
+	SupportedCommands []string `json:"supported_commands,omitempty"`
 }
 
-// pairMethod is one entry of supported_pair_methods. 9.1.1: a LIST of
-// {method, ...}; the current spec has an object keyed by method. 9.1.1
-// rejects the object form, so the list is what gets sent.
+// pairMethods are the pairing methods the panel offers.
+//
+// It is an object keyed by the method, which is what the current
+// protocol has. It used to be a list of {method, ...}, and a server
+// that speaks the current one says a client that sends the list is not
+// conforming.
+type pairMethods struct {
+	// PairingPSK is the pre-shared key the server pairs with.
+	PairingPSK *pairMethod `json:"pairing_psk,omitempty"`
+}
+
+// pairMethod describes one pairing method.
 type pairMethod struct {
-	Method string `json:"method"`
+	// Locations is where the operator finds the secret.
+	//
+	// It is a hint for the person setting the device up, so it is
+	// optional.
+	Locations []string `json:"locations,omitempty"`
 }
 
 type unpairedAccess struct {
@@ -76,7 +94,7 @@ type clientHello struct {
 	SupportedRoles       []string       `json:"supported_roles"`
 	DeviceInfo           *deviceInfo    `json:"device_info,omitempty"`
 	PlayerSupport        *playerSupport `json:"player@v1_support,omitempty"`
-	SupportedPairMethods []pairMethod   `json:"supported_pair_methods"`
+	SupportedPairMethods pairMethods    `json:"supported_pair_methods"`
 	UnpairedAccess       unpairedAccess `json:"unpaired_access"`
 }
 
@@ -150,11 +168,24 @@ type streamProgress struct {
 }
 
 type playerState struct {
-	Volume            int      `json:"volume"`
-	Muted             bool     `json:"muted"`
-	StaticDelayMs     int      `json:"static_delay_ms"`
-	RequiredLeadMs    int      `json:"required_lead_time_ms"`
-	MinBufferMs       int      `json:"min_buffer_ms"`
+	Volume int  `json:"volume"`
+	Muted  bool `json:"muted"`
+	// OutputDelayMs is how far behind the server's clock the panel's
+	// audio is played.
+	//
+	// It was called static_delay_ms, and a server that speaks the
+	// current protocol says a client that uses the old name is not
+	// conforming.
+	OutputDelayMs int `json:"output_delay_ms"`
+	// RequiredLeadMs is how far ahead of the clock the server sends.
+	RequiredLeadMs int `json:"required_lead_time_ms"`
+	// MinBufferMs is how much audio the panel keeps queued.
+	MinBufferMs int `json:"min_buffer_ms"`
+	// SupportedCommands are the commands the player takes.
+	//
+	// set_static_delay was renamed to set_output_delay, and a server
+	// that speaks the current protocol says a client that declares the
+	// old name is not conforming.
 	SupportedCommands []string `json:"supported_commands"`
 }
 

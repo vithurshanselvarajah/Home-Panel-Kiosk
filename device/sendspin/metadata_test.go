@@ -242,3 +242,30 @@ func TestTheServerStateIsHandled(t *testing.T) {
 		t.Errorf("the metadata was %+v after the music stopped, want nothing", got)
 	}
 }
+
+// TestTheBufferIsSmallEnoughToHearTheMusic checks that the buffer is
+// small.
+//
+// The server holds the audio back by the buffer before it sends it, and
+// the player plays the audio when its own time says it is due. So a big
+// buffer is a long silence before the music is heard — and a buffer of
+// two seconds meant the panel played nothing for two seconds and then
+// waited for the buffer to pass.
+//
+// The buffer only has to be big enough that the network cannot outrun
+// the speaker.
+func TestTheBufferIsSmallEnoughToHearTheMusic(t *testing.T) {
+	dir := t.TempDir()
+	client, err := New(Config{StorePath: filepath.Join(dir, "sendspin.json"), Name: "Test Panel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Stop("the test is over")
+
+	if got := client.bufferMs; got > 500 {
+		t.Errorf("the buffer is %dms, the music would be heard that late", got)
+	}
+	if got := client.requiredLeadMs; got > 500 {
+		t.Errorf("the lead is %dms, the music would be heard that late", got)
+	}
+}
