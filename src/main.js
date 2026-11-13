@@ -284,6 +284,8 @@ function publishState(state) {
     slideshowToOffMinutes: Math.max(0, Number(settings.slideshowToOffMinutes) || 0),
     touchKeyboardEnabled: Boolean(settings.touchKeyboardEnabled),
     startupVolume: Math.max(0, Math.min(100, Number(settings.voiceStartupVolume) || 0)),
+    musicEnabled: Boolean(settings.musicEnabled),
+    musicUnpaired: Boolean(settings.musicUnpaired),
   };
   if (Number.isFinite(state.volume)) payload.volume = state.volume;
   controlClient.sendState(payload);
@@ -930,12 +932,14 @@ async function handleCommand(command) {
         slideshow_off_minutes: "slideshowToOffMinutes",
         touch_keyboard_enabled: "touchKeyboardEnabled",
         startup_volume: "voiceStartupVolume",
+        music_enabled: "musicEnabled",
+        music_unpaired: "musicUnpaired",
       }[command.setting];
       if (!setting) {
         console.warn("Ignored unknown Home Assistant setting:", command.setting);
         break;
       }
-      const value = command.setting === "touch_keyboard_enabled"
+      const value = ["touch_keyboard_enabled", "music_enabled", "music_unpaired"].includes(command.setting)
         ? Boolean(command.value)
         : Math.max(0, Math.min(command.setting === "startup_volume" ? 100 : 1440, Math.round(Number(command.value) || 0)));
       saveSettings({ [setting]: value }).catch((error) => console.error("Home Assistant setting could not be saved:", error.message));

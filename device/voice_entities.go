@@ -24,6 +24,16 @@ import (
 // Assistant shows them together.
 func voiceEntities(registry *esphome.Registry) {
 	registry.Add(&esphome.Entity{
+		Kind: esphome.KindSwitch, Name: "Music · Music Assistant", ObjectID: "music_enabled",
+		Icon: "mdi:music", Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State: esphome.EntityValue{Kind: esphome.KindSwitch, Bool: true},
+	})
+	registry.Add(&esphome.Entity{
+		Kind: esphome.KindSwitch, Name: "Music · Allow unpaired servers", ObjectID: "music_unpaired",
+		Icon: "mdi:lan-disconnect", Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State: esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
+	})
+	registry.Add(&esphome.Entity{
 		Kind: esphome.KindNumber, Name: "Audio · Startup volume", ObjectID: "startup_volume",
 		Icon: "mdi:volume-medium", Min: 0, Max: 100, Step: 1,
 		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,

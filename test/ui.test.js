@@ -6,6 +6,7 @@ const path = require("node:path");
 const root = path.join(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "src", "ui", "index.html"), "utf8");
 const renderer = fs.readFileSync(path.join(root, "src", "ui", "renderer.js"), "utf8");
+const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
 
 // The interface is a page with a drawer, a settings panel and a touch
 // keyboard. It is one file of markup and one of script, and nothing
@@ -225,6 +226,12 @@ test("the wake word settings are Home Assistant's to set", () => {
     !renderer.includes("voiceWakeWordEnabled"),
     "the panel still writes the wake word switch",
   );
+});
+
+test("Music Assistant settings are Home Assistant's to set", () => {
+  assert.doesNotMatch(html, /name="musicEnabled"|name="musicUnpaired"/);
+  assert.match(main, /music_enabled: "musicEnabled"/);
+  assert.match(main, /music_unpaired: "musicUnpaired"/);
 });
 
 test("the wake word overlay covers the whole screen", () => {

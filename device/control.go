@@ -103,6 +103,8 @@ type ControlState struct {
 	SlideshowToOffMinutes  int    `json:"slideshowToOffMinutes"`
 	TouchKeyboardEnabled   bool   `json:"touchKeyboardEnabled"`
 	StartupVolume          int    `json:"startupVolume"`
+	MusicEnabled           bool   `json:"musicEnabled"`
+	MusicUnpaired          bool   `json:"musicUnpaired"`
 }
 
 // ControlServer is the socket the panel and the device program share.
@@ -614,6 +616,10 @@ func (s *ControlServer) applyEntities(state ControlState) {
 			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: state.TouchKeyboardEnabled})
 		case "startup_volume":
 			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindNumber, Number: float64(state.StartupVolume)})
+		case "music_enabled":
+			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: state.MusicEnabled})
+		case "music_unpaired":
+			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: state.MusicUnpaired})
 		}
 	}
 }
