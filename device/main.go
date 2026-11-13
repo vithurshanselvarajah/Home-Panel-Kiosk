@@ -1345,6 +1345,9 @@ func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wa
 	if c.SendspinEnabled != nil || c.SendspinName != nil || c.SendspinUnpaired != nil {
 		audio.applySendspinConfig(c)
 	}
+	if c.CameraEnabled != nil {
+		control.SetCameraEnabled(*c.CameraEnabled)
+	}
 	if c.TestSound != nil {
 		audio.setTestSound(*c.TestSound)
 	}
