@@ -31,7 +31,6 @@ test("the drawer has its parts", () => {
     "control-state",
     "immich-state",
     "dashboard-state",
-    "voice-row",
     "settings-button",
     "display-mode-button",
     "exit-button",
@@ -73,11 +72,15 @@ test("the drawer and the script name the same things", () => {
   }
 });
 
-test("the voice row is in the drawer and not the settings", () => {
-  // The row belongs to the drawer: it is one of the services a person
-  // sees without opening the settings.
+test("the drawer has one row for the device's link", () => {
+  // The voice assistant and the ESPHome connection are the same link,
+  // and the drawer said so twice. It says it once now: the ESPHome row.
+  //
+  // The voice assistant's own settings are still in the settings page,
+  // where a person looking at them can see whether it is there.
   const drawer = html.slice(html.indexOf('id="side-panel"'), html.indexOf('id="settings-panel"'));
-  assert.ok(drawer.includes('id="voice-row"'), "the voice row is not in the drawer");
+  assert.ok(!drawer.includes('id="voice-row"'), "the drawer still has a voice assistant row");
+  assert.ok(drawer.includes('id="control-state"'), "the drawer has no row for the device's link");
   assert.ok(!drawer.includes('id="voice-form"'), "the voice form is in the drawer");
 });
 

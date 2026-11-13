@@ -53,7 +53,7 @@ func splitLines(text string) []string {
 // It uses aioesphomeapi's own client, so the handshake, the framing and
 // the messages are all the ones Home Assistant uses.
 const apiPeerSource = `
-import asyncio, base64, sys
+import asyncio, base64, sys, time
 
 from aioesphomeapi import APIClient, VoiceAssistantEventType
 
@@ -160,6 +160,20 @@ async def main():
         client.send_voice_assistant_event(
             VoiceAssistantEventType.VOICE_ASSISTANT_STT_VAD_END, {})
         await asyncio.sleep(0.8)
+    elif mode == "ping":
+        # The device pings, so that Home Assistant does not drop the
+        # connection for being quiet.
+        client.subscribe_voice_assistant(
+            handle_start=lambda *a: asyncio.sleep(0),
+            handle_stop=lambda *a: asyncio.sleep(0),
+            handle_audio=lambda data, data2: asyncio.sleep(0),
+        )
+        await asyncio.sleep(0.3)
+        deadline = time.time() + 45
+        while time.time() < deadline:
+            await asyncio.sleep(0.5)
+            print("pinged")
+            return
     elif mode == "sendspin":
         # What the device says about its music player.
         caps = await client.device_capabilities()

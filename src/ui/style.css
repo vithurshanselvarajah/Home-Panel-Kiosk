@@ -8,13 +8,25 @@
 .quick-control__label{flex:1;color:#d5dce5;font-size:12px;font-weight:600}
 .quick-control__value{color:#8d99a8;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
 
-/* The mute button. It is the icon that was there, made into a button,
-   so the volume's icon can be pressed. A muted system is shown in the
-   colour of an alarm rather than the accent, because it is a thing
-   that wants to be noticed. */
-.quick-control__mute{display:grid;place-items:center;width:26px;height:26px;flex:none;padding:0;border:0;border-radius:8px;background:rgba(143,227,194,.14);color:var(--accent);font-size:13px;cursor:pointer}
-.quick-control__mute.is-muted{background:rgba(255,138,138,.18);color:#ff8a8a}
-.quick-control__mute:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* The row the slider and the microphone's mute sit in. The mute is
+   beside the slider rather than in the heading, because it is a
+   control and not a label. */
+.quick-control__row{display:flex;align-items:center;gap:10px}
+.quick-control__row .slider{flex:1;min-width:0}
+
+/* The microphone's mute.
+   It is the microphone and not the speaker: a person who mutes the
+   panel wants the room to stop hearing them, and they still want to
+   hear the music.
+
+   It is green when the microphone is open and red when it is muted,
+   because the two are what a person looks for. */
+.mic-mute{display:grid;place-items:center;width:38px;height:38px;flex:none;padding:0;border:0;border-radius:11px;background:rgba(143,227,194,.14);color:var(--accent);font-size:17px;cursor:pointer;transition:background .15s ease,color .15s ease}
+.mic-mute:hover{background:rgba(143,227,194,.24)}
+.mic-mute:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mic-mute.is-muted{background:rgba(255,107,107,.2);color:#ff6b6b}
+.mic-mute.is-muted:hover{background:rgba(255,107,107,.3)}
+.mic-mute.is-muted .mic-mute__icon{opacity:.55}
 
 /* A slider that is meant to be dragged with a thumb, so it is tall and
    the thumb is big enough to hit. The filled part is a gradient that

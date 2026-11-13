@@ -1055,16 +1055,29 @@ func (a *deviceAudio) stopCapture() {
 // The frames go to home assistant only while a turn is running. The rest
 // of the time they are measured for the level meter and dropped.
 func (a *deviceAudio) pushFrame(pcm []byte) {
+	a.mu.Lock()
+	streaming := a.streaming
+	muted := a.muted
+	a.mu.Unlock()
+
+	// A muted microphone hears nothing.
+	//
+	// The mute is the microphone's, not the speaker's: a person who
+	// mutes the panel wants the room to stop hearing them, and they
+	// still want to hear the music.
+	//
+	// So the audio is silenced before anything sees it: the wake word
+	// does not fire and home assistant hears silence.
+	if muted {
+		pcm = make([]byte, len(pcm))
+	}
+
 	// The wake word hears every block. It is what decides whether a turn
 	// starts, so it has to hear the room all the time — and its gate is
 	// what keeps that cheap.
 	if a.onWakeAudio != nil {
 		a.onWakeAudio(pcm)
 	}
-
-	a.mu.Lock()
-	streaming := a.streaming
-	a.mu.Unlock()
 
 	// The audio goes to home assistant, over the ESPHome connection.
 	//
@@ -1739,7 +1752,9 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		// The mute is the panel's own switch or the server's, and
 		// either silences the music. The server's mute is not the
 		// panel's switch, so they are kept apart and both are honoured.
-		muted := a.muted || a.sendspinMuted
+		// The mute is the microphone's, so it does not silence the
+		// speaker. The music server's own mute is the speaker's.
+		muted := a.sendspinMuted
 		ducked := a.ducked
 		duckDB := a.duckDB
 		// One period is taken from each queue, so a long reply is spread

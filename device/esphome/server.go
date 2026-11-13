@@ -359,6 +359,17 @@ func (s *Server) serve(conn net.Conn) {
 	s.reportConnected(true)
 	defer s.reportConnected(false)
 
+	// The device pings, so that a connection nobody is using is not
+	// taken for a dead one.
+	//
+	// Home Assistant does not ping: it waits, and after a minute of
+	// silence it drops the connection and starts again. So a panel that
+	// says nothing is a panel that is reconnected every minute, and
+	// everything it is doing is interrupted every minute.
+	stop := make(chan struct{})
+	go client.ping(stop)
+	defer close(stop)
+
 	// The client asks what the device is, what it can do, and then
 	// subscribes to the state. The messages come in that order, but the
 	// server answers whatever is asked for, so a client that asks in a

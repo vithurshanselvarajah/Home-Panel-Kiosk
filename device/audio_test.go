@@ -791,3 +791,49 @@ func TestTheProgressStartsAgainForTheNextReply(t *testing.T) {
 		t.Errorf("the progress is %v at the start of the next reply, it should be nothing", got)
 	}
 }
+
+// TestTheMuteSilencesTheMicrophone checks that a muted microphone
+// sends silence.
+//
+// The mute is the microphone's and not the speaker's: a person who
+// mutes the panel wants the room to stop hearing them, and they still
+// want to hear the music.
+//
+// So the audio is silenced before the wake word hears it and before
+// Home Assistant hears it. A muted microphone that still sent the room
+// would be a mute that did nothing.
+func TestTheMuteSilencesTheMicrophone(t *testing.T) {
+	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
+
+	var heard [][]byte
+	audio.onWakeAudio = func(pcm []byte) {
+		heard = append(heard, append([]byte(nil), pcm...))
+	}
+
+	// A block of sound.
+	frame := make([]byte, 320)
+	for i := range frame {
+		frame[i] = 0x40
+	}
+
+	// Unmuted, the wake word hears the room.
+	audio.pushFrame(frame)
+	if len(heard) != 1 {
+		t.Fatalf("the wake word heard %d blocks, it should have heard one", len(heard))
+	}
+	if heard[0][0] == 0 {
+		t.Fatalf("the wake word heard silence, it should have heard the room")
+	}
+
+	// And muted, it hears nothing.
+	audio.setMuted(true)
+	audio.pushFrame(frame)
+	if len(heard) != 2 {
+		t.Fatalf("the wake word heard %d blocks, it should have heard two", len(heard))
+	}
+	for _, b := range heard[1] {
+		if b != 0 {
+			t.Fatalf("a muted microphone heard %v, it should have heard silence", heard[1][:8])
+		}
+	}
+}

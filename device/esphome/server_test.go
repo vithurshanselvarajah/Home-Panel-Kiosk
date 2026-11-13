@@ -174,3 +174,39 @@ func TestCommandDoesNotSetTheState(t *testing.T) {
 		t.Errorf("the change was published %d times, it should have been published once", changed)
 	}
 }
+
+// TestTheDevicePingsSoTheConnectionSurvives checks that the device says
+// something now and then.
+//
+// Home Assistant waits for the device to say something and drops the
+// connection after a minute of silence. So a panel that only listens is
+// a panel that is reconnected every minute, and everything it is doing
+// is interrupted every minute.
+//
+// The peer is aioesphomeapi's own client, so the ping is the one Home
+// Assistant would see.
+func TestTheDevicePingsSoTheConnectionSurvives(t *testing.T) {
+	server := NewServer(ServerOptions{
+		Name: "home-panel", FriendlyName: "Home Panel", MAC: "aabbccddeeff",
+		Version: "0.0.2", Registry: NewRegistry(),
+	})
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go server.Listen(listener)
+
+	lines, err := runPeer("ping", listener.Addr().String(), "")
+	if err != nil {
+		if errors.Is(err, errSkipPeer) {
+			t.Skip("the python peer is not available")
+		}
+		t.Fatalf("the peer could not be run: %v", err)
+	}
+	for _, line := range lines {
+		if line == "pinged" {
+			return
+		}
+	}
+	t.Fatalf("the device did not ping: %v", lines)
+}
