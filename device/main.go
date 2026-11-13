@@ -456,31 +456,40 @@ func main() {
 			go speaker_.playMediaURL(ctx, url, announcement)
 		},
 		OnCommand: func(command esphome.MediaPlayerCommand) {
-			// There are two kinds of music, and the command goes to
-			// whichever is playing.
+			// The command goes to whichever music is playing, and only
+			// to that one.
 			//
-			// The music Home Assistant is playing is the device's own
-			// stream, and the device holds the audio, so it can pause
-			// it and play it again.
+			// There are two kinds of music: the music Home Assistant
+			// is playing, which the device holds, and the music a
+			// music server is playing, which the server has the
+			// transport for.
 			//
-			// The music a music server is playing is the server's, and
-			// the server has the transport. The command goes to it.
+			// Sending the command to both would pause one while the
+			// other is playing, and the one that was not asked about
+			// would be paused anyway. So the command goes to the one
+			// that is playing.
+			//
+			// The music server's music comes first: it has priority,
+			// and it is the music the panel is playing when both
+			// somehow are.
+			if player := speaker_.sendspinPlayer(); player != nil && player.Active() {
+				switch command {
+				case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PLAY:
+					player.Transport("play")
+				case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PAUSE:
+					player.Transport("pause")
+				case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_STOP:
+					player.Transport("stop")
+				}
+				return
+			}
 			switch command {
 			case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PLAY:
 				speaker_.ResumeMedia()
-				if player := speaker_.sendspinPlayer(); player != nil {
-					player.Transport("play")
-				}
 			case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PAUSE:
 				speaker_.PauseMedia()
-				if player := speaker_.sendspinPlayer(); player != nil {
-					player.Transport("pause")
-				}
 			case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_STOP:
 				speaker_.StopMedia()
-				if player := speaker_.sendspinPlayer(); player != nil {
-					player.Transport("stop")
-				}
 			}
 		},
 		OnVolume: func(volume float32) {
