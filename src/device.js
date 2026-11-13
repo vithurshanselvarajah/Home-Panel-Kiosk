@@ -54,6 +54,13 @@ const BINARY_NAME = "home-panel-device";
 // a sidecar that hangs does not stop the application from starting.
 const STOP_TIMEOUT_MS = 3000;
 
+// How long to wait before the device program is started again.
+//
+// The wait is longer each time it fails, so a device program that
+// cannot start is not started over and over.
+const RESTART_FIRST_WAIT_MS = 1000;
+const RESTART_MAX_WAIT_MS = 30_000;
+
 // The state the sidecar reports. These are the fields the interface draws.
 const DEFAULT_STATE = {
   connection: "unknown",
@@ -160,6 +167,9 @@ class DeviceClient {
     this.onLog = onLog || (() => {});
     this.child = null;
     this.timer = null;
+    // The pipes the children's errors came through. Every one of them
+    // is closed when the panel stops.
+    this.pipes = new Set();
     this.state = { ...DEFAULT_STATE };
     this.lastRead = "";
   }
@@ -219,14 +229,36 @@ class DeviceClient {
       this.onLog(`the device program could not be started: ${error.message}`);
       return false;
     }
-    this.child.stderr.on("data", (chunk) => this.onLog(String(chunk).trim()));
+    // The pipe the child's errors come through is kept, so that it can
+    // be closed when the child goes.
+    //
+    // It is kept as a local, because the pipe belongs to this child and
+    // not to the panel: a child that is started again has its own pipe,
+    // and the panel's would be the wrong one to close.
+    const stderr = this.child.stderr;
+    this.stderr = stderr;
+    // Every pipe is remembered, so that they can all be closed when the
+    // panel stops. A pipe that is left open is a panel that cannot
+    // shut down.
+    this.pipes.add(stderr);
+    stderr.on("data", (chunk) => this.onLog(String(chunk).trim()));
     this.child.on("exit", (code) => {
       this.child = null;
+      // The pipe the child's errors came through is closed.
+      //
+      // A pipe whose other end has gone stays open, and an open pipe is
+      // a panel that cannot shut down: the process waits for the pipe
+      // to close and the pipe never does.
+      stderr.destroy();
+      this.pipes.delete(stderr);
+      if (this.stderr === stderr) this.stderr = null;
       this.onLog(`the device program stopped with code ${code}`);
+      this.restart();
     });
     this.child.on("error", (error) => {
       this.child = null;
       this.onLog(`the device program could not be started: ${error.message}`);
+      this.restart();
     });
 
     // The state file is watched rather than polled.
@@ -259,11 +291,40 @@ class DeviceClient {
         if (this.settle) clearTimeout(this.settle);
         this.settle = setTimeout(() => this.read(), WATCH_SETTLE_MS);
       });
+      // The watch does not keep the panel alive: the panel is kept alive
+      // by its window.
       this.watcher.unref?.();
     } catch {
       // The poll is the backstop, so a file system that cannot be
       // watched is not a failure.
     }
+  }
+
+  /**
+   * Starts the device program again after it has stopped.
+   *
+   * The device program is the panel's voice: it owns the microphone, the
+   * speaker, the wake word and the connection to Home Assistant. A
+   * device program that has stopped is a panel that cannot hear and
+   * cannot be heard, and a kiosk that is on a wall for a year should
+   * not need a person to visit it.
+   *
+   * The wait is longer each time, so a device program that will not
+   * start is not started over and over: the panel says what is wrong
+   * and waits.
+   */
+  restart() {
+    if (this.stopping) return;
+    if (this.restartTimer) return;
+    const wait = Math.min(RESTART_MAX_WAIT_MS, (this.restartWait || 0) * 2 || RESTART_FIRST_WAIT_MS);
+    this.restartWait = wait;
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null;
+      if (this.stopping) return;
+      this.onLog("the device program is being started again");
+      this.start();
+    }, wait);
+    this.restartTimer.unref?.();
   }
 
   /**
@@ -386,6 +447,11 @@ class DeviceClient {
    * @returns {Promise<void>} resolved when the sidecar has gone
    */
   async stop() {
+    // The device program is not started again once the panel is going
+    // away.
+    this.stopping = true;
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    this.restartTimer = null;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     if (this.levelTimer) clearInterval(this.levelTimer);
@@ -423,6 +489,13 @@ class DeviceClient {
         done();
       }
     });
+
+    // Every pipe the children's errors came through is closed. A pipe
+    // whose other end has gone stays open, and an open pipe is a panel
+    // that cannot shut down.
+    for (const pipe of this.pipes) pipe.destroy();
+    this.pipes.clear();
+    this.stderr = null;
   }
 }
 
