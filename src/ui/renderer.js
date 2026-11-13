@@ -518,6 +518,21 @@ let media = {
   at: 0,
 };
 
+// mediaLoading is whether something is on its way.
+//
+// Pressing play does not start the music there and then: the command
+// goes to the server, the server gets the music, and the music starts.
+// That takes a moment, and a button that does nothing when it is
+// pressed looks broken.
+//
+// So the button waits and says that it is waiting. The wait ends when
+// the state says what is playing, and it ends by itself if the state
+// never comes, so a button cannot be left spinning for ever.
+let mediaLoading = false;
+
+// mediaLoadingTimer is how long the wait is allowed to last.
+const mediaLoadingTimeout = 8000;
+
 // The position the panel shows.
 //
 // The server says where the track has got to, but only when it says so,
@@ -627,6 +642,16 @@ function paintMedia(state) {
   // it knows is whether something is playing.
   const mediaState = state.media_state || "idle";
   const homePlaying = mediaState === "playing" || mediaState === "announcing";
+  // A music that has started is the end of the wait. The wait is also
+  // ended by the timer, so a music that never starts does not leave the
+  // button spinning.
+  if (mediaLoading && (mediaSources.server.playing || homePlaying)) {
+    mediaLoading = false;
+    if (mediaLoadingTimer) {
+      clearTimeout(mediaLoadingTimer);
+      mediaLoadingTimer = null;
+    }
+  }
   mediaSources.home = {
     title: homePlaying ? "Playing in Home Assistant" : "",
     artist: "",
@@ -677,15 +702,26 @@ function paintMedia(state) {
 
   media = { ...shown, at: Date.now() };
   repaintMedia();
-
   if (mediaDuration) mediaDuration.textContent = shown.duration > 0 ? formatTime(shown.duration) : "—";
 
   // The transport buttons are only there for the commands the server
   // says it will take.
   if (mediaPlay) {
     mediaPlay.disabled = !shown.commands.includes(shown.playing ? "pause" : "play");
-    mediaPlay.textContent = shown.playing ? "⏸" : "▶";
-    mediaPlay.setAttribute("aria-label", shown.playing ? "Pause" : "Play");
+    // The button shows what it will do, unless something is on its way
+    // in which case it waits and says so.
+    if (mediaLoading) {
+      mediaPlay.textContent = "";
+      mediaPlay.classList.add("is-loading");
+      mediaPlay.setAttribute("aria-label", "Loading");
+    } else {
+      mediaPlay.classList.remove("is-loading");
+      mediaPlay.textContent = shown.playing ? "⏸" : "▶";
+      mediaPlay.setAttribute("aria-label", shown.playing ? "Pause" : "Play");
+    }
+    // The button has to send what it shows. A button that shows the
+    // pause sign and sends "play" is a button that pauses nothing.
+    mediaPlay.dataset.transport = shown.playing ? "pause" : "play";
   }
   if (mediaPrevious) mediaPrevious.disabled = !shown.commands.includes("previous");
   if (mediaNext) mediaNext.disabled = !shown.commands.includes("next");
@@ -723,8 +759,29 @@ for (const button of document.querySelectorAll("[data-transport]")) {
     // The command goes to whichever music is being shown, so the button
     // does what the panel says it does.
     window.homePanel.transport({ action, source: mediaSource });
+    // Starting the music takes a moment, and the button shows that it
+    // is waiting for it.
+    if (action === "play") startMediaLoading();
   });
 }
+
+// startMediaLoading shows that the music is on its way.
+//
+// The wait ends when the state says the music is playing, and it ends
+// by itself if that never happens, so a button cannot be left spinning
+// for ever.
+function startMediaLoading() {
+  mediaLoading = true;
+  paintMedia(lastMediaState || {});
+  if (mediaLoadingTimer) clearTimeout(mediaLoadingTimer);
+  mediaLoadingTimer = setTimeout(() => {
+    mediaLoading = false;
+    paintMedia(lastMediaState || {});
+  }, mediaLoadingTimeout);
+}
+
+// mediaLoadingTimer is the wait that ends the spinner by itself.
+let mediaLoadingTimer = null;
 
 // The scrubber seeks when it is let go.
 //
@@ -830,8 +887,16 @@ window.addEventListener("pointerdown", (event) => {
   const drawerOpen = drawer.classList.contains("open");
   const inEdgeZone = event.clientX > window.innerWidth - 45;
   const onDrawer = Boolean(event.target.closest?.("#side-panel"));
+  // A control is not a drag of the drawer.
+  //
+  // The sliders are inside the drawer and near its edge, so a drag of
+  // one was taken for a drag of the drawer: the drawer moved under the
+  // pointer and then closed, and the volume was changed on the way.
+  const onControl = Boolean(event.target.closest?.("input, textarea, select, button, [role='slider']"));
   touchStart = { x: event.clientX, y: event.clientY };
-  if (drawerOpen && onDrawer) {
+  if (onControl) {
+    dragState = null;
+  } else if (drawerOpen && onDrawer) {
     dragState = { start: 1, active: true };
   } else if (!drawerOpen && inEdgeZone) {
     dragState = { start: 0, active: true };
@@ -874,8 +939,16 @@ window.addEventListener("pointerup", (event) => {
     touchStart = null;
     return;
   }
-  if (dy < 90 && !drawer.classList.contains("open") && touchStart.x > window.innerWidth - 45 && dx < -55) setDrawer(true);
-  else if (dy < 90 && drawer.classList.contains("open") && dx > 65) setDrawer(false);
+  // A swipe is a swipe of the screen, not of a control.
+  //
+  // The sliders are inside the drawer and near its edge, so a drag of
+  // one was taken for a swipe: the drawer opened or closed under the
+  // pointer and the value was changed on the way.
+  const onControl = Boolean(event.target.closest?.("input, textarea, select, button, [role='slider']"));
+  if (!onControl) {
+    if (dy < 90 && !drawer.classList.contains("open") && touchStart.x > window.innerWidth - 45 && dx < -55) setDrawer(true);
+    else if (dy < 90 && drawer.classList.contains("open") && dx > 65) setDrawer(false);
+  }
   touchStart = null;
 }, { passive: true });
 window.addEventListener("pointercancel", () => {
