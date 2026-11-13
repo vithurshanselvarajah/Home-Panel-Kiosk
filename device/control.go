@@ -2,13 +2,18 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 )
@@ -38,7 +43,8 @@ type ControlCommand struct {
 	// Value is the value, for the commands that take one.
 	Value any `json:"value,omitempty"`
 	// Setting is the panel setting a Home Assistant configuration entity changes.
-	Setting string `json:"setting,omitempty"`
+	Setting         string `json:"setting,omitempty"`
+	CameraRequestID string `json:"cameraRequestId,omitempty"`
 	// Mode is the mode, for the commands that take one.
 	Mode string `json:"mode,omitempty"`
 	// URL is the address, for the command that takes one.
@@ -157,7 +163,15 @@ type ControlServer struct {
 	// connections are the panels that are connected.
 	connections sync.Map
 	// writeMu guards the writes on each connection.
-	writeMu sync.Mutex
+	writeMu        sync.Mutex
+	cameraMu       sync.Mutex
+	cameraRequests map[string]chan cameraResult
+	cameraSequence atomic.Uint64
+}
+
+type cameraResult struct {
+	data []byte
+	err  error
 }
 
 // ControlOptions is what the control server is made with.
@@ -275,6 +289,27 @@ func (s *ControlServer) handle(message ControlMessage) {
 	switch message.Action {
 	case "state":
 		s.SetState(message.State)
+	case "camera_frame":
+		s.cameraMu.Lock()
+		result := s.cameraRequests[message.CameraRequestID]
+		delete(s.cameraRequests, message.CameraRequestID)
+		s.cameraMu.Unlock()
+		if result != nil {
+			var data []byte
+			var err error
+			if len(message.CameraData) > 6*1024*1024 {
+				err = fmt.Errorf("camera image exceeds 4 MiB")
+			} else {
+				data, err = base64.StdEncoding.DecodeString(message.CameraData)
+			}
+			if len(data) > 4*1024*1024 {
+				err = fmt.Errorf("camera image exceeds 4 MiB")
+			}
+			if message.CameraError != "" {
+				err = fmt.Errorf("%s", message.CameraError)
+			}
+			result <- cameraResult{data: data, err: err}
+		}
 	case "transport":
 		s.mu.Lock()
 		handler := s.onTransport
@@ -336,7 +371,10 @@ type ControlMessage struct {
 	//
 	// The mute is the microphone's, so the panel asks the device
 	// program for it: the device program owns the microphone.
-	Muted bool `json:"muted,omitempty"`
+	Muted           bool   `json:"muted,omitempty"`
+	CameraRequestID string `json:"cameraRequestId,omitempty"`
+	CameraData      string `json:"cameraData,omitempty"`
+	CameraError     string `json:"cameraError,omitempty"`
 }
 
 // TransportCommand is what the panel asks of the music transport.
@@ -597,6 +635,33 @@ func (s *ControlServer) SendCommand(command ControlCommand) {
 		}
 		return true
 	})
+}
+
+// CaptureCamera asks the panel for one JPEG from the host's default camera.
+func (s *ControlServer) CaptureCamera(ctx context.Context) ([]byte, error) {
+	id := strconv.FormatUint(s.cameraSequence.Add(1), 10)
+	result := make(chan cameraResult, 1)
+	s.cameraMu.Lock()
+	if s.cameraRequests == nil {
+		s.cameraRequests = make(map[string]chan cameraResult)
+	}
+	s.cameraRequests[id] = result
+	s.cameraMu.Unlock()
+	s.SendCommand(ControlCommand{Action: "camera_capture", CameraRequestID: id})
+	select {
+	case response := <-result:
+		return response.data, response.err
+	case <-ctx.Done():
+		s.cameraMu.Lock()
+		delete(s.cameraRequests, id)
+		s.cameraMu.Unlock()
+		return nil, ctx.Err()
+	case <-time.After(10 * time.Second):
+		s.cameraMu.Lock()
+		delete(s.cameraRequests, id)
+		s.cameraMu.Unlock()
+		return nil, fmt.Errorf("camera capture timed out")
+	}
 }
 
 // writeCommand asks one panel to do something.
