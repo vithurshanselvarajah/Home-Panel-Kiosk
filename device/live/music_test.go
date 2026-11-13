@@ -183,6 +183,23 @@ async def main():
 
     print("roles=" + ",".join(sorted(client.active_role_ids)))
 
+    if MODE == "play" or MODE == "control":
+        # The server says what the transport can do.
+        #
+        # The panel's buttons are the transport, and a button that the
+        # server will not take is a button that does nothing.
+        from aiosendspin.models.types import MediaCommand
+        controller = client.group.group_role("controller")
+        if controller is not None:
+            controller.set_supported_commands([
+                MediaCommand.PLAY,
+                MediaCommand.PAUSE,
+                MediaCommand.STOP,
+                MediaCommand.NEXT,
+                MediaCommand.PREVIOUS,
+            ])
+            print("the transport was set")
+
     if MODE == "control":
         # The server takes the controller role, which is what the
         # transport buttons on the panel's drawer drive.
