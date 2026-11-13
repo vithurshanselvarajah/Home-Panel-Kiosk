@@ -1718,6 +1718,10 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	// music is stereo and the reply is mono, so the stereo buffer is
 	// twice the size of the mono one.
 	stereo := make([]byte, playbackRate/100*4)
+	// The mono buffer is made once, because a period comes a hundred
+	// times a second and a buffer made every time is a hundred
+	// allocations a second for nothing.
+	mono := make([]byte, playbackRate/100*2)
 
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
@@ -1816,7 +1820,7 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		// has.
 		out := stereo
 		if channels == 1 {
-			out = make([]byte, len(stereo)/2)
+			out = mono
 			audio.StereoToMono(stereo, out)
 		}
 
