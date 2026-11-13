@@ -290,6 +290,11 @@ drawer.addEventListener("click", (event) => {
   // A control inside the media panel is not a drawer action, whatever
   // it is.
   if (button.closest(".media-panel")) return;
+  // Nor is a control inside the quick controls. The sliders are
+  // inputs rather than buttons, so the handler does not see them as
+  // buttons at all, but the mute is a button and it would close the
+  // drawer.
+  if (button.closest(".quick-controls")) return;
   const action = button.dataset.action;
   if (action) window.homePanel.command({ action });
   else if (button.id === "settings-button") openSettings();
@@ -391,6 +396,7 @@ if (voiceForm) {
 
 const brightnessSlider = $("#brightness-slider");
 const volumeSlider = $("#volume-slider");
+const volumeMute = $("#volume-mute");
 const brightnessValue = $("#brightness-value");
 const volumeValue = $("#volume-value");
 const brightnessControl = $("#brightness-control");
@@ -418,6 +424,19 @@ function paintVolume(value) {
   if (volumeValue) volumeValue.textContent = `${percent}%`;
 }
 
+// paintMute shows whether the system is muted.
+//
+// The icon is the same either way and the state is carried by the
+// button, because the icon is what the stylesheet draws and the state
+// is what a screen reader reads.
+function paintMute(muted) {
+  if (!volumeMute) return;
+  const on = Boolean(muted);
+  volumeMute.classList.toggle("is-muted", on);
+  volumeMute.setAttribute("aria-pressed", String(on));
+  volumeMute.setAttribute("aria-label", on ? "Unmute" : "Mute");
+}
+
 // The slider is set on release rather than on every movement, because a
 // backlight is written to for every value and a drag would write it
 // dozens of times.
@@ -439,6 +458,17 @@ bindSlider(volumeSlider, (value) => {
   paintVolume(value);
   window.homePanel.setVolume(value);
 });
+
+// The mute button mutes the system, or unmutes it.
+//
+// The mute is the system's own, because the volume is: a person who
+// reaches for the volume on a panel expects the volume of the room.
+if (volumeMute) {
+  volumeMute.addEventListener("click", () => {
+    const muted = volumeMute.getAttribute("aria-pressed") !== "true";
+    window.homePanel.setMute(muted);
+  });
+}
 
 // ── The music ─────────────────────────────────────────────────────────────
 //
@@ -715,6 +745,7 @@ window.homePanel.onState((state) => {
   // right the moment the drawer opens.
   if (typeof state.brightness === "number") paintBrightness(state.brightness);
   if (typeof state.volume === "number") paintVolume(state.volume);
+  if (typeof state.muted === "boolean") paintMute(state.muted);
   // A control that cannot change anything is hidden rather than shown at
   // a value that would do nothing.
   if (brightnessControl) brightnessControl.hidden = typeof state.brightness !== "number";
