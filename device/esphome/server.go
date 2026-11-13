@@ -68,6 +68,13 @@ type Server struct {
 	writeMu sync.Mutex
 }
 
+// cameraStream is a comparable identity for a live camera request. A
+// context.CancelFunc cannot be compared, so it cannot be the value passed to
+// sync.Map.CompareAndDelete when a stream ends.
+type cameraStream struct {
+	cancel context.CancelFunc
+}
+
 // ServerOptions is what the server is made with.
 type ServerOptions struct {
 	// Name is the device name, as Home Assistant knows it.
@@ -743,17 +750,27 @@ func (s *Server) sendCameraImage(client *Client, ctx context.Context) error {
 
 func (s *Server) startCameraStream(client *Client) {
 	ctx, cancel := context.WithCancel(context.Background())
-	previous, loaded := s.cameraStreams.Swap(client, cancel)
+	stream := &cameraStream{cancel: cancel}
+	previous, loaded := s.cameraStreams.Swap(client, stream)
 	if loaded {
-		previous.(context.CancelFunc)()
+		previous.(*cameraStream).cancel()
 	}
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
-		defer s.cameraStreams.CompareAndDelete(client, cancel)
+		defer s.cameraStreams.CompareAndDelete(client, stream)
+		failed := false
 		for {
 			if err := s.sendCameraImage(client, ctx); err != nil {
-				return
+				if ctx.Err() != nil {
+					return
+				}
+				if !failed {
+					s.log.Warn("camera stream frame failed; will retry", "error", err)
+					failed = true
+				}
+			} else {
+				failed = false
 			}
 			select {
 			case <-ctx.Done():
@@ -766,7 +783,7 @@ func (s *Server) startCameraStream(client *Client) {
 
 func (s *Server) stopCameraStream(client *Client) {
 	if value, ok := s.cameraStreams.LoadAndDelete(client); ok {
-		value.(context.CancelFunc)()
+		value.(*cameraStream).cancel()
 	}
 }
 

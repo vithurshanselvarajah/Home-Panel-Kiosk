@@ -5,6 +5,88 @@ const drawerBackdrop = $("#side-panel-backdrop");
 const keyboard = $("#keyboard");
 const form = $("#settings-form");
 const voiceForm = $("#voice-form");
+let cameraSession = null;
+let cameraSessionOpening = null;
+let cameraSessionIdleTimer = null;
+
+function releaseCameraSession(session = cameraSession) {
+  if (!session) return;
+  clearTimeout(cameraSessionIdleTimer);
+  cameraSessionIdleTimer = null;
+  if (cameraSession === session) cameraSession = null;
+  session.stream.getTracks().forEach((track) => track.stop());
+  session.video.pause();
+  session.video.srcObject = null;
+  session.video.remove();
+}
+
+async function openCameraSession() {
+  const live = cameraSession?.stream.getVideoTracks().some((track) => track.readyState === "live");
+  if (live && cameraSession.video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return cameraSession;
+  if (cameraSessionOpening) return cameraSessionOpening;
+
+  cameraSessionOpening = (async () => {
+    releaseCameraSession();
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera capture is unavailable");
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 2, max: 5 } },
+      audio: false,
+    });
+    const video = document.createElement("video");
+    video.muted = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.style.cssText = "position:fixed;left:-10000px;top:0;width:320px;height:180px;opacity:0;pointer-events:none";
+    document.body.append(video);
+    video.srcObject = stream;
+    const session = { stream, video };
+    try {
+      await video.play();
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => finish(new Error("Timed out waiting for a camera frame")), 5000);
+          const finish = (error) => {
+            clearTimeout(timeout);
+            video.removeEventListener("loadeddata", onFrame);
+            if (error) reject(error); else resolve();
+          };
+          const onFrame = () => video.videoWidth && finish();
+          video.addEventListener("loadeddata", onFrame);
+          if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth) finish();
+        });
+      }
+    } catch (error) {
+      releaseCameraSession(session);
+      throw error;
+    }
+    cameraSession = session;
+    stream.getVideoTracks()[0]?.addEventListener("ended", () => releaseCameraSession(session), { once: true });
+    return session;
+  })();
+  try {
+    return await cameraSessionOpening;
+  } finally {
+    cameraSessionOpening = null;
+  }
+}
+
+window.homePanelCaptureCameraFrame = async () => {
+  clearTimeout(cameraSessionIdleTimer);
+  const { video } = await openCameraSession();
+  const scale = Math.min(1, 1280 / video.videoWidth, 720 / video.videoHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("The camera frame could not be processed");
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const image = canvas.toDataURL("image/jpeg", 0.78);
+  const session = cameraSession;
+  cameraSessionIdleTimer = setTimeout(() => releaseCameraSession(session), 5000);
+  return image;
+};
+
+window.addEventListener("pagehide", () => releaseCameraSession());
 const voiceUI = window.VoiceUI ? window.VoiceUI.create({
   overlay: $("#voice-overlay"),
   onOverlayClosed: () => {
