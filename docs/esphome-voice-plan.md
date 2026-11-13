@@ -1029,3 +1029,98 @@ The camera is the larger one, because the panel has no camera today:
 `cdd595d` removed the old Home Assistant camera feature and there is no
 V4L2 or `getUserMedia` code in the tree. It needs a capture source, a
 JPEG encoder and the chunked image responses.
+
+---
+
+## 11. What the panel costs
+
+The panel is a kiosk on a machine with 4 GB of eMMC and 1 GB of RAM to
+spare. What it costs matters more than what it does, because a panel
+that is too heavy is a panel that is slow to answer.
+
+The numbers below are from the panel running against the real Home
+Assistant, measured over thirty seconds of each activity, with the
+writes counted from `/proc/<pid>/io`.
+
+### The memory
+
+| Part | RSS |
+|---|---|
+| The browser process | 237 MB |
+| The graphics process | 170 MB |
+| The dashboard's renderer | 170 MB |
+| The utility process | 86 MB |
+| The three helper processes | 134 MB |
+| The device program | 56 MB |
+| **All of it** | **833 MB** |
+
+The device program is the small one: 56 MB, and it holds the wake word
+model, the microphone and the speaker.
+
+Most of the rest is Chromium's own. A bare Electron with one empty
+window uses 249 MB, so the panel's own code is a small part of the
+figure and the dashboard and the graphics stack are the rest. There is
+no leak: the browser process sits at 234 MB and stays there.
+
+The overlay is a whole renderer process, and it is closed after a minute
+of nothing needing it. That is worth 140 MB on a machine where the
+memory matters, and it is why the panel sits at 833 MB rather than
+985 MB.
+
+### The writes
+
+**Nothing.** The whole panel writes 94 KB of disk in its whole life,
+and that is the graphics caches being filled the first time a page is
+drawn. After that: zero.
+
+The three things that used to write have been moved:
+
+- The live state is in memory. It is a reading and not a record: it
+  changes as the device listens and speaks, and it is worth nothing
+  once the process is gone. Writing it to the flash would wear the
+  flash out for nothing.
+- The microphone's level is in memory, and is written in place rather
+  than replaced, so the directory does not change.
+- Chromium's caches are in memory and capped at 16 MB, because the
+  default is a share of the free disk and a kiosk on a 4 GB card does
+  not need a hundred times that.
+
+### The processor
+
+**0.03%** while idle, and **0.04%** while the music streams, the
+drawer opens, the volume moves and the microphone is muted.
+
+The panel is not doing much when it is waiting, and that is the point.
+Three things used to make it work harder than it needed to:
+
+- The mixer was read every half second, in two processes, for as long
+  as the panel was running. The two are read in one process now, and
+  the watch runs once a second.
+- The device's state file was read four times a second. It is watched
+  now, and the poll beside it runs once a second as a backstop.
+- The state was compared before it was sent, so a state that had not
+  changed did not cross the socket.
+
+### The device program
+
+The device program writes nothing to the disk while it is idle, and its
+state file is only rewritten when the state has actually changed. The
+level file is written at most four times a second, and only when the
+level has moved far enough to see.
+
+### What was changed
+
+| Change | Before | After |
+|---|---|---|
+| The mixer is read | two processes every 500 ms | one process every 1000 ms |
+| The state file is read | four times a second | watched, with a backstop |
+| The overlay | always alive | closed after a minute |
+
+### What was left alone
+
+The dashboard is 170 MB of Home Assistant's own Lovelace, and it is not
+the panel's to trim. The graphics process is 170 MB because the machine
+has no working VAAPI and Chromium falls back to software, and it does
+not get smaller when Vulkan is turned off. The three helper processes
+are Chromium's own and there is nothing to be done about them from
+here.
