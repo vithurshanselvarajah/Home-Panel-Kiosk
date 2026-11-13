@@ -266,8 +266,15 @@ func (d *device) stop() {
 		case <-done:
 		case <-ctx.Done():
 			_ = d.cmd.Process.Kill()
+			<-done
 		}
 	}
+
+	// The ports have to be free before the next test starts, and a
+	// process that has just been killed takes a moment to let go of
+	// them.
+	waitForFreePort(livePort())
+	waitForFreePort(liveSendspinPort())
 }
 
 // speakerBytes says how many bytes the speaker has played.
