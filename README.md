@@ -56,8 +56,10 @@ The key is kept out of the settings file and encrypted with Electron `safeStorag
 | Display · Touch keyboard | switch (configuration) | Enables the on-screen keyboard |
 | Audio · Startup volume | number (configuration) | Volume applied when the audio device starts |
 | Voice · Wake word / sensitivity / music ducking | switch / numbers (configuration) | Voice satellite settings |
+| Music · Music Assistant | switch (configuration) | Enables the Sendspin player |
+| Music · Allow unpaired servers | switch (configuration) | Allows local servers to play without pairing |
 
-Configuration entities appear under the device's configuration section in Home Assistant. The dashboard and slideshow URLs remain in the local setup because they are connection details, not device controls. The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface. Camera frames use the system default camera; the operating system must allow the installed app to access it.
+Configuration entities appear under the device's configuration section in Home Assistant. The dashboard and slideshow URLs and local microphone/speaker selection remain in setup because they are connection details or depend on locally enumerated hardware. The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface. Camera frames use the system default camera; the operating system must allow the installed app to access it.
 
 There is a control for each thing the panel can do and a sensor for each thing that can be seen but not set. Nothing is offered twice: the screen switch turns the screen off and on, so there is no separate button for either.
 
