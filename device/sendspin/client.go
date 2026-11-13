@@ -30,6 +30,10 @@ type Config struct {
 	Name      string // shown in Music Assistant
 	Instance  string // mDNS instance name; unique on the LAN
 	Port      int
+	// Addresses are the addresses Music Assistant can reach. The mDNS
+	// announcement is limited to interfaces that own these addresses so
+	// Docker bridges cannot publish an unreachable address for the host.
+	Addresses []net.IP
 	Product   string
 	Version   string
 	// Unpaired lets a server play without pairing, once its operator has
@@ -174,14 +178,59 @@ func (c *Client) Start() error {
 	c.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go c.srv.Serve(ln)
 
+	interfaces, err := announceInterfaces(c.cfg.Addresses)
+	if err != nil {
+		c.srv.Close()
+		return fmt.Errorf("mDNS interfaces: %w", err)
+	}
 	c.mdns, err = zeroconf.Register(c.cfg.Instance, serviceType, "local.", c.cfg.Port,
-		[]string{"path=" + Path, "name=" + c.cfg.Name}, nil)
+		[]string{"path=" + Path, "name=" + c.cfg.Name}, interfaces)
 	if err != nil {
 		c.srv.Close()
 		return fmt.Errorf("mDNS: %w", err)
 	}
 	log.Printf("[sendspin] player %q listening on :%d%s", c.cfg.Name, c.cfg.Port, Path)
 	return nil
+}
+
+// announceInterfaces limits mDNS to the interfaces carrying reachable
+// addresses. Advertising on every interface lets Docker bridges win the
+// hostname's address record, making LAN clients connect to an unreachable IP.
+func announceInterfaces(addresses []net.IP) ([]net.Interface, error) {
+	if len(addresses) == 0 {
+		return nil, nil
+	}
+	all, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	var chosen []net.Interface
+	seen := make(map[int]bool, len(addresses))
+	for _, iface := range all {
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			ip, _, err := net.ParseCIDR(addr.String())
+			if err != nil {
+				continue
+			}
+			for _, wanted := range addresses {
+				if ip.Equal(wanted) {
+					if !seen[iface.Index] {
+						chosen = append(chosen, iface)
+						seen[iface.Index] = true
+					}
+					break
+				}
+			}
+		}
+	}
+	if len(chosen) == 0 {
+		return nil, fmt.Errorf("no network interface owns a published address")
+	}
+	return chosen, nil
 }
 
 // Stop says goodbye to every server and stops listening.
