@@ -70,29 +70,18 @@ func openWakeWord(log *slog.Logger) (*wakeWord, error) {
 		threshold: defaultWakeThreshold,
 	}
 
-	// The scorer is opened with the first model, and the others are
-	// loaded as well so that a panel with two models hears both.
-	for _, model := range models {
-		opened, err := scorer.Open(filepath.Join(dir, model+".onnx"), float32(defaultWakeThreshold), wake.crossed)
-		if err != nil {
-			if wake.scorer == nil {
-				return nil, err
-			}
-			// One model loaded is enough to carry on. A second that will
-			// not load is a problem with that model, not with the panel.
-			log.Warn("a wake word model could not be loaded", "model", model, "error", err)
-			continue
-		}
-		if wake.scorer == nil {
-			wake.scorer = opened
-			wake.model = model
-		} else {
-			log.Info("a second wake word model was loaded", "model", model)
-		}
+	// The device currently advertises one active phrase to Home Assistant,
+	// so only the first classifier is useful. Do not open and leak unused
+	// native sessions when old classifiers are left in the directory.
+	model := models[0]
+	opened, err := scorer.Open(filepath.Join(dir, model+".onnx"), float32(defaultWakeThreshold), wake.crossed)
+	if err != nil {
+		return nil, err
 	}
-
-	if wake.scorer == nil {
-		return nil, fmt.Errorf("no wake word model could be loaded from %s", dir)
+	wake.scorer = opened
+	wake.model = model
+	for _, ignored := range models[1:] {
+		log.Warn("an extra wake word model is ignored; only one is supported", "model", ignored)
 	}
 
 	log.Info("the local wake word is ready", "model", wake.model, "phrase", wake.scorer.Phrase())

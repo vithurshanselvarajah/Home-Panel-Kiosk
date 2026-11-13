@@ -262,6 +262,8 @@ They go in `/usr/share/home-panel/wakeword`:
 
 The directory can be changed with `HOME_PANEL_WAKEWORD_DIR`.
 
+For installation steps, custom model guidance, filename rules and troubleshooting, see [Adding a wake word](docs/wakewords.md).
+
 Without the models the panel still works: it is a screen with some
 switches, and Home Assistant can ask it to speak. With them it hears the
 wake word itself, and nothing is sent to Home Assistant until it fires.
