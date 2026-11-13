@@ -130,6 +130,9 @@ function hideSecret(kind) {
 async function toggleSecret(kind) {
   const view = secretViews[kind];
   if (!view || view.open) { hideSecret(kind); return; }
+  // A previous text field may still hold focus while the reveal button is
+  // clicked. The token and QR are read-only, so dismiss the touch keyboard.
+  if (!keyboard.hidden) setKeyboard(false);
   const button = document.querySelector(`[data-secret-toggle="${kind}"]`);
   if (button) button.disabled = true;
   try {
@@ -196,6 +199,8 @@ function populate(settings) {
   // whether it is wanted at all.
   const enabledToggle = form.elements.namedItem("esphomeEncryptionEnabled");
   if (enabledToggle) enabledToggle.checked = Boolean(settings.esphomeEncryptionEnabled);
+  const sendspinPairing = form.elements.namedItem("sendspinRequirePairing");
+  if (sendspinPairing) sendspinPairing.checked = !Boolean(settings.musicUnpaired);
   syncEncryptionKeyField();
 }
 
@@ -370,7 +375,7 @@ $("#notice").addEventListener("click", (event) => {
 
 form.addEventListener("focusin", (event) => {
   const field = event.target;
-  if (!field || !("value" in field) || field.type === "checkbox" || field.type === "radio") return;
+  if (!field?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]), textarea')) return;
   // The keyboard is only for the settings form, and only when the setting
   // says it should appear. The main process vetoes it as well, but the
   // keyboard is drawn here, so the check has to be here too.
@@ -419,6 +424,7 @@ form.addEventListener("submit", async (event) => {
   // says so, and the key follows it: no key when the connection is in
   // plain text.
   data.esphomeEncryptionEnabled = form.elements.namedItem("esphomeEncryptionEnabled").checked;
+  data.musicUnpaired = !form.elements.namedItem("sendspinRequirePairing").checked;
   if (!data.esphomeEncryptionEnabled) {
     data.esphomeEncryptionKey = "";
   }
