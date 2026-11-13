@@ -67,6 +67,13 @@
 .media-button--play{width:46px;height:46px;background:var(--accent);color:#12221d;font-size:17px}
 .media-button--play:hover{background:#a4ecd0;color:#12221d}
 .media-button--play:disabled:hover{background:var(--accent)}
+/* The spinner is shown while the music is on its way. It is drawn with
+   a border rather than a glyph, because a glyph has no parts that can
+   move. */
+.media-button--play.is-loading{cursor:progress}
+.media-button--play.is-loading::before{content:"";width:18px;height:18px;border-radius:50%;border:2px solid rgba(18,34,29,.28);border-top-color:#12221d;animation:media-spin .7s linear infinite}
+@keyframes media-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.media-button--play.is-loading::before{animation-duration:2.4s}}
 
 /* A slim slider for the position in a track. The big one is for the
    volume and the brightness, where the thumb is what is aimed at; here
