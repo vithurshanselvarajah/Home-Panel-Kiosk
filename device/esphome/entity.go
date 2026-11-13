@@ -83,6 +83,9 @@ type Entity struct {
 	Unit string
 	// DeviceClass is the class Home Assistant groups the entity by.
 	DeviceClass string
+	// Category tells Home Assistant whether this entity is configuration
+	// or diagnostic information rather than a day-to-day control.
+	Category EntityCategory
 	// Options are the choices, for a select.
 	Options []string
 	// Min, Max and Step are the range, for a number.

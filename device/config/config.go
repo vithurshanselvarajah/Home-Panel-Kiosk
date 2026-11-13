@@ -46,8 +46,6 @@ type Config struct {
 	Volume *int `json:"volume,omitempty"`
 	// DuckDb is how far the music is turned down while a reply plays.
 	DuckDb *int `json:"duckDb,omitempty"`
-	// MuteButton is the panel's own mute switch.
-	MuteButton *bool `json:"muteButton,omitempty"`
 
 	// ── Music ───────────────────────────────────────────────────────────
 	// SendspinEnabled turns the music player on and off.

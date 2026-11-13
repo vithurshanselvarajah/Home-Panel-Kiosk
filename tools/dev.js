@@ -1,8 +1,6 @@
 // Runs the app against a Home Assistant server.
 //
-//   npm run dev              the app, with the voice switched on
-//   npm run dev -- --no-voice
-//                            the app, without the voice
+//   npm run dev              the app; Home Assistant controls the wake word
 //
 // The app is a voice satellite to Home Assistant. It finds Home Assistant
 // on the network the same way any ESPHome device does, so there is
@@ -16,8 +14,6 @@ const { spawn } = require("node:child_process");
 const path = require("node:path");
 
 const root = path.join(__dirname, "..");
-const args = process.argv.slice(2);
-const useVoice = !args.includes("--no-voice");
 
 const children = [];
 function cleanup() {
@@ -33,12 +29,7 @@ console.log("dev: starting the app");
 const app = spawn("npx", ["electron", ".", "--dev"], {
   cwd: root,
   stdio: "inherit",
-  env: {
-    ...process.env,
-    // A development run turns the voice on, because the panel is a voice
-    // satellite and that is what is being worked on.
-    HOME_PANEL_VOICE: useVoice ? "1" : "0",
-  },
+  env: process.env,
 });
 children.push(app);
 app.on("exit", (code) => { cleanup(); process.exit(code || 0); });

@@ -37,6 +37,8 @@ type ControlCommand struct {
 	Action string `json:"action"`
 	// Value is the value, for the commands that take one.
 	Value any `json:"value,omitempty"`
+	// Setting is the panel setting a Home Assistant configuration entity changes.
+	Setting string `json:"setting,omitempty"`
 	// Mode is the mode, for the commands that take one.
 	Mode string `json:"mode,omitempty"`
 	// URL is the address, for the command that takes one.
@@ -90,7 +92,11 @@ type ControlState struct {
 	// LastActivity is when somebody last did something on the panel.
 	LastActivity string `json:"lastActivity"`
 	// Version is the version of the application.
-	Version string `json:"version"`
+	Version                string `json:"version"`
+	IdleToSlideshowMinutes int    `json:"idleToSlideshowMinutes"`
+	SlideshowToOffMinutes  int    `json:"slideshowToOffMinutes"`
+	TouchKeyboardEnabled   bool   `json:"touchKeyboardEnabled"`
+	StartupVolume          int    `json:"startupVolume"`
 }
 
 // ControlServer is the socket the panel and the device program share.
@@ -562,6 +568,14 @@ func (s *ControlServer) applyEntities(state ControlState) {
 				Kind:   esphome.KindNumber,
 				Number: float64(state.Brightness),
 			})
+		case "idle_slideshow_minutes":
+			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindNumber, Number: float64(state.IdleToSlideshowMinutes)})
+		case "slideshow_off_minutes":
+			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindNumber, Number: float64(state.SlideshowToOffMinutes)})
+		case "touch_keyboard_enabled":
+			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: state.TouchKeyboardEnabled})
+		case "startup_volume":
+			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindNumber, Number: float64(state.StartupVolume)})
 		}
 	}
 }
