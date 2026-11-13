@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("homePanel", {
   setKeyboard: (visible) => ipcRenderer.send("app:keyboard", visible),
   setBrightness: (value) => ipcRenderer.invoke("app:set-brightness", value),
   setVolume: (value) => ipcRenderer.invoke("app:set-volume", value),
+  setMute: (muted) => ipcRenderer.invoke("app:set-mute", muted),
   voiceOverlay: (full) => ipcRenderer.send("app:voice-overlay", full),
   transport: (command) => ipcRenderer.invoke("app:transport", command),
   keyboardKey: (key) => ipcRenderer.send("app:keyboard-key", key),
