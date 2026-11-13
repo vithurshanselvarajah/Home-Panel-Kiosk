@@ -56,11 +56,12 @@ type player struct {
 
 // playerStats are counts since the stream started, for the status report.
 type playerStats struct {
-	Snaps       int `json:"snaps"`
-	Corrections int `json:"corrections"`
-	Underruns   int `json:"underruns"`
-	LateDrops   int `json:"lateDrops"`
-	LastErrorUs int `json:"lastErrorUs"`
+	Snaps          int `json:"snaps"`
+	Corrections    int `json:"corrections"`
+	Underruns      int `json:"underruns"`
+	LateDrops      int `json:"lateDrops"`
+	BufferOverruns int `json:"bufferOverruns"`
+	LastErrorUs    int `json:"lastErrorUs"`
 }
 
 func newPlayer(f *timeFilter) *player {
@@ -68,6 +69,10 @@ func newPlayer(f *timeFilter) *player {
 }
 
 const unity int32 = 1 << 15
+
+// maxBufferedSamples bounds memory and latency if the speaker stalls while
+// the network keeps delivering audio.
+const maxBufferedSamples = outRate * 10
 
 // volumeGain is the spec's perceptual curve: amplitude = (v/100)^1.5.
 func volumeGain(volume int, muted bool) int32 {
@@ -103,8 +108,27 @@ func (p *player) setDelay(ms int) {
 func (p *player) push(ts int64, pcm []int16) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	oversized := false
+	if len(pcm) > maxBufferedSamples {
+		drop := len(pcm) - maxBufferedSamples
+		pcm = pcm[drop:]
+		ts += int64(drop) * 1e6 / outRate
+		oversized = true
+	}
 	if n := len(p.q); n > 0 && ts < p.q[n-1].ts {
 		p.clearLocked()
+	}
+	if oversized {
+		p.clearLocked()
+		p.st.BufferOverruns++
+	}
+	buffered := -p.off
+	for _, queued := range p.q {
+		buffered += len(queued.pcm)
+	}
+	if !oversized && buffered+len(pcm) > maxBufferedSamples {
+		p.clearLocked()
+		p.st.BufferOverruns++
 	}
 	p.q = append(p.q, chunk{ts: ts, pcm: pcm})
 }
