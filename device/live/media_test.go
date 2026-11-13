@@ -2,6 +2,7 @@ package live
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +32,6 @@ import (
 func TestThePanelPlaysRadioFromHomeAssistant(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
-	station := liveStation(t)
 	// The station is a radio browser entry, so the content is a media
 	// source address rather than the stream itself.
 	//
@@ -40,10 +40,7 @@ func TestThePanelPlaysRadioFromHomeAssistant(t *testing.T) {
 	// it came, and the panel would have to know every format a radio
 	// station uses.
 	//
-	// The station is named by its identifier in the radio browser, not
-	// by its address: Home Assistant looks the station up to find out
-	// what it is and where it plays from.
-	content := "media-source://radio_browser/" + station
+	content := liveStationContent(t)
 
 	d := startDevice(t, "")
 	d.waitFor("connected to Home Assistant", 90*time.Second, func(s deviceState) bool {
@@ -94,12 +91,117 @@ func TestThePanelPlaysRadioFromHomeAssistant(t *testing.T) {
 //
 // It is a stream, so it never ends and the panel keeps playing it for
 // as long as it is told to.
+//
+// The station is looked up in Home Assistant's radio browser rather
+// than being named, because the radio browser's catalogue changes: a
+// station that was there yesterday has a different identifier today,
+// and a test that names an identifier fails for a reason that has
+// nothing to do with the panel.
+//
+// The name is the one the environment gives, and Capital is the
+// default because it is a station that is always there.
 func liveStation(t *testing.T) string {
 	t.Helper()
 	if station := os.Getenv("LIVE_STATION"); station != "" {
-		return station
+		// The station may be named by its identifier already, in which
+		// case there is nothing to look up.
+		if strings.Contains(station, "-") && strings.Contains(station, "radio_browser") {
+			return station
+		}
 	}
-	t.Skip("no station was named")
+	name := os.Getenv("LIVE_STATION")
+	if name == "" {
+		name = "Capital FM London"
+	}
+	station := findRadioStation(t, name)
+	if station == "" {
+		t.Skipf("the radio browser does not have a station called %q", name)
+	}
+	return station
+}
+
+// liveStationContent is what Home Assistant is told to play.
+//
+// The station is a media source address, which is what Home Assistant's
+// radio browser gives out. A name is turned into an address by the
+// lookup, so the address is used as it is.
+func liveStationContent(t *testing.T) string {
+	t.Helper()
+	content := liveStation(t)
+	if !strings.HasPrefix(content, "media-source://") {
+		content = "media-source://radio_browser/" + content
+	}
+	return content
+}
+
+// findRadioStation looks a station up in Home Assistant's radio browser.
+//
+// It is Home Assistant's copy of the catalogue that is searched, so the
+// identifier it gives is the one Home Assistant will accept.
+func findRadioStation(t *testing.T, name string) string {
+	t.Helper()
+	player := livePlayerEntity(t)
+	script := `
+import asyncio, json, sys
+import websockets
+
+TOKEN = sys.argv[1]
+URL = sys.argv[2]
+PLAYER = sys.argv[3]
+WANTED = sys.argv[4]
+
+async def main():
+    ws_url = URL.replace("http://", "ws://").replace("https://", "wss://")
+    async with websockets.connect(ws_url + "/api/websocket") as ws:
+        await ws.send(json.dumps({"type": "auth", "access_token": TOKEN}))
+        await ws.recv()
+        await ws.send(json.dumps({
+            "id": 1,
+            "type": "media_player/browse_media",
+            "entity_id": PLAYER,
+            "media_content_type": "music",
+            "media_content_id": "media-source://radio_browser/country/GB",
+        }))
+        for _ in range(20):
+            msg = await asyncio.wait_for(ws.recv(), timeout=60)
+            data = json.loads(msg)
+            if data.get("id") != 1:
+                continue
+            result = data.get("result") or {}
+            for child in result.get("children", []):
+                if (child.get("title") or "").lower() == WANTED.lower():
+                    print(child.get("media_content_id", ""))
+                    return
+    print("")
+
+asyncio.run(main())
+`
+	cmd := exec.Command("python3", "-c", script, haToken(), haURL(), player, name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Logf("the radio browser could not be searched: %v (%s)", err, strings.TrimSpace(string(out)))
+		return ""
+	}
+	// The answer is the media source address, and the identifier is the
+	// last part of it.
+	answer := strings.TrimSpace(string(out))
+	if answer == "" {
+		return ""
+	}
+	return answer
+}
+
+// livePlayerEntity is any media player in Home Assistant.
+//
+// The radio browser is searched through a media player, and the panel
+// may not be connected when the station is looked up, so any player
+// will do.
+func livePlayerEntity(t *testing.T) string {
+	t.Helper()
+	for id := range haEntities(t, "media_player") {
+		return id
+	}
+	t.Skip("Home Assistant has no media player at all")
 	return ""
 }
 
@@ -167,7 +269,7 @@ func TestThePanelSurvivesTheMediaPlaying(t *testing.T) {
 
 	post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
 		"entity_id":          player,
-		"media_content_id":   "media-source://radio_browser/" + liveStation(t),
+		"media_content_id":   liveStationContent(t),
 		"media_content_type": "music",
 	})
 
