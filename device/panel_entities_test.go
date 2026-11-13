@@ -39,10 +39,21 @@ func TestPanelEntitiesHaveNoDuplicates(t *testing.T) {
 	// disagree.
 	for _, want := range []string{
 		"screen", "brightness", "view", "dashboard", "display_mode", "exit",
+		"idle_slideshow_minutes", "slideshow_off_minutes", "touch_keyboard_enabled",
 		"drawer_open", "keyboard_visible", "last_activity", "version",
 	} {
 		if !seen[want] {
 			t.Errorf("the entity %q is missing", want)
+		}
+	}
+	for _, id := range []string{"display_mode", "idle_slideshow_minutes", "slideshow_off_minutes", "touch_keyboard_enabled"} {
+		entity := entityByID(registry, id)
+		if entity == nil {
+			t.Errorf("configuration entity %q is missing", id)
+			continue
+		}
+		if entity.Category != esphome.EntityCategory_ENTITY_CATEGORY_CONFIG {
+			t.Errorf("entity %q has category %v, want configuration", id, entity.Category)
 		}
 	}
 
@@ -52,6 +63,15 @@ func TestPanelEntitiesHaveNoDuplicates(t *testing.T) {
 			t.Errorf("the entity %q says the same thing as another one", unwanted)
 		}
 	}
+}
+
+func entityByID(registry *esphome.Registry, id string) *esphome.Entity {
+	for _, entity := range registry.All() {
+		if entity.ObjectID == id {
+			return entity
+		}
+	}
+	return nil
 }
 
 // TestTheBinarySensorsSayOpenAndClosed checks what the sensors that

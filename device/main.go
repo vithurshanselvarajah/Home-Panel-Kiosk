@@ -1340,17 +1340,6 @@ func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wa
 		audio.setMonitoring(*c.MonitorMic)
 		log.Info("the microphone monitor was turned on or off", "enabled", *c.MonitorMic)
 	}
-	if c.MuteButton != nil {
-		// The setting says the device has a mute switch, not that it is
-		// muted. Treating it as the mute itself left the panel silent
-		// from the moment it was configured, because the setting is on
-		// by default.
-		//
-		// The switch is what the setting means, so the setting only
-		// says whether the switch is there. The panel is muted by the
-		// switch being pressed, and by nothing else.
-		log.Info("the mute switch was configured", "present", *c.MuteButton)
-	}
 	if c.SendspinEnabled != nil || c.SendspinName != nil || c.SendspinUnpaired != nil {
 		audio.applySendspinConfig(c)
 	}

@@ -224,26 +224,6 @@ func TestTheReportedVolumeIsThePanelsVolume(t *testing.T) {
 	}
 }
 
-// TestTheMuteSwitchDoesNotMuteThePanel checks that the setting which
-// says the device has a mute switch does not mute it.
-//
-// The setting describes the hardware. Treating it as the mute itself left
-// the panel silent from the moment it was configured, because the setting
-// is on by default.
-func TestTheMuteSwitchDoesNotMuteThePanel(t *testing.T) {
-	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
-
-	present := true
-	tracker := state.NewTracker()
-	applyConfig(Config{MuteButton: &present}, &stateReporter{state: tracker}, a, nil, nil, testLogger())
-
-	state := &State{}
-	a.fillState(state)
-	if state.Muted {
-		t.Error("the panel muted itself because it has a mute switch")
-	}
-}
-
 // TestTheServersMuteSilencesTheMusic checks that a mute from the music
 // server reaches the speaker.
 //

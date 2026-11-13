@@ -302,6 +302,15 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, plane *Cont
 				plane.setDucking(value.Number)
 			case "muted":
 				plane.setMuted(value.Bool)
+			case "idle_slideshow_minutes", "slideshow_off_minutes", "touch_keyboard_enabled", "startup_volume":
+				var settingValue any
+				switch value.Kind {
+				case esphome.KindSwitch:
+					settingValue = value.Bool
+				case esphome.KindNumber:
+					settingValue = int(value.Number)
+				}
+				send(ControlCommand{Action: "setting", Setting: entity.ObjectID, Value: settingValue})
 			default:
 				log.Debug("an entity was changed and nothing knows what to do", "entity", entity.ObjectID)
 			}

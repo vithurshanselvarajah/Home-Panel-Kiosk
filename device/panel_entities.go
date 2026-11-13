@@ -69,6 +69,23 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 		})
 	}
 	registry.Add(&esphome.Entity{
+		Kind: esphome.KindNumber, Name: "Display · Idle to slideshow", ObjectID: "idle_slideshow_minutes",
+		Icon: "mdi:timer-sand", Min: 0, Max: 1440, Step: 1,
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindNumber, Number: 5},
+	})
+	registry.Add(&esphome.Entity{
+		Kind: esphome.KindNumber, Name: "Display · Slideshow before screen off", ObjectID: "slideshow_off_minutes",
+		Icon: "mdi:monitor-off", Min: 0, Max: 1440, Step: 1,
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindNumber, Number: 15},
+	})
+	registry.Add(&esphome.Entity{
+		Kind: esphome.KindSwitch, Name: "Display · Touch keyboard", ObjectID: "touch_keyboard_enabled",
+		Icon: "mdi:keyboard", Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State: esphome.EntityValue{Kind: esphome.KindSwitch, Bool: true},
+	})
+	registry.Add(&esphome.Entity{
 		Kind:     esphome.KindButton,
 		Name:     "Return to Home",
 		ObjectID: "dashboard",
@@ -79,6 +96,7 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 		Name:     "Display mode",
 		ObjectID: "display_mode",
 		Icon:     "mdi:monitor",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
 		Options:  []string{"fullscreen", "window"},
 		State:    esphome.EntityValue{Kind: esphome.KindSelect, Text: "fullscreen"},
 	})

@@ -32,16 +32,10 @@ const DEFAULTS = {
   esphomeEncryptionEnabled: false,
   esphomeEncryptionKey: "",
   esphomeDeviceName: "",
-  // The voice settings. They are the panel's own: the wake word runs on
-  // the panel and home assistant only hears the turn.
-  voiceEnabled: false,
-  voiceDeviceId: HOSTNAME,
+  // The microphone and speaker are local hardware choices.
   voiceAudioInput: "",
   voiceAudioOutput: "",
   voiceStartupVolume: 50,
-  voiceVolume: 50,
-  voiceDuckDb: -6,
-  voiceMuteButton: true,
   musicEnabled: true,
   musicName: HOSTNAME,
   musicUnpaired: false,
@@ -195,6 +189,11 @@ async function decodeSettings(data) {
   }
   delete data.esphomeEncryptionKeyEncrypted;
   delete data.cameras;
+  delete data.voiceEnabled;
+  delete data.voiceDeviceId;
+  delete data.voiceVolume;
+  delete data.voiceDuckDb;
+  delete data.voiceMuteButton;
   return {
     ...DEFAULTS,
     ...data,
@@ -202,7 +201,6 @@ async function decodeSettings(data) {
     // Home Assistant and Music Assistant surface. Older saved aliases
     // are deliberately ignored.
     deviceName: HOSTNAME,
-    voiceDeviceId: HOSTNAME,
     esphomeDeviceName: HOSTNAME,
     musicName: HOSTNAME,
   };
@@ -282,6 +280,10 @@ function publishState(state) {
     brightness: state.brightness,
     lastActivity: state.lastActivity,
     version: state.version,
+    idleToSlideshowMinutes: Math.max(0, Number(settings.idleToSlideshowMinutes) || 0),
+    slideshowToOffMinutes: Math.max(0, Number(settings.slideshowToOffMinutes) || 0),
+    touchKeyboardEnabled: Boolean(settings.touchKeyboardEnabled),
+    startupVolume: Math.max(0, Math.min(100, Number(settings.voiceStartupVolume) || 0)),
   };
   if (Number.isFinite(state.volume)) payload.volume = state.volume;
   controlClient.sendState(payload);
@@ -898,6 +900,23 @@ async function handleCommand(command) {
       recordActivity("home-assistant");
       setDisplayMode(command.mode);
       break;
+    case "setting": {
+      const setting = {
+        idle_slideshow_minutes: "idleToSlideshowMinutes",
+        slideshow_off_minutes: "slideshowToOffMinutes",
+        touch_keyboard_enabled: "touchKeyboardEnabled",
+        startup_volume: "voiceStartupVolume",
+      }[command.setting];
+      if (!setting) {
+        console.warn("Ignored unknown Home Assistant setting:", command.setting);
+        break;
+      }
+      const value = command.setting === "touch_keyboard_enabled"
+        ? Boolean(command.value)
+        : Math.max(0, Math.min(command.setting === "startup_volume" ? 100 : 1440, Math.round(Number(command.value) || 0)));
+      saveSettings({ [setting]: value }).catch((error) => console.error("Home Assistant setting could not be saved:", error.message));
+      break;
+    }
     case "exit":
       recordActivity("home-assistant");
       quitApp();
@@ -922,7 +941,7 @@ function setServiceStatus(name, status) {
 function startControlPlane() {
   // The socket is where the sidecar was told to put it, so the two
   // cannot disagree about it.
-  const socket = findControlSocket(runtimeDirectory(settings.voiceDeviceId || deviceId));
+  const socket = findControlSocket(runtimeDirectory(deviceId));
   controlClient = new ControlClient({
     socket,
     onCommand: (command) => handleCommand(command),
@@ -961,7 +980,6 @@ async function loadSettings() {
 async function saveSettings(next) {
   const clean = { ...settings, ...next };
   clean.deviceName = HOSTNAME;
-  clean.voiceDeviceId = HOSTNAME;
   clean.esphomeDeviceName = HOSTNAME;
   clean.musicName = HOSTNAME;
   clean.configured = true;
@@ -970,11 +988,7 @@ async function saveSettings(next) {
   clean.slideshowUrl = clean.slideshowUrl ? safeUrl(clean.slideshowUrl) || "" : "";
   // The voice settings. The panel is a voice satellite, and these are
   // what make it one.
-  clean.voiceEnabled = Boolean(clean.voiceEnabled);
   clean.voiceStartupVolume = settingNumber(clean.voiceStartupVolume) ?? DEFAULTS.voiceStartupVolume;
-  clean.voiceVolume = settingNumber(clean.voiceVolume) ?? DEFAULTS.voiceVolume;
-  clean.voiceDuckDb = settingNumber(clean.voiceDuckDb) ?? DEFAULTS.voiceDuckDb;
-  clean.voiceMuteButton = Boolean(clean.voiceMuteButton);
   clean.musicEnabled = Boolean(clean.musicEnabled);
   clean.musicUnpaired = Boolean(clean.musicUnpaired);
   // The audio devices are named by the sidecar, so the names are kept as
@@ -1016,22 +1030,28 @@ async function saveSettings(next) {
   }
   await fs.mkdir(path.dirname(configPath()), { recursive: true });
   await writeSettingsFile(persisted);
+  const previous = settings;
   const previousDisplayMode = displayMode();
   settings = { ...clean };
   // The mode is applied only when it changed, so saving the other settings
   // does not move the window the user is looking at.
   if (settings.displayMode !== previousDisplayMode) applyDisplayMode();
   if (!settings.touchKeyboardEnabled) setKeyboardVisible(false);
-  registerHealthProbes();
-  openMode(mode === "slideshow" ? "slideshow" : "dashboard");
-  // The device program is restarted because the settings it was given may
-  // have changed — the microphone, the speaker, the controller. It is
-  // awaited so the old one has released the sound card before the new
-  // one asks for it.
-  await startDeviceProgram();
-  // The settings are pushed to the device program, so the panel and the
-  // device agree on how the device listens.
-  if (deviceClient && settings.voiceEnabled) sendDeviceConfig();
+  const urlsChanged = previous.dashboardUrl !== settings.dashboardUrl || previous.slideshowUrl !== settings.slideshowUrl;
+  const timersChanged = previous.idleToSlideshowMinutes !== settings.idleToSlideshowMinutes || previous.slideshowToOffMinutes !== settings.slideshowToOffMinutes;
+  if (urlsChanged) {
+    registerHealthProbes();
+    if (mode === "dashboard" || mode === "slideshow") openMode(mode);
+  } else if (timersChanged) {
+    scheduleIdle();
+  }
+  const restartDevice = ["voiceAudioInput", "voiceAudioOutput", "esphomeEncryptionEnabled", "esphomeEncryptionKey"]
+    .some((key) => previous[key] !== settings[key]);
+  const deviceConfigChanged = ["voiceStartupVolume", "musicEnabled", "musicUnpaired"]
+    .some((key) => previous[key] !== settings[key]);
+  if (restartDevice) await startDeviceProgram();
+  else if (deviceConfigChanged) sendDeviceConfig();
+  sendState(true);
   return publicSettings();
 }
 
@@ -1047,8 +1067,6 @@ function sendDeviceConfig() {
   // undo whatever Home Assistant had set.
   deviceClient.sendConfig({
     startupVolume: settingNumber(settings.voiceStartupVolume),
-    volume: settingNumber(settings.voiceVolume),
-    muteButton: settingBoolean(settings.voiceMuteButton),
     sendspinEnabled: settingBoolean(settings.musicEnabled),
     sendspinName: settings.musicName || "",
     sendspinUnpaired: settingBoolean(settings.musicUnpaired),
@@ -1552,11 +1570,6 @@ app.whenReady().then(async () => {
   // The flag wins over the saved setting, but only for this run.
   const flagMode = readDisplayModeFlag();
   if (flagMode) settings.displayMode = flagMode;
-  // The environment can turn the voice on for a development run. It is
-  // not written to the settings file, so a development run never changes
-  // how the device is set up.
-  if (process.env.HOME_PANEL_VOICE === "1") settings.voiceEnabled = true;
-  if (process.env.HOME_PANEL_VOICE === "0") settings.voiceEnabled = false;
   registerHealthProbes();
   healthChecker.start();
   registerIpc();
