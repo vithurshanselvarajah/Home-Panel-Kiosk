@@ -154,6 +154,65 @@ func (b *Backend) SelectAudioDevices(input, output string) error {
 	return nil
 }
 
+// ChooseDefaultInput picks the microphone to use when nobody has chosen
+// one.
+//
+// The system default is not always a microphone that works. On the Echo
+// Show 8 the card has two capture devices: the real microphone array,
+// and a dummy that the machine driver puts in front of it. The dummy
+// opens for the level meter's format, so it is taken for a working
+// microphone, and it cannot be opened for the card's own format, so the
+// wake word never hears anything.
+//
+// The devices are tried in the card's own format, and the first one that
+// opens is the one that is used. A device that cannot be opened is not a
+// microphone as far as the panel is concerned, so it is skipped rather
+// than reported.
+//
+// The chosen device is remembered, so the choice is made once rather
+// than on every capture.
+func (b *Backend) ChooseDefaultInput() error {
+	b.mu.RLock()
+	chosen := b.input
+	b.mu.RUnlock()
+	if chosen != "" && chosen != DeviceDefault {
+		return nil
+	}
+
+	inputs, _, err := List()
+	if err != nil {
+		return err
+	}
+
+	var lastErr error
+	for _, endpoint := range inputs {
+		if endpoint.Name == DeviceDefault {
+			continue
+		}
+		// The card's own format, through the hardware alone: a device
+		// that opens for the level meter's format but not for this one
+		// is a dummy, and the wake word cannot use it.
+		stream, err := openHardware(target(endpoint.Name), streamCapture, CardCaptureRate, CardCaptureChannels, FormatS32LE)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		_ = stream.Close()
+
+		b.mu.Lock()
+		b.input = endpoint.Name
+		b.mu.Unlock()
+		return nil
+	}
+
+	// Nothing opened. The system default is left in place, so the panel
+	// says why rather than claiming a microphone it does not have.
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("no microphone could be opened")
+}
+
 // AudioDevices lists the endpoints the machine has.
 func (b *Backend) AudioDevices() (inputs, outputs []Endpoint, err error) {
 	in, out, err := List()
@@ -245,6 +304,112 @@ func (b *Backend) OpenClockedOutput(ctx context.Context, rate, channels int) (Cl
 // open one for a single channel. The controller wants mono, so the channels
 // are averaged as the frames are read.
 const captureChannels = 2
+
+// CaptureFormat describes a capture in the card's own words, for a card
+// that will not open for anything else.
+//
+// The Echo Show 8's sound card hands the microphones over as 32-bit
+// samples at 96 kHz, and its machine driver asks for exactly that: the
+// amplifier reads the top 16 bits of each 32-bit slot and the microphone
+// converter writes 32-bit words. A 16-bit request is refused outright.
+//
+// The frames are read in this format and converted by the caller, because
+// the conversion is the same work whether the caller is the wake word or
+// the level meter.
+type CaptureFormat struct {
+	// Rate is the rate the card is opened at.
+	Rate int
+	// Channels is how many channels it is opened with.
+	Channels int
+	// Format is the ALSA sample format: S32LE or S16LE.
+	Format int
+}
+
+// FormatS32LE and FormatS16LE are the ALSA sample formats.
+//
+// The numbers are ALSA's own: SND_PCM_FORMAT_S16_LE is 2 and
+// SND_PCM_FORMAT_S32_LE is 10. The format that is 8 is S32_BE, the
+// same width the other way round, and a card that is asked for it says
+// the format is not available.
+const (
+	FormatS16LE = 2
+	FormatS32LE = 10
+)
+
+// The card's own capture format.
+//
+// The Echo Show 8's sound card hands the microphones over as 32-bit
+// samples at 96 kHz, and its machine driver asks for exactly that: the
+// amplifier reads the top 16 bits of each 32-bit slot and the microphone
+// converter writes 32-bit words. A 16-bit request is refused outright.
+//
+// These are the format a microphone has to open for to be usable at all.
+// The card also has a dummy in front of the real array, and the dummy
+// opens for the level meter's format but not for this one, so this is
+// what tells the two apart.
+const (
+	// CardCaptureRate is the rate the card captures the microphones at.
+	CardCaptureRate = 96000
+	// CardCaptureChannels is how many microphone channels the card hands
+	// over.
+	CardCaptureChannels = 4
+)
+
+// RawCapture is a capture in the card's own format.
+//
+// It is what a board whose card insists on a format needs: the frames are
+// read as the card gives them and the conversion is the caller's, because
+// the caller's conversion is the one that needs doing anyway.
+type RawCapture interface {
+	// ReadRaw reads frames in the card's format. The buffer must be a
+	// whole number of frames.
+	ReadRaw(p []byte) (int, error)
+	// Format is what the capture was opened as.
+	Format() CaptureFormat
+	// Close releases the microphone.
+	Close() error
+}
+
+// CaptureRaw opens the microphone in the card's own format.
+func (b *Backend) CaptureRaw(ctx context.Context, f CaptureFormat) (RawCapture, error) {
+	b.mu.RLock()
+	device := b.input
+	b.mu.RUnlock()
+
+	stream, err := openStreamFormat(target(device), streamCapture, f.Rate, f.Channels, f.Format)
+	if err != nil {
+		b.setError(err)
+		return nil, err
+	}
+	return &rawCapture{stream: stream, format: f}, nil
+}
+
+// rawCapture is a capture in the card's own format.
+type rawCapture struct {
+	stream *audioStream
+	format CaptureFormat
+	done   chan struct{}
+	once   sync.Once
+}
+
+// ReadRaw reads frames in the card's format.
+func (c *rawCapture) ReadRaw(p []byte) (int, error) {
+	select {
+	case <-c.done:
+		return 0, io.EOF
+	default:
+	}
+	return c.stream.Read(p)
+}
+
+// Format is what the capture was opened as.
+func (c *rawCapture) Format() CaptureFormat { return c.format }
+
+// Close releases the microphone.
+func (c *rawCapture) Close() error {
+	c.once.Do(func() { close(c.done) })
+	return c.stream.Close()
+}
 
 // capture reads the microphone.
 type capture struct {
