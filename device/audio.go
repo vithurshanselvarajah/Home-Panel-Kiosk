@@ -16,6 +16,9 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/sendspin"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/mic"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/rate"
+	vol "github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/volume"
 )
 
 // audioBackend is the sound card, as the device uses it.
@@ -36,6 +39,9 @@ type audioBackend interface {
 	SelectedAudioDevices() (string, string)
 	// SelectAudioDevices chooses the devices.
 	SelectAudioDevices(input, output string) error
+	// ChooseDefaultInput picks a microphone that works, for when nobody
+	// has chosen one.
+	ChooseDefaultInput() error
 }
 
 // deviceAudio is the device's audio: the microphone it listens with, the
@@ -84,6 +90,12 @@ type deviceAudio struct {
 	// means by the volume — so the panel asks for it rather than
 	// reaching for it itself.
 	onSystemVolume func(level int)
+	// onPanelsVolume is called when the volume changes, so the panels'
+	// sliders follow it.
+	//
+	// The level is the device program's, so the panels are told where it
+	// is rather than each keeping its own idea of it.
+	onPanelsVolume func(level int)
 	// onReplyEnded is called when the reply has been played out.
 	//
 	// The reply is over when the speaker has drained it, which is the
@@ -307,14 +319,58 @@ type deviceAudio struct {
 	// endpoints are the audio devices the machine has.
 	inputs  []audio.Endpoint
 	outputs []audio.Endpoint
+
+	// micPipeline is the microphone's chain, when the board's card is
+	// opened in its own format: the channels averaged, the rate brought
+	// down, the panel's own voice cancelled, and the speech levelled and
+	// cleaned.
+	micPipeline *mic.Pipeline
+
+	// mute is the microphone's mute, when the board has a hardware latch
+	// for it.
+	//
+	// The latch is the source of truth: it is what the button on the
+	// unit moves, and it is what says whether the microphones are cut.
+	mute *muteController
 }
 
 // The rates. The controller expects captured audio at 16 kHz and sends
 // audio at 48 kHz.
+//
+// The Echo Show 8's speaker is run at 96 kHz, not 48 kHz, and the
+// difference is not a preference. The amplifier holds a tuning that was
+// made for 96 kHz: its equaliser and its limiter are set for that rate,
+// and at 48 kHz every one of those corners sits an octave low, so the
+// tone is wrong and the protection that should be catching the peaks is
+// not catching them. The rate the card is opened at is therefore the
+// amplifier's, and everything else is converted to it.
 const (
 	captureRate  = audio.CaptureRate
 	playbackRate = audio.PlaybackRate
 )
+
+// athenaRate is the rate the Echo Show 8's speaker runs at.
+//
+// The amplifier's tuning was made for it, so it is the rate the card is
+// opened at and the rate everything is converted to on the way out.
+const athenaRate = 96000
+
+// cardRate is the rate the sound card is opened at.
+//
+// On the Echo Show 8 that is the amplifier's own rate, 96 kHz, because
+// the tuning inside the amplifier was made for it: at 48 kHz every
+// corner of its equaliser and its limiter sits an octave low, so the
+// tone is wrong and the protection that should be catching the peaks is
+// not catching them.
+//
+// The mix is still made at playbackRate and converted on the way out,
+// because nothing upstream needs the higher rate.
+const cardRate = athenaRate
+
+// upsampleTaps is the length of each phase of the filter that takes the
+// mix up to the card's rate: 96 taps at 96 kHz, flat to 21 kHz and about
+// 74 dB down on the images from 27 kHz. 1 ms of delay.
+const upsampleTaps = 48
 
 // voiceRate is the rate the reply arrives at.
 //
@@ -352,7 +408,13 @@ func (a *deviceAudio) fillState(s *State) {
 		s.Level = a.level
 	}
 	s.Monitoring = a.monitoring
-	s.Muted = a.muted
+	// The mute is the latch's, when the board has one. The latch is what
+	// the button on the unit moves, so what it says is what is reported.
+	if a.mute != nil {
+		s.Muted = a.mute.Get()
+	} else {
+		s.Muted = a.muted
+	}
 	// The music player's own state. It says whether a server is
 	// connected, whether the player is in step with it, how much music
 	// is queued, and what is playing.
@@ -395,9 +457,18 @@ func (a *deviceAudio) fillState(s *State) {
 //
 // An empty name means the system's own default, which is what the device
 // uses before anybody has chosen anything.
+//
+// The system's default is not always a microphone that works: on the
+// Echo Show 8 the card has a dummy in front of the real microphone
+// array, and the dummy is what the system default points at. So the
+// default is not taken on trust: the devices are tried and the first
+// one that opens is used.
 func (a *deviceAudio) selectInput(name string) error {
 	if name == "" {
-		name = audio.DeviceDefault
+		if err := a.backend.ChooseDefaultInput(); err != nil {
+			return err
+		}
+		return nil
 	}
 	return a.backend.SelectAudioDevices(name, a.currentOutput())
 }
@@ -676,12 +747,18 @@ func (a *deviceAudio) setTestSound(counter int) {
 //
 // There is one volume, and the speaker owns it. The speaker's level is
 // what Home Assistant shows, the panel's own gain is what the music and
-// the reply are played at, the music server is told, and the system mixer
-// is set to match.
+// the reply are played at, the music server is told, and the panels are
+// told so their sliders follow.
 //
 // They are one setting seen from four places, so they are set together:
 // a panel whose speaker says one thing and whose music plays at another
 // is a panel nobody can reason about.
+//
+// The mixer is deliberately not among them. The level is applied in one
+// place — in the samples, on a curve — and the mixer is left where the
+// card's driver put it. A level applied in two places is a level nobody
+// can reason about: the same slider position sounds different depending
+// on which path the audio took.
 //
 // The level is a percentage, 0 to 100. The protocol's media player uses
 // a fraction, so that is converted at the boundary rather than kept in
@@ -706,10 +783,10 @@ func (a *deviceAudio) setVolume(level int) {
 		a.onVolume(float32(level) / 100)
 	}
 
-	// The system mixer is set to match, because the volume a person means
-	// when they reach for it on a panel is the volume of the room.
-	if a.onSystemVolume != nil {
-		a.onSystemVolume(level)
+	// The panels are told, so their sliders follow the level rather than
+	// each keeping its own idea of it.
+	if a.onPanelsVolume != nil {
+		a.onPanelsVolume(level)
 	}
 }
 
@@ -764,8 +841,15 @@ func (a *deviceAudio) duckLevel() float64 {
 	return a.duckDB
 }
 
-// mutedNow is whether the panel's own mute switch is on.
+// mutedNow is whether the microphone is muted.
+//
+// The hardware latch is the source of truth when the board has one, so
+// the button on the unit is reflected here without anything having to
+// ask for it.
 func (a *deviceAudio) mutedNow() bool {
+	if a.mute != nil {
+		return a.mute.Get()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.muted
@@ -814,12 +898,39 @@ func (a *deviceAudio) setWakeEnabled(enabled bool) {
 
 // setMuted turns the panel's own mute switch on or off.
 //
-// The mute is the panel's, not the server's: it is the switch on the
-// device, and it holds whatever the server says.
+// On the Echo Show 8 the mute is a hardware latch, and the latch is asked
+// to move: what it says afterwards is what the application uses, because
+// the latch is the source of truth and the button on the unit is the same
+// latch.
+//
+// On a board with no latch the software mute stands on its own, and the
+// microphone's frames are silenced before anything sees them.
 func (a *deviceAudio) setMuted(muted bool) {
+	if a.mute != nil {
+		if err := a.mute.Set(muted); err != nil {
+			a.log.Warn("the microphone could not be muted", "error", err)
+		}
+		return
+	}
 	a.mu.Lock()
 	a.muted = muted
 	a.mu.Unlock()
+}
+
+// stepVolume moves the level one step along the curve.
+//
+// The buttons move the level by a step rather than by a number of
+// decibels, so a press is the same size of step wherever the level is:
+// the curve is spread over its thirty steps, and a step is a step.
+//
+// The level is a percentage, and the step is turned back into one.
+func (a *deviceAudio) stepVolume(delta int) {
+	a.mu.Lock()
+	level := a.volume
+	a.mu.Unlock()
+
+	step := vol.Step(level) + delta
+	a.setVolume(vol.Percent(step))
 }
 
 // setDucked turns the music duck on or off.
@@ -894,7 +1005,7 @@ func (a *deviceAudio) startCapture() {
 	// The microphone is opened before this returns, so a failure is
 	// reported here rather than on another goroutine, and so the caller
 	// knows the capture has the card.
-	reader, err := a.backend.Capture(ctx, captureRate)
+	reader, err := a.openMicrophone(ctx)
 	if err != nil {
 		a.log.Error("the microphone could not be opened", "error", err)
 		a.mu.Lock()
@@ -959,6 +1070,118 @@ func (a *deviceAudio) startCapture() {
 			}
 		}
 	}()
+}
+
+// pushEchoReference tells the echo canceller what the speaker is playing.
+//
+// The reference is the period as it goes to the card, stamped with when
+// its last frame will be heard. The microphones take out what was heard
+// over the stretch of time each of their reads covers.
+//
+// Without a clock the time is a guess, and a guess that is late misses
+// the start of every echo — so the clocked output is asked when its next
+// frame reaches the speaker, and the guess is only used when there is
+// none.
+func (a *deviceAudio) pushEchoReference(stereo []byte, clocked audio.ClockedOutput) {
+	a.mu.Lock()
+	pipeline := a.micPipeline
+	a.mu.Unlock()
+	if pipeline == nil {
+		return
+	}
+
+	heardEnd := time.Now().Add(80 * time.Millisecond)
+	if clocked != nil {
+		if at, _, err := clocked.NextPlaybackTime(); err == nil {
+			heardEnd = at
+		}
+	}
+	pipeline.Push(stereo, playbackRate, heardEnd)
+}
+
+// openMicrophone opens the microphone and returns it as the wake word wants to hear it.
+//
+// On the Echo Show 8 the card hands the microphones over at 96 kHz as
+// four channels of 32-bit samples, and the card will not open for
+// anything else. So the capture is opened in that format and the frames
+// are put through the pipeline: the channels are averaged, the rate is
+// brought down to 16 kHz, the panel's own voice is cancelled, and the
+// speech is levelled and cleaned.
+//
+// On any other board the microphone is opened as it always was: at the
+// rate the controller asks for, in the format the card offers.
+func (a *deviceAudio) openMicrophone(ctx context.Context) (io.ReadCloser, error) {
+	raw, ok := a.backend.(interface {
+		CaptureRaw(context.Context, audio.CaptureFormat) (audio.RawCapture, error)
+	})
+	if !ok {
+		return a.backend.Capture(ctx, captureRate)
+	}
+
+	format := audio.CaptureFormat{
+		Rate:     mic.CardRate,
+		Channels: mic.CardChannels,
+		Format:   audio.FormatS32LE,
+	}
+	capture, err := raw.CaptureRaw(ctx, format)
+	if err != nil {
+		return nil, err
+	}
+
+	pipeline := mic.New(format.Channels, true)
+	a.mu.Lock()
+	a.micPipeline = pipeline
+	a.mu.Unlock()
+
+	// 100 milliseconds of the card's own audio.
+	buf := make([]byte, format.Rate/10*format.Channels*4)
+	return &micReader{capture: capture, pipeline: pipeline, buf: buf}, nil
+}
+
+// micReader is a microphone in the card's own format, handed on as the
+// wake word wants to hear it.
+type micReader struct {
+	capture  audio.RawCapture
+	pipeline *mic.Pipeline
+	buf      []byte
+	closed   bool
+}
+
+// Read reads one block of the wake word's audio.
+func (m *micReader) Read(p []byte) (int, error) {
+	if m.closed {
+		return 0, io.EOF
+	}
+	for {
+		n, err := m.capture.ReadRaw(m.buf)
+		if n > 0 {
+			format := m.capture.Format()
+			out := m.pipeline.Process(m.buf[:n], format.Channels)
+			if len(out) > 0 {
+				copied := 0
+				for _, v := range out {
+					if copied+2 > len(p) {
+						break
+					}
+					p[copied] = byte(v)
+					p[copied+1] = byte(uint16(v) >> 8)
+					copied += 2
+				}
+				if copied > 0 {
+					return copied, nil
+				}
+			}
+		}
+		if err != nil {
+			return 0, err
+		}
+	}
+}
+
+// Close releases the microphone.
+func (m *micReader) Close() error {
+	m.closed = true
+	return m.capture.Close()
 }
 
 // restartCapture opens the microphone again after it has stopped.
@@ -1059,6 +1282,14 @@ func (a *deviceAudio) pushFrame(pcm []byte) {
 	streaming := a.streaming
 	muted := a.muted
 	a.mu.Unlock()
+
+	// The hardware latch, when the board has one, is the truth about the
+	// microphone. The board has already cut the microphones, so the
+	// frames are silence anyway; silencing them here as well means
+	// nothing downstream has to know that.
+	if a.mute != nil {
+		muted = a.mute.Get()
+	}
 
 	// A muted microphone hears nothing.
 	//
@@ -1682,7 +1913,7 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	if clocked == nil {
 		// Without a clock the music goes through the shared speaker, and
 		// the time handed to the player is a guess.
-		w, err := a.backend.Playback(ctx, playbackRate)
+		w, err := a.backend.Playback(ctx, cardRate)
 		if err != nil {
 			a.log.Error("the speaker could not be opened", "error", err)
 			a.releaseOutput(generation)
@@ -1735,6 +1966,23 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	// times a second and a buffer made every time is a hundred
 	// allocations a second for nothing.
 	mono := make([]byte, playbackRate/100*2)
+
+	// The card runs faster than the mix is made, so the period is taken
+	// up to the card's rate on the way out. The buffer for it is made
+	// once, for the same reason the mono one is.
+	//
+	// The upsampler is only made when the card is actually faster. On a
+	// board whose card runs at the mix's own rate it would be a copy.
+	//
+	// It takes as many channels as the card has, because the filter is
+	// per channel: upsampling a stereo mix and writing it to a mono card
+	// would put the two halves of the mix in the wrong places.
+	var upsampler *rate.Upsampler
+	hwBuf := make([]byte, 0, cardRate/100*channels*2)
+	if cardRate != playbackRate {
+		upsampler = rate.NewUpsampler(cardRate/playbackRate, upsampleTaps, channels, 1)
+		a.log.Info("playback at the card's own rate", "rate", cardRate, "channels", channels)
+	}
 
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
@@ -1839,6 +2087,27 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 			audio.StereoToMono(stereo, out)
 		}
 
+		// The card runs at 96 kHz, and the mix is made at 48 kHz, so the
+		// period is taken up to the card's rate on the way out.
+		//
+		// It is done here rather than by making the whole chain run at
+		// 96 kHz because the amplifier's tuning is the only thing that
+		// needs the higher rate: the music arrives at 48 kHz, the reply
+		// at 16 kHz, and everything between here and the card is a
+		// conversion that costs CPU for nothing.
+		if upsampler != nil {
+			// The echo reference is what the speaker is about to play,
+			// so the microphones can be told what they are about to
+			// hear again and can have it taken out of them.
+			//
+			// It is fed before the upsampling, because the reference is
+			// decimated down to the microphones' rate on its own, and
+			// the card's rate would only make that a harder filter for
+			// no gain.
+			a.pushEchoReference(stereo, clocked)
+			out = upsampler.S16LE(out, hwBuf[:0])
+		}
+
 		var err error
 		if clocked != nil {
 			_, err = clocked.Write(out)
@@ -1920,7 +2189,7 @@ func (a *deviceAudio) openClocked(ctx context.Context) (audio.ClockedOutput, int
 
 	// The music is stereo, and stereo is what the player fills. A card
 	// that will not do stereo falls back to mono inside the backend.
-	out, err := a.backend.OpenClockedOutput(ctx, playbackRate, 2)
+	out, err := a.backend.OpenClockedOutput(ctx, cardRate, 2)
 	if err != nil {
 		a.log.Warn("the clocked speaker could not be opened; using the shared speaker", "error", err)
 		a.mu.Lock()
@@ -2010,12 +2279,13 @@ func applySendspinGain(pcm []byte, volume int, muted, ducked bool, duckDB float6
 	if ducked {
 		duckGain = math.Pow(10, duckDB/20)
 	}
+	gain := float64(vol.GainForPercent(volume)) * duckGain
 	for i := 0; i+1 < len(pcm); i += 2 {
 		v := float64(int16(uint16(pcm[i]) | uint16(pcm[i+1])<<8))
 		if muted {
 			v = 0
 		} else {
-			v = v * float64(volume) / 100 * duckGain
+			v = v * gain
 		}
 		if v > 32767 {
 			v = 32767
@@ -2084,11 +2354,28 @@ func (a *deviceAudio) finishPlayback() {
 //
 // The scale is applied here rather than on the sound card so that the
 // volume is the same for the voice and the music.
+//
+// It is the curve's gain and not the percentage itself: a percentage of a
+// linear scale is not a percentage of how loud something sounds, and a
+// half-dial that is a quarter of the power is a half-dial nobody can hear
+// over the room. The curve is TECHO5's, and its top sits below unity so
+// that the amplifier's own protection stays in front of the signal.
+//
+// The mixer is not touched by this: the device program owns the level, and
+// a level applied in two places is a level nobody can reason about.
 func applyGain(pcm []byte, volume int) {
-	if volume == 100 {
+	gain := vol.GainForPercent(volume)
+	if gain == 1 {
 		return
 	}
-	gain := float64(volume) / 100
+	scale(pcm, float64(gain))
+}
+
+// scale multiplies every sample by gain, holding it inside int16.
+func scale(pcm []byte, gain float64) {
+	if gain == 1 {
+		return
+	}
 	for i := 0; i+1 < len(pcm); i += 2 {
 		v := float64(int16(uint16(pcm[i]) | uint16(pcm[i+1])<<8))
 		v *= gain

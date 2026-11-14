@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
+	vol "github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/volume"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/sendspin"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/state"
@@ -52,6 +53,8 @@ func (b *fakeBackend) OpenClockedOutput(ctx context.Context, rate, channels int)
 func (b *fakeBackend) SelectedAudioDevices() (string, string) { return "", "" }
 
 func (b *fakeBackend) SelectAudioDevices(input, output string) error { return nil }
+
+func (b *fakeBackend) ChooseDefaultInput() error { return nil }
 
 // isOpen says whether the microphone is open.
 func (b *fakeBackend) isOpen() bool {
@@ -187,13 +190,27 @@ func waitFor(t *testing.T, ok func() bool, message string) {
 // The panel reported zero for a long time, because the volume was never
 // copied into the reported state and Home Assistant sent back what it
 // was told.
+//
+// The scale is the curve's gain and not the percentage: half the dial is
+// a quiet conversation, not half the amplitude.
 func TestTheSendspinGainFollowsTheVolume(t *testing.T) {
 	full := []byte{0x00, 0x40, 0x00, 0x40} // 16384, 16384
 	half := append([]byte(nil), full...)
 	applySendspinGain(half, 50, false, false, 0)
 
-	if half[0] != 0x00 || half[1] != 0x20 {
-		t.Errorf("at half volume the sample was %d, want %d", int16(uint16(half[1])|uint16(half[0])<<8), 8192)
+	want := int16(float64(16384) * float64(vol.GainForPercent(50)))
+	got := int16(uint16(half[0]) | uint16(half[1])<<8)
+	if got != want {
+		t.Errorf("at half volume the sample was %d, want %d", got, want)
+	}
+
+	// Half the dial is quieter than half the amplitude, and louder than
+	// silence: that is the whole point of the curve.
+	if got == 0 {
+		t.Error("half volume was silence")
+	}
+	if got >= 8192 {
+		t.Errorf("half volume was %d, which is not quieter than half the amplitude", got)
 	}
 
 	silent := append([]byte(nil), full...)
@@ -262,7 +279,11 @@ func TestTheMicrophoneMuteDoesNotMuteTheSpeaker(t *testing.T) {
 
 	pcm := []byte{0x00, 0x40, 0x00, 0x40}
 	applySendspinGain(pcm, 100, serverMuted, false, 0)
-	if pcm[0] != 0x00 || pcm[1] != 0x40 || pcm[2] != 0x00 || pcm[3] != 0x40 {
+	// At full volume the curve's gain is not unity: its top sits below
+	// unity so the amplifier's own protection stays in front of the
+	// signal. What matters here is that the microphone mute did not
+	// silence the speaker at all.
+	if pcm[0] == 0x00 && pcm[1] == 0x00 {
 		t.Fatalf("the speaker was silenced by the microphone mute: %v", pcm)
 	}
 }

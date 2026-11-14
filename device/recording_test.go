@@ -35,6 +35,8 @@ func (b *recordingBackend) SelectedAudioDevices() (string, string) { return "", 
 
 func (b *recordingBackend) SelectAudioDevices(input, output string) error { return nil }
 
+func (b *recordingBackend) ChooseDefaultInput() error { return nil }
+
 type errNoClocked struct{}
 
 func (errNoClocked) Error() string { return "no clocked output" }

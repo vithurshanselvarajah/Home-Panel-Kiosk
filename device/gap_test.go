@@ -146,3 +146,5 @@ func (b *fakeRecordingBackend) OpenClockedOutput(ctx context.Context, rate, chan
 func (b *fakeRecordingBackend) SelectedAudioDevices() (string, string) { return "", "" }
 
 func (b *fakeRecordingBackend) SelectAudioDevices(input, output string) error { return nil }
+
+func (b *fakeRecordingBackend) ChooseDefaultInput() error { return nil }
