@@ -156,6 +156,15 @@ func (b *fileBackend) SelectAudioDevices(input, output string) error {
 	return nil
 }
 
+// ChooseDefaultInput does nothing, and that is deliberate.
+//
+// The input of a card made of files is the file, and there is only one,
+// so there is nothing to choose. The name is ignored, as it is in
+// SelectAudioDevices.
+func (b *fileBackend) ChooseDefaultInput() error {
+	return nil
+}
+
 // errNoClock says there is no sound card to be clocked against.
 var errNoClock = fmt.Errorf("home-panel: there is no sound card")
 

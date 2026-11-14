@@ -59,6 +59,19 @@ var (
 const (
 	// s16le is the sample format: signed 16-bit little-endian.
 	s16le = 2
+	// s32le is the sample format: signed 32-bit little-endian.
+	//
+	// The Echo Show 8's sound card hands the microphones over in this
+	// format and will not open for anything else: the machine driver
+	// resets the format mask and asks for 32 bits, because the amplifier
+	// reads the top 16 bits of each 32-bit slot and the microphone
+	// converter writes 32-bit words.
+	//
+	// The number is ALSA's own: SND_PCM_FORMAT_S32_LE is 10. The
+	// format that is 8 is S32_BE, which is the same width the other way
+	// round, and the card refuses it: a panel that asked for it was told
+	// the format was not available.
+	s32le = 10
 	// rwInterleaved is the access mode.
 	rwInterleaved = 3
 	// streamPlayback and streamCapture are ALSA's stream directions.
@@ -122,6 +135,14 @@ type audioStream struct {
 	rate int
 	// channels is how many channels the stream carries.
 	channels int
+	// bytesPerSample is how many bytes each sample takes.
+	//
+	// The stream has to know this, because the number of frames in a
+	// buffer depends on it. A buffer sized for 16-bit samples and read
+	// as if they were 32-bit asks the sound card for twice the frames
+	// the buffer holds, and the card writes them past the end of it:
+	// that is a bus error, and it takes the whole program down.
+	bytesPerSample int
 	// closed is whether the stream has been closed.
 	closed bool
 	// reading is whether a read is in progress.
@@ -131,6 +152,14 @@ type audioStream struct {
 	// finish holds the card for the length of a frame, and the thing
 	// that wants the card next is told it is busy.
 	reading bool
+}
+
+// sampleBytes is how many bytes a sample of the given format takes.
+func sampleBytes(format int) int {
+	if format == s32le {
+		return 4
+	}
+	return 2
 }
 
 // openStream opens an ALSA stream.
@@ -143,13 +172,22 @@ type audioStream struct {
 // work, because a sound card that cannot do the rate the controller wants
 // is an ordinary thing rather than a broken one.
 func openStream(device string, direction, rate, channels int) (*audioStream, error) {
+	return openStreamFormat(device, direction, rate, channels, s16le)
+}
+
+// openStreamFormat opens an ALSA stream in a given sample format.
+//
+// The format matters on a board whose card will not open for anything
+// else: the Echo Show 8's machine driver resets the format mask and asks
+// for 32 bits, so a 16-bit request is refused outright.
+func openStreamFormat(device string, direction, rate, channels, format int) (*audioStream, error) {
 	if err := loadALSA(); err != nil {
 		return nil, err
 	}
 
 	var failure error
 	for _, candidate := range streamCandidates(device) {
-		stream, err := openOne(candidate, device, direction, rate, channels)
+		stream, err := openOne(candidate, device, direction, rate, channels, format)
 		if err == nil {
 			return stream, nil
 		}
@@ -179,12 +217,31 @@ func streamCandidates(device string) []string {
 	return []string{device}
 }
 
+// openHardware opens a stream through the hardware device alone.
+//
+// The plug device is the same hardware with the rate converted in
+// software, and it is a fallback: a device that will not open for the
+// format the panel needs will often open for the plug, because the
+// converter can make the format fit.
+//
+// That is the right thing when the audio is wanted. It is the wrong
+// thing when the question is whether the device can do the format at
+// all: the Echo Show 8's dummy capture opens through the plug and
+// produces silence, so a microphone that "works" is not one that is
+// really there. So this opens the hardware and nothing else.
+func openHardware(device string, direction, rate, channels, format int) (*audioStream, error) {
+	if err := loadALSA(); err != nil {
+		return nil, err
+	}
+	return openOne(device, device, direction, rate, channels, format)
+}
+
 // openOne opens a stream through one name.
 //
 // The name it is given and the name it is reported under are different
 // things: the device is opened as `hw:CARD=Audio,DEV=0` but it is
 // reported as `alsa:Audio,0`, which is what the settings page shows.
-func openOne(candidate, device string, direction, rate, channels int) (*audioStream, error) {
+func openOne(candidate, device string, direction, rate, channels, format int) (*audioStream, error) {
 	name := []byte(candidate + "\x00")
 	// The handle is zeroed before the open, because ALSA does not touch
 	// the output pointer when the open fails. A handle that still holds
@@ -198,7 +255,7 @@ func openOne(candidate, device string, direction, rate, channels int) (*audioStr
 		// the application rather than say it is busy.
 		return nil, &alsaFailure{operation: "opening", device: device, code: int(rc)}
 	}
-	if rc := sndPcmSetParams(handle, s16le, rwInterleaved, uint(channels), uint(rate), 1, 100000); rc < 0 {
+	if rc := sndPcmSetParams(handle, format, rwInterleaved, uint(channels), uint(rate), 1, 100000); rc < 0 {
 		// The stream is closed, because it was opened. Closing it is safe
 		// here and closing it is right: leaving a stream open would take
 		// the device away from anything else that wants it.
@@ -206,7 +263,7 @@ func openOne(candidate, device string, direction, rate, channels int) (*audioStr
 		sndPcmClose(handle)
 		return nil, &alsaFailure{operation: "setting the format of", device: device, code: int(rc), rate: rate}
 	}
-	return &audioStream{handle: handle, rate: rate, channels: channels}, nil
+	return &audioStream{handle: handle, rate: rate, channels: channels, bytesPerSample: sampleBytes(format)}, nil
 }
 
 // alsaFailure is an ALSA call that failed, with the code it failed with.
@@ -261,6 +318,7 @@ func (p *audioStream) Read(buf []byte) (int, error) {
 	}
 	handle := p.handle
 	channels := p.channels
+	bytesPerSample := p.bytesPerSample
 	p.reading = true
 	p.mu.Unlock()
 	defer func() {
@@ -269,15 +327,19 @@ func (p *audioStream) Read(buf []byte) (int, error) {
 		p.mu.Unlock()
 	}()
 
-	frames := len(buf) / (2 * channels)
+	// The number of frames in the buffer depends on how many bytes a
+	// sample takes. Getting this wrong asks the sound card for twice the
+	// frames the buffer holds, and it writes them past the end of it.
+	frameBytes := channels * bytesPerSample
+	frames := len(buf) / frameBytes
 	if frames == 0 {
 		return 0, nil
 	}
 
 	for {
-		n := sndPcmReadi(handle, buf[:frames*2*channels], uintptr(frames))
+		n := sndPcmReadi(handle, buf[:frames*frameBytes], uintptr(frames))
 		if n >= 0 {
-			return int(n) * 2 * channels, nil
+			return int(n) * frameBytes, nil
 		}
 		// The stream may have been closed while the read was waiting, in
 		// which case the handle is gone and there is nothing to recover.
@@ -306,17 +368,21 @@ func (p *audioStream) Write(buf []byte) (int, error) {
 	}
 	handle := p.handle
 	channels := p.channels
+	bytesPerSample := p.bytesPerSample
 	p.mu.Unlock()
 
-	frames := len(buf) / (2 * channels)
+	// The number of frames in the buffer depends on how many bytes a
+	// sample takes, for the same reason the read does.
+	frameBytes := channels * bytesPerSample
+	frames := len(buf) / frameBytes
 	if frames == 0 {
 		return 0, nil
 	}
 
 	for {
-		n := sndPcmWritei(handle, buf[:frames*2*channels], uintptr(frames))
+		n := sndPcmWritei(handle, buf[:frames*frameBytes], uintptr(frames))
 		if n >= 0 {
-			return int(n) * 2 * channels, nil
+			return int(n) * frameBytes, nil
 		}
 		p.mu.Lock()
 		closed := p.closed

@@ -298,6 +298,12 @@ func main() {
 		credentialsDir: *creds,
 	}
 
+	// The microphone's mute is the hardware latch, where the board has
+	// one. The latch is the source of truth: the button on the unit
+	// moves it, and it says whether the microphones are cut.
+	muteController := newMuteController(log)
+	speaker_.mute = muteController
+
 	// The reporter is made before the callbacks are wired, because the
 	// callbacks tell it when a reply starts and ends and it is what
 	// publishes that.
@@ -634,13 +640,14 @@ func main() {
 		control.SetMediaPlayerVolume(volume)
 	}
 
-	// The system mixer follows the speaker's volume.
+	// The panels follow the speaker's level.
 	//
-	// The mixer is the application's business — it is what a person means
-	// by the volume — so the panel asks for it over the control socket
-	// rather than reaching for it itself.
-	speaker_.onSystemVolume = func(level int) {
-		control.SendCommand(ControlCommand{Action: "volume", Value: level})
+	// The level is the device program's, so the panels are told where it
+	// is rather than each keeping its own idea of it. The mixer is left
+	// alone: the level is applied in the samples, on a curve, and a level
+	// applied in two places is a level nobody can reason about.
+	speaker_.onPanelsVolume = func(level int) {
+		control.SendVolume(level)
 	}
 
 	// The wake word hears every block the microphone captures.
@@ -737,6 +744,40 @@ func main() {
 		log.Info("the mute was switched", "muted", muted)
 	})
 
+	// The latch is followed, and the button's light follows the latch.
+	//
+	// The button on the unit is the latch's, so a press on it is a
+	// change of the mute rather than an event to handle: the latch
+	// reports where it ended up and everything else follows.
+	muteController.OnChange(func(muted bool) {
+		log.Info("the microphone mute changed", "muted", muted)
+		// The light follows the latch, so the button shows what is
+		// happening rather than what was last asked for.
+		if err := setMicMuteLED(muted); err != nil {
+			log.Debug("the mute light could not be set", "error", err)
+		}
+		reporter.setMuted(muted)
+	})
+	go muteController.Watch(ctx)
+
+	// The light starts where the latch is, so a unit that was muted
+	// before the program started shows the light rather than a silent
+	// mute that looks like an open microphone.
+	if err := setMicMuteLED(muteController.Get()); err != nil {
+		log.Debug("the mute light could not be set", "error", err)
+	}
+
+	// The panel's volume slider is a control surface for the device
+	// program's level.
+	//
+	// The level is applied in one place — in the samples, on a curve —
+	// and the mixer is left alone. A level applied in two places is a
+	// level nobody can reason about: the same slider position sounds
+	// different depending on which path the audio took.
+	control.OnVolume(func(level int) {
+		speaker_.setVolume(level)
+	})
+
 	// The microphone's frames go to home assistant over the ESPHome
 	// connection. The device program owns both, so it does not have to
 	// hand the frames across a boundary to get them there.
@@ -765,6 +806,36 @@ func main() {
 	go reporter.run(ctx)
 	go watchConfig(ctx, *configFile, reporter, speaker_, wake, control, log)
 
+	// The buttons on top of the device.
+	//
+	// They are read here rather than by a script on the side, because the
+	// level is the device program's and the mute is the hardware latch's:
+	// both are this program's business.
+	//
+	// A volume button moves the level one step along the curve, so a
+	// press is the same size of step wherever the level is — which is
+	// what makes the buttons and the panel's slider the same setting.
+	deviceButtons := newButtons(log)
+	deviceButtons.onVolume = func(delta int) {
+		speaker_.stepVolume(delta)
+	}
+	deviceButtons.onMute = func() {
+		// The latch is the hardware's and the kernel has already flipped
+		// it. The state is read back so that what is reported is where
+		// the latch actually is.
+		log.Info("the mute button was pressed", "muted", muteController.Get())
+	}
+	if err := deviceButtons.Start(ctx); err != nil {
+		log.Warn("the buttons could not be read", "error", err)
+	} else {
+		go func() {
+			if err := deviceButtons.Run(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("the buttons stopped", "error", err)
+			}
+		}()
+		defer deviceButtons.Close()
+	}
+
 	<-ctx.Done()
 	// Stop capture before closing the scorer. The capture goroutine may
 	// still be finishing a frame, and Scorer.Close waits for any inference
@@ -772,6 +843,11 @@ func main() {
 	speaker_.stop()
 	if wake != nil {
 		wake.Close()
+	}
+	// The latch's node and line are released, so a program that starts
+	// again finds them free.
+	if err := muteController.Close(); err != nil {
+		log.Debug("the microphone latch could not be released", "error", err)
 	}
 	// The memory the live state lived in is given back at once, rather than
 	// when the last reference to it goes. The kernel would do it anyway,
@@ -853,6 +929,11 @@ const levelWriteInterval = 250 * time.Millisecond
 //
 // A machine with no sound card is not an error: the device still works as a
 // display, it just cannot hear or speak.
+//
+// When nobody has chosen a microphone, one is chosen here: the first
+// capture device that opens. The system default is not taken on trust,
+// because on the Echo Show 8 it is a dummy in front of the real
+// microphone array and cannot be opened for the card's own format.
 func (r *stateReporter) discoverAudio() {
 	inputs, outputs, err := audio.List()
 	if err != nil {
@@ -861,6 +942,13 @@ func (r *stateReporter) discoverAudio() {
 	}
 	r.audio.setEndpoints(inputs, outputs)
 	r.log.Info("the audio devices were found", "inputs", len(inputs), "outputs", len(outputs))
+
+	if err := r.audio.selectInput(""); err != nil {
+		r.log.Warn("no microphone could be opened", "error", err)
+		return
+	}
+	chosen, _ := r.audio.backend.SelectedAudioDevices()
+	r.log.Info("the microphone was chosen", "device", chosen)
 }
 
 func (r *stateReporter) run(ctx context.Context) {
