@@ -6,10 +6,13 @@ const vm = require("node:vm");
 
 // The panel's own mute.
 //
-// The mute is the microphone's. The panel mutes the system's microphone
-// — it owns the mixer — and tells the device program, which owns the
-// microphone, so that Home Assistant's switch and the microphone are
-// the same thing.
+// The mute is the microphone's. The device program owns the microphone —
+// on the Echo Show 8 that is the hardware latch — so the panel tells the
+// device program, and the device program moves the latch and reports
+// where it ended up.
+//
+// The mixer is not written: the microphone is cut at the board, and
+// there is no mixer control for it.
 
 const root = path.join(__dirname, "..");
 const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
@@ -23,12 +26,7 @@ function muteSource() {
 
 function run() {
   const sent = [];
-  let micMuted = false;
   const sandbox = {
-    systemVolumePercent: async () => 50,
-    setSystemVolume: async () => true,
-    systemMicMuted: async () => micMuted,
-    setSystemMicMuted: async (muted) => { micMuted = muted; return true; },
     sendState: () => {},
     controlClient: { sendMute: (muted) => sent.push(muted) },
     console,
@@ -38,20 +36,27 @@ function run() {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(muteSource(), sandbox);
-  return { sandbox, sent, isMuted: () => micMuted };
+  // What the panel shows is the panel's own state.
+  return { sandbox, sent, isMuted: () => sandbox.currentMute() };
 }
 
-test("the panel's mute mutes the microphone and tells the device", async () => {
-  const { sandbox, sent, isMuted } = run();
+test("the panel's mute tells the device program", async () => {
+  const { sandbox, sent } = run();
   await sandbox.setMute(true);
-  assert.equal(isMuted(), true, "the microphone was not muted");
   assert.deepEqual(sent, [true], "the device program was not told");
 });
 
 test("unmuting works the other way round", async () => {
-  const { sandbox, sent, isMuted } = run();
+  const { sandbox, sent } = run();
   await sandbox.setMute(true);
   await sandbox.setMute(false);
-  assert.equal(isMuted(), false, "the microphone was not unmuted");
   assert.deepEqual(sent, [true, false], "the device program was not told");
+});
+
+test("the panel shows the mute it asked for", async () => {
+  const { sandbox, isMuted } = run();
+  await sandbox.setMute(true);
+  assert.equal(isMuted(), true, "the panel does not show the mute");
+  await sandbox.setMute(false);
+  assert.equal(isMuted(), false, "the panel does not show the unmute");
 });

@@ -62,16 +62,31 @@ test("the panel asks the device program to mute the microphone", () => {
   );
 });
 
-test("the device's mute mutes the system's microphone", () => {
+test("the device's mute is the hardware latch's", () => {
   // The switch in Home Assistant is the device's, and it is the
-  // system's microphone that it means.
+  // microphone's mute that it means.
+  //
+  // On the Echo Show 8 the microphone's mute is a hardware latch, and
+  // the device program owns it: it moves the latch and reports where
+  // the latch ended up. So the panel follows the device program's
+  // state rather than writing the mixer, which is not where the
+  // microphone is cut.
   assert.ok(
     main.includes("followDeviceMute"),
     "the device's mute does not reach the microphone",
   );
   assert.ok(
-    main.includes("setSystemMicMuted(muted)"),
-    "the microphone is not muted when the device says so",
+    main.includes("deviceClient?.state?.muted"),
+    "the panel does not follow the device program's mute",
+  );
+  assert.ok(
+    !main.includes("setSystemMicMuted(muted)"),
+    "the panel still writes the mixer for the mute",
+  );
+  // And the device program is what moves the latch.
+  assert.ok(
+    deviceMain.includes("newMuteController"),
+    "the device program does not own the microphone's mute",
   );
 });
 

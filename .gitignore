@@ -13,3 +13,7 @@ pnpm-debug.log*
 audio/echomuse-device
 device/echomuse-device
 /device/device
+
+# A recording of somebody's voice, kept for testing the wake word. It is
+# not ours to keep.
+WakeWord*.mp3

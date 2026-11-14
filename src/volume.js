@@ -155,22 +155,24 @@ async function findMixer() {
 
   const athenaMaster = await run("amixer", ["-c", "0", "cget", "name=Master Playback Volume"]);
   if (athenaMaster !== null && parseAlsaElement(athenaMaster) !== null) {
-    const readRaw = async () => parseAlsaElement(await run("amixer", ["-c", "0", "cget", "name=Master Playback Volume"]));
-    const writeRaw = async (percent) => {
-      const answer = await run("amixer", ["-c", "0", "cget", "name=Master Playback Volume"]);
-      const range = /max=(-?\d+)/.exec(answer || "");
-      if (!range) return null;
-      const raw = Math.round(Number(range[1]) * percent / 100);
-      return run("amixer", ["-q", "-c", "0", "cset", "name=Master Playback Volume", `${raw},${raw}`]);
-    };
+    // The Echo Show 8's speaker is on the amplifier's own control, which
+    // the device program owns. The panel does not write it: the level is
+    // applied in one place, in the samples, on a curve, and a level
+    // applied in two places is a level nobody can reason about.
+    //
+    // So this mixer is read but not written. The device program applies
+    // the level and tells the panel what it is.
     mixer = {
-      read: readRaw,
-      write: writeRaw,
+      read: async () => parseAlsaElement(await run("amixer", ["-c", "0", "cget", "name=Master Playback Volume"])),
+      write: async () => null,
       readMicMuted: async () => {
+        // The mute is a hardware latch, and the latch's position is what
+        // the device program reports. There is no mixer control for it:
+        // the microphone is cut at the board, not in the mixer.
         const answer = await run("amixer", ["-c", "0", "sget", "Capture"]);
         return answer === null ? null : /\[off\]/i.test(answer);
       },
-      writeMicMuted: (muted) => run("amixer", ["-q", "-c", "0", "sset", "Capture", muted ? "off" : "on"]),
+      writeMicMuted: async () => null,
     };
     return mixer;
   }

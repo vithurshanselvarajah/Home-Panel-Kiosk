@@ -1,0 +1,204 @@
+// Package evdev reads Linux input devices directly, with no cgo and no getevent.
+//
+// It is here for one reason: the Echo Show 8's microphone mute is a hardware latch, and the kernel
+// reports the latch's position as a switch on the gpio-keys device. Reading it is how the device
+// program knows whether the microphones are cut.
+//
+// The device's name is read from sysfs rather than asked for with an ioctl, so finding the device
+// needs no privileges beyond reading the node.
+//
+// Ported from TECHO5 (github.com/HuskerMinion/techo5), MIT licensed. Copyright (c) 2026 Yuri
+// Gelfand.
+package evdev
+
+import (
+	"encoding/binary"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"unsafe"
+)
+
+// The event types this package knows about.
+const (
+	EvSyn = 0x00
+	EvKey = 0x01
+	EvRel = 0x02
+	EvAbs = 0x03
+	EvSw  = 0x05
+	EvRep = 0x14
+)
+
+// sizeof(struct input_event): a timeval of two kernel longs, then u16 type, u16 code, s32 value,
+// with the tail padded back out to the timeval's alignment. evdev rejects a read shorter than one
+// whole event with EINVAL rather than returning a truncated one, so this has to be right.
+const (
+	longSize  = strconv.IntSize / 8
+	eventSize = 2*longSize + 8
+
+	evType  = 2 * longSize
+	evCode  = evType + 2
+	evValue = evCode + 2
+)
+
+// SWMuteDevice is the switch the Athena's hardware microphone latch reports on: its code is 14,
+// which the kernel's input header calls SW_MUTE_DEVICE.
+const SWMuteDevice = 0x0e
+
+// Event is one evdev record.
+type Event struct {
+	Sec, Usec uint64
+	Type      uint16
+	Code      uint16
+	Value     int32
+}
+
+// TypeName is the event's type in words.
+func (e Event) TypeName() string {
+	switch e.Type {
+	case EvSyn:
+		return "SYN"
+	case EvKey:
+		return "KEY"
+	case EvRel:
+		return "REL"
+	case EvAbs:
+		return "ABS"
+	case EvSw:
+		return "SW"
+	case EvRep:
+		return "REP"
+	}
+	return fmt.Sprintf("TYPE_%d", e.Type)
+}
+
+// Device is an open evdev node.
+type Device struct {
+	Path string
+	Name string
+	f    *os.File
+}
+
+// Open opens one event node and reads its reported name.
+func Open(path string) (*Device, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return &Device{Path: path, Name: nameFor(path), f: f}, nil
+}
+
+// nameFor reads the device name from sysfs, which avoids an EVIOCGNAME ioctl.
+func nameFor(path string) string {
+	base := filepath.Base(path)
+	b, err := os.ReadFile("/sys/class/input/" + base + "/device/name")
+	if err != nil {
+		return "unknown"
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// Read blocks for the next event.
+func (d *Device) Read() (Event, error) {
+	var buf [eventSize]byte
+	if _, err := readFull(d.f, buf[:]); err != nil {
+		return Event{}, err
+	}
+	return Event{
+		Sec:   word(buf[0:]),
+		Usec:  word(buf[longSize:]),
+		Type:  binary.LittleEndian.Uint16(buf[evType:]),
+		Code:  binary.LittleEndian.Uint16(buf[evCode:]),
+		Value: int32(binary.LittleEndian.Uint32(buf[evValue:])),
+	}, nil
+}
+
+// word reads a kernel long, which is what the timestamp is made of.
+func word(b []byte) uint64 {
+	if longSize == 4 {
+		return uint64(binary.LittleEndian.Uint32(b))
+	}
+	return binary.LittleEndian.Uint64(b)
+}
+
+// Close releases the node.
+func (d *Device) Close() error { return d.f.Close() }
+
+func readFull(f *os.File, b []byte) (int, error) {
+	n := 0
+	for n < len(b) {
+		m, err := f.Read(b[n:])
+		if err != nil {
+			return n, err
+		}
+		n += m
+	}
+	return n, nil
+}
+
+// Switch reads a switch's state now, with EVIOCGSW, rather than waiting for it to change.
+//
+// A switch is not a button: it reports a position that is already true when the program starts, and
+// the kernel sends nothing until it moves. A camera shutter that was closed before the program came
+// up would otherwise read as open until somebody touched it.
+//
+// The ioctl answers with a bitmap of every switch the device has, one bit per code, so the reply is
+// sized to hold the code being asked about and the bit picked out of it.
+func (d *Device) Switch(code uint16) (bool, error) {
+	bytes := int(code)/8 + 1
+	state := make([]byte, bytes)
+	// _IOR('E', 0x1b, len): the length travels in the request's size field.
+	req := uintptr(0x8000451b | uint32(bytes)<<16)
+	// Through the raw connection, not File.Fd(): Fd() puts the descriptor into blocking mode and
+	// takes it out of the runtime's poller, after which Close no longer wakes a blocked Read — a
+	// reader waiting for a mute that never comes would hang the shutdown.
+	rc, err := d.f.SyscallConn()
+	if err != nil {
+		return false, fmt.Errorf("evdev: %s: %w", d.Path, err)
+	}
+	var errno syscall.Errno
+	if err := rc.Control(func(fd uintptr) {
+		_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, fd, req, uintptr(unsafe.Pointer(&state[0])))
+	}); err != nil {
+		return false, fmt.Errorf("evdev: %s: %w", d.Path, err)
+	}
+	if errno != 0 {
+		return false, fmt.Errorf("evdev: EVIOCGSW %#x on %s: %w", code, d.Path, errno)
+	}
+	return state[code/8]&(1<<(code%8)) != 0, nil
+}
+
+// Find opens the one event node whose reported name matches, leaving every other node closed.
+func Find(name string) (*Device, error) {
+	paths, err := filepath.Glob("/dev/input/event*")
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range paths {
+		if nameFor(p) != name {
+			continue
+		}
+		return Open(p)
+	}
+	return nil, fmt.Errorf("evdev: no device named %q", name)
+}
+
+// List returns every /dev/input/event* node with its name.
+func List() ([]*Device, error) {
+	paths, err := filepath.Glob("/dev/input/event*")
+	if err != nil {
+		return nil, err
+	}
+	var out []*Device
+	for _, p := range paths {
+		d, err := Open(p)
+		if err != nil {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
