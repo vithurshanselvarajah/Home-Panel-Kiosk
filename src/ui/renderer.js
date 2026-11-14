@@ -28,6 +28,13 @@ let dragState;
 let shiftOn = false;
 let symbolsOn = false;
 let settingsKeyboardActive = false;
+// The field the keyboard is typing into.
+//
+// It is remembered rather than read from the focus, because the keyboard
+// is a set of buttons and a button takes the focus when it is pressed.
+// Without this the key press would go to the button rather than to the
+// field being edited.
+let keyboardTarget = null;
 // The mode the device is in, kept here so the drawer can label the button
 // before the first state arrives.
 let displayMode = "fullscreen";
@@ -74,8 +81,8 @@ function setCaret(field, position) {
 // Types into the focused settings field when the panel is open, otherwise the
 // keystroke belongs to the Home Assistant page behind the overlay.
 function applyToSettingsField(value) {
-  const field = document.activeElement;
-  if (!field || !form.contains(field) || !("value" in field)) return false;
+  const field = settingsField();
+  if (!field) return false;
   if (value === "ENTER") { form.requestSubmit(); return true; }
   const result = window.homePanel.editFieldValue({
     value: field.value,
@@ -88,6 +95,19 @@ function applyToSettingsField(value) {
   setCaret(field, result.caret);
   field.dispatchEvent(new Event("input", { bubbles: true }));
   return true;
+}
+
+// The field being edited.
+//
+// It is not simply the field with the focus, because the keyboard is a set
+// of buttons and a button takes the focus when it is pressed. The buttons
+// are told not to take it, but the field is remembered as well, so that a
+// key press always goes to the field that was being edited.
+function settingsField() {
+  const active = document.activeElement;
+  if (active && form.contains(active) && "value" in active) return active;
+  if (keyboardTarget && form.contains(keyboardTarget) && "value" in keyboardTarget) return keyboardTarget;
+  return null;
 }
 
 function sendKey(value) {
@@ -280,11 +300,25 @@ function renderKeyboard() {
   const symbols = document.createElement("button"); symbols.className = "key key-wide"; symbols.textContent = symbolsOn ? "ABC" : "?123"; symbols.addEventListener("click", () => { symbolsOn = !symbolsOn; shiftOn = false; renderKeyboard(); }); bottom.append(symbols);
   addKey("space", "SPACE", "key-space"); addKey("↵", "ENTER", "key-wide key-enter");
   keyboard.append(bottom);
+  // The keys do not take the focus.
+  //
+  // A button takes the focus when it is pressed, and that takes the focus
+  // off the field being edited: the field is then blurred, the keyboard
+  // is closed, and the key press goes nowhere. So the keys are told to
+  // leave the focus where it is.
+  //
+  // It is done on the mouse event and not the pointer event on purpose:
+  // cancelling a pointer event for a touch stops the click as well, and
+  // the click is what types the letter.
+  for (const button of keyboard.querySelectorAll("button")) {
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+  }
 }
 
 function setKeyboard(visible, { settings = false } = {}) {
   settingsKeyboardActive = settings && visible;
   keyboard.hidden = !visible;
+  if (!visible) keyboardTarget = null;
   window.homePanel.setKeyboard(visible);
   if (visible) renderKeyboard();
   syncSettingsLayout();
@@ -382,6 +416,9 @@ $("#notice").addEventListener("click", (event) => {
 form.addEventListener("focusin", (event) => {
   const field = event.target;
   if (!field?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]), textarea')) return;
+  // The field is remembered, because the keyboard's buttons take the focus
+  // when they are pressed and the field would then be lost.
+  keyboardTarget = field;
   // The keyboard is only for the settings form, and only when the setting
   // says it should appear. The main process vetoes it as well, but the
   // keyboard is drawn here, so the check has to be here too.
@@ -394,6 +431,9 @@ form.addEventListener("focusout", (event) => {
   if (!settingsKeyboardActive) return;
   const next = event.relatedTarget;
   if (next && form.contains(next)) return;
+  // The focus went to the keyboard rather than away from the settings, so
+  // the keyboard stays up: the person is still typing into the field.
+  if (next && keyboard.contains(next)) return;
   setKeyboard(false);
 });
 
@@ -958,7 +998,6 @@ window.addEventListener("pointerdown", (event) => {
     if (!insideForm) { setKeyboard(false); return; }
   }
   const drawerOpen = drawer.classList.contains("open");
-  const inEdgeZone = event.clientX > window.innerWidth - 45;
   const onDrawer = Boolean(event.target.closest?.("#side-panel"));
   // A control is not a drag of the drawer.
   //
@@ -970,9 +1009,10 @@ window.addEventListener("pointerdown", (event) => {
   if (onControl) {
     dragState = null;
   } else if (drawerOpen && onDrawer) {
+    // The drawer is dragged shut by dragging it. It is not dragged open:
+    // the tab opens it, because a gesture that has to be found is a
+    // gesture that is missed.
     dragState = { start: 1, active: true };
-  } else if (!drawerOpen && inEdgeZone) {
-    dragState = { start: 0, active: true };
   } else {
     dragState = null;
   }
@@ -1006,22 +1046,7 @@ window.addEventListener("pointerup", (event) => {
     touchStart = null;
     return;
   }
-  const wasDragging = Boolean(dragState?.moved);
   dragState = null;
-  if (wasDragging) {
-    touchStart = null;
-    return;
-  }
-  // A swipe is a swipe of the screen, not of a control.
-  //
-  // The sliders are inside the drawer and near its edge, so a drag of
-  // one was taken for a swipe: the drawer opened or closed under the
-  // pointer and the value was changed on the way.
-  const onControl = Boolean(event.target.closest?.("input, textarea, select, button, [role='slider']"));
-  if (!onControl) {
-    if (dy < 90 && !drawer.classList.contains("open") && touchStart.x > window.innerWidth - 45 && dx < -55) setDrawer(true);
-    else if (dy < 90 && drawer.classList.contains("open") && dx > 65) setDrawer(false);
-  }
   touchStart = null;
 }, { passive: true });
 window.addEventListener("pointercancel", () => {
