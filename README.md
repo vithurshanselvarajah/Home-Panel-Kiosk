@@ -4,7 +4,7 @@ An independent Electron kiosk for a Home Assistant touch display. Immich photos 
 
 ## Current build
 
-- Fullscreen Home Assistant dashboard surface with a swipe-in controls drawer. Swipe left from the right edge to open it and swipe right to close it.
+- Fullscreen Home Assistant dashboard surface with a slide-in controls drawer. A pull out tab on the middle right of the screen opens it with a tap, and dragging the open drawer shuts it again.
 - Fullscreen or window mode. The drawer has a button that switches between them, and the mode is remembered. The device can also be started in either mode with `--fullscreen` or `--window`.
 - An exit button in the drawer, which shuts the app down cleanly.
 - Optional automatic touch keyboard appears when an editable Home Assistant field receives focus. Enable or disable it in Settings.
@@ -177,6 +177,54 @@ satellite.
 
 The wake word and its sensitivity are switched from Home Assistant on the
 panel's device page.
+
+### The volume, the microphone and the mute
+
+On the Echo Show 8 the audio is arranged the way the hardware wants it,
+rather than the way a desktop's sound server does it.
+
+**The level is applied in one place.** The device program owns it: the
+panel's slider, Home Assistant's slider and the two buttons on top of the
+device all ask the device program for a level, and it applies that level
+to everything it plays — the reply, the music and the test sound — on a
+curve rather than as a percentage of the amplitude. A half dial is a quiet
+conversation and not half the volume.
+
+The mixer is left alone. A level applied in two places is a level nobody
+can reason about: the same slider position sounds different depending on
+which path the audio took.
+
+**The speaker runs at 96 kHz.** The amplifier holds a tuning that was made
+for that rate, and at 48 kHz every corner of its equaliser and its limiter
+sits an octave low — the tone is wrong and the protection that should be
+catching the peaks is not catching them. The music arrives at 48 kHz and
+the reply at 16 kHz, and the mix is made at 48 kHz and taken up to the
+card's rate on the way out.
+
+**The microphone is the whole array.** The card hands over four channels
+at 96 kHz, and they are averaged into one, brought down to 16 kHz, and
+then:
+
+- the panel's own voice is cancelled out of them, using a reference made
+  from what the speaker played;
+- the speech is levelled, by an automatic gain control that follows the
+  room rather than a fixed gain;
+- the steady noise is taken out, leaving speech and whatever is as sudden
+  as speech.
+
+Without those three the speech arrives at a level the wake word model was
+never trained on, in a room whose noise it also hears.
+
+**The mute is the hardware's.** The button on top of the unit flips a
+latch in the board, and while it is flipped the microphones are cut there:
+the converter is held in reset and the room stops reaching the application
+at all. The latch's position is read from the kernel and it is the source
+of truth — the button, Home Assistant's switch and the panel's switch are
+all views of the same latch, and none of them can be out of step with it.
+
+A mute asked for from Home Assistant pulses the line that flips the latch,
+the same way the button does, and then waits for the latch to report where
+it ended up.
 
 ### The audio devices
 

@@ -39,17 +39,3 @@ function queueFocusCheck() {
 
 document.addEventListener("focusin", queueFocusCheck, true);
 document.addEventListener("focusout", queueFocusCheck, true);
-
-let edgeSwipeStart;
-document.addEventListener("pointerdown", (event) => {
-  edgeSwipeStart = { x: event.clientX, y: event.clientY };
-}, true);
-document.addEventListener("pointerup", (event) => {
-  if (!edgeSwipeStart) return;
-  const dx = event.clientX - edgeSwipeStart.x;
-  const dy = Math.abs(event.clientY - edgeSwipeStart.y);
-  const edge = document.documentElement.clientWidth - 45;
-  if (edgeSwipeStart.x > edge && dx < -55 && dy < 90) ipcRenderer.send("remote:open-side-panel");
-  edgeSwipeStart = undefined;
-}, true);
-document.addEventListener("pointercancel", () => { edgeSwipeStart = undefined; }, true);

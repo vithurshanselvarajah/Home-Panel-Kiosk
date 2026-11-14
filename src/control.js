@@ -254,6 +254,27 @@ class ControlClient {
   }
 
   /**
+   * Asks the device program for a volume.
+   *
+   * The level is the device program's, because it applies the level to
+   * everything it plays. The panel is a control surface for it.
+   *
+   * @param {number} percent the level, 0 to 100
+   * @returns {boolean} whether the request was sent
+   */
+  sendVolume(percent) {
+    if (!this.connection || !this.connected) return false;
+    try {
+      const level = Math.max(0, Math.min(100, Math.round(Number(percent))));
+      this.connection.write(`${JSON.stringify({ action: "volume", volume: level })}\n`);
+      return true;
+    } catch (error) {
+      this.onLog(`the volume could not be sent: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
    * Stops the connection.
    */
   stop() {

@@ -7,8 +7,14 @@ const vm = require("node:vm");
 // The mute follows.
 //
 // The mute is the same thing in two places: the device's switch, which
-// Home Assistant reads and writes, and the system's microphone, which is
+// Home Assistant reads and writes, and the microphone itself, which is
 // what actually stops hearing the room.
+//
+// On the Echo Show 8 the microphone's mute is a hardware latch, and the
+// device program owns it: the panel asks the device program, the device
+// program moves the latch, and the latch says where it ended up. So the
+// panel does not write the mixer — the microphone is cut at the board,
+// and there is no mixer control for it.
 //
 // Each follows the other, and each only follows the other when the
 // change did not come from here. Without that, the two argue: the panel
@@ -27,28 +33,10 @@ function muteSource() {
 
 function run() {
   const sent = [];
-  let micMuted = false;
-  // The mixer the test pretends is there. It remembers the value that
-  // was asked for and does not answer with it until the write has
-  // landed, which is what a real mixer does.
-  let pending = null;
   const deviceState = { muted: false };
   const sandbox = {
-    systemVolumePercent: async () => 50,
-    setSystemVolume: async () => true,
-    // The mixer answers with what it has been told, and a write that
-    // has not landed yet is not what it says.
-    systemMicMuted: async () => micMuted,
-    // The watch reads the volume and the mute together, in one go.
-    systemVolumeAndMicMute: async () => ({ volume: 50, muted: micMuted }),
-    setSystemMicMuted: async (muted) => {
-      // The write lands on the next turn of the event loop, which is
-      // what a real mixer does: the command goes out and the mixer
-      // answers afterwards.
-      await new Promise((resolve) => setImmediate(resolve));
-      micMuted = muted;
-      return true;
-    },
+    // The mixer is neither read nor written: the device program owns
+    // the microphone and reports where the latch ended up.
     sendState: () => {},
     controlClient: { sendMute: (muted) => sent.push(muted) },
     deviceClient: { state: deviceState },
@@ -63,29 +51,38 @@ function run() {
     sandbox,
     sent,
     deviceState,
-    isMuted: () => micMuted,
+    // What the panel shows is the panel's own state, which is what the
+    // drawer draws and what is published to Home Assistant.
+    isMuted: () => sandbox.currentMute(),
     // The device's state arrives.
     deviceSays: (muted) => { deviceState.muted = muted; sandbox.followDeviceMute(); },
-    // The watcher reads the mixer.
+    // The watcher follows the device program's state.
     tick: async () => { await sandbox.watchTick(); },
-
   };
 }
 
-test("the device's mute mutes the microphone", async () => {
-  const { isMuted, deviceSays } = run();
+test("the panel's mute asks the device program", async () => {
+  const { sandbox, sent } = run();
+
+  await sandbox.setMute(true);
+
+  assert.deepEqual(sent, [true], "the device was not told");
+});
+
+test("the device's mute is shown", async () => {
+  const { sandbox, isMuted, deviceSays } = run();
+
   deviceSays(true);
   await new Promise((resolve) => setImmediate(resolve));
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(isMuted(), true, "the microphone was not muted");
+
+  assert.equal(isMuted(), true, "the panel does not show the mute");
 });
 
 test("the panel does not chase its own mute", async () => {
-  const { sandbox, sent, isMuted, deviceSays } = run();
+  const { sandbox, sent, deviceSays } = run();
 
   // The panel mutes.
   await sandbox.setMute(true);
-  assert.equal(isMuted(), true, "the microphone was not muted");
   assert.deepEqual(sent, [true], "the device was not told");
 
   // The device says it is muted. That is the panel's own change coming
@@ -96,18 +93,19 @@ test("the panel does not chase its own mute", async () => {
 });
 
 test("pressing the mute twice does not turn it back on", async () => {
-  // The button writes the mixer and the watcher reads it. If the
-  // watcher reads the value from before the button wrote it, it takes
-  // it for a change from outside and undoes it — which is a mute that
-  // turns itself off.
-  const { sandbox, sent, isMuted, tick } = run();
+  // The watcher follows the device program's state, and the device
+  // program reports the latch. If the watcher read a state the device
+  // program had not applied yet, it would take it for a change from
+  // outside and undo it — which is a mute that turns itself off.
+  const { sandbox, sent, deviceSays, tick } = run();
 
   await sandbox.setMute(true);
-  // The watcher reads the mixer while the button's write is on its way.
+  // The device program confirms the mute, which is what it does when
+  // the latch has moved.
+  deviceSays(true);
   await tick();
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(isMuted(), true, "the mute turned itself off");
   assert.deepEqual(sent, [true], "the device was told twice");
 });
 
