@@ -6,17 +6,27 @@ const vm = require("node:vm");
 
 // The volume.
 //
-// The panel shows the volume of the system mixer, and the volume can be
-// changed by something other than the panel: the keyboard's media keys,
-// a desktop's own control, an automation. So the panel follows the
-// mixer while the drawer is open.
+// The level is the device program's: it applies the level to everything
+// it plays, on a curve, and tells the panel where it is. The panel is a
+// control surface for it.
 //
-// This is checked by running the code with a mixer that answers with
-// whatever the test says it should.
+// So the panel's slider asks the device program for a level, and the
+// panel follows the level the device program reports. The mixer is not
+// involved: a level applied in two places is a level nobody can reason
+// about.
+//
+// The microphone's mute is still read from the mixer, because that is
+// what says whether the room is being cut.
+//
+// This is checked by running the code with a device program that
+// answers with whatever the test says it should.
 
-// The mixer the test pretends is there.
-let mixerValue = 50;
-let micMuted = false;
+// The state the test pretends is there.
+//
+// The mute comes from the device program: on the Echo Show 8 it is the
+// hardware latch's position, and the device program reports it.
+let deviceMuted = false;
+let deviceVolume = 50;
 
 // The main process's source.
 const root = path.join(__dirname, "..");
@@ -26,27 +36,38 @@ const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
 function volumeSource() {
   // The volume the panel is showing, and the reading of it.
   const holding = main.indexOf("let systemVolume = null;");
-  const reading = main.indexOf("function currentVolume() {");
-  const start = main.indexOf("// refreshVolume reads the volume of the mixer.");
+  const start = main.indexOf("// refreshVolume reads the microphone's mute.");
   const end = main.indexOf("// handleCommand acts on a command.");
   return main.slice(holding, end);
 }
 
-// run runs the volume handling with a mixer that answers.
+// run runs the volume handling with a device program that answers.
 function run() {
   const sent = [];
   const timers = [];
+  const requested = [];
+  const deviceState = { muted: deviceMuted };
   const sandbox = {
-    systemVolumePercent: async () => mixerValue,
-    setSystemVolume: async (percent) => { mixerValue = percent; return true; },
-    systemMicMuted: async () => micMuted,
-    // The watch reads the volume and the mute together, in one go.
-    systemVolumeAndMicMute: async () => ({ volume: mixerValue, muted: micMuted }),
-    setSystemMicMuted: async (muted) => { micMuted = muted; return true; },
     sendState: (force) => sent.push({ force }),
-    // The control client is what tells the device program, and it is
-    // not there when the panel is not connected.
-    controlClient: null,
+    // The device program's state carries the mute, which is the
+    // hardware latch's position.
+    deviceClient: { state: deviceState },
+    // The control client is what tells the device program. It answers
+    // with the level it now holds, which is what the device program
+    // would have applied.
+    controlClient: {
+      connected: true,
+      sendVolume: (percent) => {
+        requested.push(percent);
+        deviceVolume = percent;
+        return true;
+      },
+      sendMute: (muted) => {
+        deviceMuted = muted;
+        deviceState.muted = muted;
+        return true;
+      },
+    },
     console,
     setInterval: (fn, ms) => { timers.push({ fn, ms, alive: true }); return timers.length - 1; },
     clearInterval: (id) => { if (timers[id]) timers[id].alive = false; },
@@ -58,74 +79,71 @@ function run() {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(volumeSource(), sandbox);
-  // The watcher reads the mixer on a timer, and the test runs the timer
+  // The watcher reads the mute on a timer, and the test runs the timer
   // by hand rather than waiting for it.
   sandbox.tick = async () => {
     for (const timer of timers) {
       if (timer.alive) await timer.fn();
     }
   };
-  return { sandbox, sent };
+  return { sandbox, sent, requested };
 }
 
-test("the volume is read when it is refreshed", async () => {
-  mixerValue = 42;
-  const { sandbox } = run();
-  await sandbox.refreshVolume();
-  assert.equal(sandbox.currentVolume(), 42, "the volume was not read");
+test("the panel asks the device program for a volume", async () => {
+  deviceVolume = 50;
+  const { sandbox, requested } = run();
+
+  await sandbox.setVolume(70);
+
+  assert.deepEqual(requested, [70], "the device program was not asked");
+  assert.equal(sandbox.currentVolume(), 70, "the panel does not show the level it asked for");
 });
 
-test("the drawer follows a volume changed outside the panel", async () => {
-  mixerValue = 50;
+test("the panel follows the level the device program reports", async () => {
+  deviceVolume = 50;
   const { sandbox, sent } = run();
 
-  // The watcher is running.
-  sandbox.watchVolume();
-  sent.length = 0;
+  // Something outside the panel moved the level: the physical buttons,
+  // or Home Assistant.
+  sandbox.followDeviceVolume(25);
 
-  // Something outside the panel changes the volume.
-  mixerValue = 25;
-  await sandbox.tick();
-
-  assert.equal(sandbox.currentVolume(), 25, "the panel did not follow the volume");
-  assert.equal(sent.length, 1, "the drawer was not told about the volume");
+  assert.equal(sandbox.currentVolume(), 25, "the panel did not follow the level");
+  assert.equal(sent.length, 1, "the drawer was not told about the level");
 });
 
-test("the panel does not chase a volume it set itself", async () => {
-  mixerValue = 50;
+test("the panel does not chase a level it set itself", async () => {
+  deviceVolume = 50;
   const { sandbox, sent } = run();
 
-  sandbox.watchVolume();
-  sent.length = 0;
-
-  // The panel's own change: the mixer has the value the panel asked
-  // for, so there is nothing to follow.
+  // The panel's own change: the device program now holds what the panel
+  // asked for, so there is nothing to follow.
   await sandbox.setVolume(70);
   assert.equal(sandbox.currentVolume(), 70, "the panel's own change did not take");
 
   sent.length = 0;
-  await sandbox.tick();
+  sandbox.followDeviceVolume(70);
   assert.equal(sent.length, 0, "the panel chased its own change");
 });
 
 test("the mute is read with the volume", async () => {
-  mixerValue = 50;
-  micMuted = true;
+  deviceMuted = true;
   const { sandbox } = run();
   await sandbox.refreshVolume();
   assert.equal(sandbox.currentMute(), true, "the mute was not read");
 });
 
 test("the drawer follows a mute changed outside the panel", async () => {
-  mixerValue = 50;
-  micMuted = false;
+  deviceMuted = false;
   const { sandbox, sent } = run();
 
   sandbox.watchVolume();
   sent.length = 0;
 
-  // Something outside the panel mutes the microphone.
-  micMuted = true;
+  // Something outside the panel mutes the microphone: the button on the
+  // unit, which is the hardware latch, and the device program reports
+  // where the latch ended up.
+  deviceMuted = true;
+  sandbox.deviceClient.state.muted = true;
   await sandbox.tick();
 
   assert.equal(sandbox.currentMute(), true, "the panel did not follow the mute");
@@ -135,25 +153,24 @@ test("the drawer follows a mute changed outside the panel", async () => {
 test("the mute is the microphone's", async () => {
   // A person who mutes the panel wants the room to stop hearing them,
   // and they still want to hear the music.
-  mixerValue = 50;
-  micMuted = false;
+  deviceMuted = false;
   const { sandbox } = run();
 
   await sandbox.setMute(true);
 
-  assert.equal(micMuted, true, "the microphone was not muted");
+  assert.equal(deviceMuted, true, "the microphone was not muted");
   assert.equal(sandbox.currentMute(), true, "the panel does not say it is muted");
 });
 
 test("the watcher stops when the drawer closes", async () => {
-  mixerValue = 50;
+  deviceMuted = false;
   const { sandbox, sent } = run();
 
   sandbox.watchVolume();
   sandbox.stopWatchingVolume();
   sent.length = 0;
 
-  mixerValue = 25;
+  deviceMuted = true;
   await sandbox.tick();
   assert.equal(sent.length, 0, "the drawer was told about a volume it was not showing");
 });

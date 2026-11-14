@@ -56,7 +56,7 @@ let state = {
   displayMode: "fullscreen",
   brightness: 60,
   volume: 60,
-  version: "0.0.2",
+  version: "0.0.3",
   serviceStatus: { control: "unknown", immich: "unknown", dashboard: "unknown" },
   lastActivity: new Date().toISOString(),
 };
@@ -217,8 +217,10 @@ wss.on("connection", (socket) => {
       return;
     }
     if (channel === "app:set-volume") {
-      // The volume belongs to the system mixer, so it is set there and the
-      // state carries what it is now.
+      // The development bridge has no device program, so there is nobody
+      // to own the level and the mixer is the one that holds it. On the
+      // real panel the device program owns the level and the mixer is
+      // left alone.
       const volume = Math.max(0, Math.min(100, Math.round(Number(payload) || 0)));
       await setSystemVolume(volume);
       state.volume = volume;

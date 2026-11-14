@@ -338,6 +338,19 @@ func (s *ControlServer) handle(conn net.Conn, message ControlMessage) {
 		if handler != nil {
 			handler(message.Muted)
 		}
+	case "volume":
+		// The panel sets the volume.
+		//
+		// The level is the device program's, the same way the mute is:
+		// it applies the level to everything it plays — the reply, the
+		// music and the test sound — so the panel asks for it rather
+		// than reaching for the mixer itself.
+		s.mu.Lock()
+		handler := s.onVolume
+		s.mu.Unlock()
+		if handler != nil {
+			handler(message.Volume)
+		}
 	case "listen":
 		// The panel is asking the device to start listening.
 		//
@@ -380,11 +393,17 @@ type ControlMessage struct {
 	//
 	// The mute is the microphone's, so the panel asks the device
 	// program for it: the device program owns the microphone.
-	Muted          bool   `json:"muted,omitempty"`
-	CameraPassword string `json:"cameraPassword,omitempty"`
-	RequestID      string `json:"requestId,omitempty"`
-	SendspinToken  string `json:"sendspinToken,omitempty"`
-	Error          string `json:"error,omitempty"`
+	Muted bool `json:"muted,omitempty"`
+	// Volume is the level the panel asks for, for the volume message.
+	//
+	// The volume is the device program's, the same way the mute is: the
+	// device program owns the speaker and applies the level to
+	// everything it plays. The panel is a control surface for it.
+	Volume          int    `json:"volume,omitempty"`
+	CameraPassword  string `json:"cameraPassword,omitempty"`
+	RequestID       string `json:"requestId,omitempty"`
+	SendspinToken   string `json:"sendspinToken,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // TransportCommand is what the panel asks of the music transport.
@@ -462,6 +481,16 @@ func (s *ControlServer) SetListenHandler(fn func(phrase string)) {
 func (s *ControlServer) SetMuteHandler(fn func(muted bool)) {
 	s.mu.Lock()
 	s.onMute = fn
+	s.mu.Unlock()
+}
+
+// SetVolumeHandler sets what is called when the panel asks for a volume.
+//
+// The level is the device program's, because it applies the level to
+// everything it plays. The panel is a control surface for it.
+func (s *ControlServer) SetVolumeHandler(fn func(level int)) {
+	s.mu.Lock()
+	s.onVolume = fn
 	s.mu.Unlock()
 }
 
@@ -661,6 +690,28 @@ func (s *ControlServer) writeCommand(conn net.Conn, command ControlCommand) erro
 	defer s.writeMu.Unlock()
 	_, err = conn.Write(append(payload, '\n'))
 	return err
+}
+
+// SendVolume tells the panels what the level is.
+//
+// The device program owns the level, and the panel shows it. So when the
+// level changes — from the physical buttons, or from Home Assistant — the
+// panels are told, and the slider follows.
+//
+// The panel's own change is not sent back: it is already there, and the
+// two telling each other about the same change for ever is what the
+// follower's settling is there to stop.
+func (s *ControlServer) SendVolume(level int) {
+	s.connections.Range(func(key, _ any) bool {
+		conn, ok := key.(net.Conn)
+		if !ok {
+			return true
+		}
+		if err := s.writeMessage(conn, ControlMessage{Action: "volume", Volume: level}); err != nil {
+			s.log.Debug("the volume could not be sent to the panel", "error", err)
+		}
+		return true
+	})
 }
 
 // Close stops serving the socket.

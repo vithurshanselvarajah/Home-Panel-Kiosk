@@ -11,13 +11,6 @@ const { createHealthChecker, probeHttp } = require("./health");
 const { DeviceClient, findSidecar } = require("./device");
 const { ControlClient, findControlSocket } = require("./control");
 const { moveCachesToMemory } = require("./caches");
-const {
-  systemVolumePercent,
-  setSystemVolume,
-  systemMicMuted,
-  setSystemMicMuted,
-  systemVolumeAndMicMute,
-} = require("./volume");
 
 const HOSTNAME = hostIdentity(os.hostname());
 
@@ -469,6 +462,10 @@ function scheduleViewRetry(delay = VIEW_RETRY_INTERVAL_MS) {
   }, delay);
 }
 
+// setDrawerTabVisible says whether the pull tab is wanted.
+//
+// The tab lives in the overlay, so turning it on or off changes what the
+// overlay has to show, and the overlay is resized to match.
 function setSidePanel(open) {
   // The drawer is only told about a change. Resizing the overlay view
   // when nothing has changed makes the drawer jump, and the drawer is
@@ -489,6 +486,9 @@ function resizeOverlay() {
   if (!win || win.isDestroyed() || !overlayView) return;
   const { width, height } = win.getContentBounds();
   const homeButtonVisible = mode === "url";
+  // The pull tab is the way the drawer is opened, so the overlay has to be
+  // on the screen for the tab to be caught, even when nothing else in it
+  // is showing.
   const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlayFull;
   if (!needsOverlay) {
     if (overlayAttached) {
@@ -511,7 +511,12 @@ function resizeOverlay() {
   } else if (keyboardVisible) {
     const keyboardHeight = Math.min(300, height);
     overlayView.setBounds({ x: 0, y: height - keyboardHeight, width, height: keyboardHeight });
-  } else overlayView.setBounds({ x: Math.max(0, width - 210), y: 0, width: Math.min(210, width), height: Math.min(58, height) });
+  } else {
+    // The strip along the top right, which holds the home button and the
+    // pull tab. It is wide enough for the tab and the button together.
+    const stripWidth = Math.min(210, width);
+    overlayView.setBounds({ x: Math.max(0, width - stripWidth), y: 0, width: stripWidth, height: Math.min(58, height) });
+  }
 }
 
 // setVoiceOverlayFull says whether the wake word overlay is covering the
@@ -655,23 +660,25 @@ function currentMute() {
   return micMuted;
 }
 
-// refreshVolume reads the volume of the mixer.
+// refreshVolume reads the microphone's mute.
 //
 // It is called when the drawer opens and when the volume is changed. A
 // panel that read it every time it sent its state would run a command
 // every time it sent its state.
+//
+// The volume is not read here. The level is the device program's and it
+// tells the panel when it changes, so there is nothing to read. The mute
+// comes from the device program too: on the Echo Show 8 it is the
+// hardware latch's position.
 async function refreshVolume() {
-  // The mixer is read under the lock, so that a reading cannot happen
+  // The reading is under the lock, so that a reading cannot happen
   // while the button is writing. A reading that happens halfway
   // through a write sees the value from before it, and takes it for a
   // change from outside — and undoes it.
   return withMuteLock(async () => {
-    const value = await systemVolumePercent();
-    if (value === null) return false;
-    systemVolume = value;
-    // The microphone's mute is read with the volume, because they are
-    // both read from the mixer and both are worth following.
-    micMuted = await systemMicMuted();
+    const muted = deviceClient?.state?.muted;
+    if (typeof muted !== "boolean") return false;
+    micMuted = muted;
     // The state is sent whatever the value is. The overlay is destroyed and
     // made again while the drawer is shut, so a drawer that was not there
     // when the volume was last read has never been told what it is.
@@ -704,41 +711,33 @@ function watchVolume() {
   if (typeof volumeWatcher.unref === "function") volumeWatcher.unref();
 }
 
-// watchTick reads the mixer once.
+// watchTick follows the device program's mute.
 //
 // It is the watcher's body on its own, so that a test can run it
 // without waiting for the timer.
+//
+// Neither the volume nor the mute is read from the mixer. The level is
+// the device program's and it tells the panel when it changes; the mute
+// is the hardware latch's and the device program reports where the latch
+// ended up. A watch would only ever race them: the panel would read a
+// value the device program had not applied yet and undo the change.
 async function watchTick() {
     // The whole reading is under the lock, and not just the part that
     // changes things. A reading that happens while the button is
     // writing sees the value from before the write, and takes it for a
     // change from outside — which is a mute that turns itself off.
     await withMuteLock(async () => {
-      // The volume and the mute are read together, in one process.
-      //
-      // The watch runs for as long as the panel does, and a watch that
-      // ran a process for each of them would run a process every few
-      // hundred milliseconds for as long as the panel is up.
-      const reading = await systemVolumeAndMicMute();
-      const value = reading.volume;
-      if (value === null) return;
-      const muted = reading.muted;
+      // The device program's own state says where the microphone's mute
+      // is, and it is the latch's position on the Echo Show 8.
+      const muted = deviceClient?.state?.muted;
+      if (typeof muted !== "boolean") return;
       // The panel's own change is not a change from outside, and it has
       // already been sent.
-      if (value === systemVolume && muted === micMuted) return;
-      systemVolume = value;
+      if (muted === micMuted) return;
       micMuted = muted;
       // The microphone muted by something else turns the device's switch
       // on, so that Home Assistant shows what is really happening.
       followMicMute(muted);
-      // The device program's speaker follows the mixer, and the mixer is
-      // what a person means by the volume. The state carries the
-      // volume, so the speaker follows too.
-      //
-      // The panel's own change has already been sent, so it is not sent
-      // again here: the two telling each other about the same change
-      // for ever is what the volume follower in the device program is
-      // there to stop.
       sendState(true);
     });
 }
@@ -785,27 +784,56 @@ async function setBrightness(value) {
   showNotice({ title: "Brightness control unavailable", message: "No writable Linux backlight device was found." });
 }
 
-// setVolume changes the volume of the system.
+// setVolume changes the volume.
 //
-// The volume a person means when they reach for it on a panel is the
-// volume of the room, which is the system mixer and not the device
-// program's own gain.
+// The level is the device program's: it applies the level to everything it
+// plays — the reply, the music and the test sound — on a curve, so that
+// half the dial is a quiet conversation rather than half the amplitude.
 //
-// It is best effort: a machine with no mixer is not a failure, it is a
-// machine whose volume cannot be changed from here.
+// So the panel asks the device program for the level and does not reach
+// for the mixer itself. A level applied in two places is a level nobody
+// can reason about: the same slider position sounds different depending
+// on which path the audio took.
+//
+// It is best effort: a panel whose device program is not there yet is a
+// panel whose volume cannot be changed from here.
 async function setVolume(value) {
   const percent = Math.max(0, Math.min(100, Number(value)));
-  if (!Number.isFinite(percent)) return;
+  if (!Number.isFinite(percent)) return false;
   return withMuteLock(async () => {
-    if (!await setSystemVolume(percent)) return false;
-    const reading = await systemVolumeAndMicMute();
-    if (reading.volume !== null) systemVolume = reading.volume;
-    micMuted = reading.muted;
-    // A remote volume command is reflected in the drawer and published back
-    // to Home Assistant after the system mixer confirms its actual level.
+    if (!await sendDeviceVolume(percent)) return false;
+    // The level is reflected in the drawer straight away, and published
+    // back to Home Assistant.
+    systemVolume = percent;
     sendState(true);
     return true;
   });
+}
+
+// followDeviceVolume shows the level the device program is using.
+//
+// The level is the device program's, and the panel shows it. So when the
+// device program says where the level is — because the physical buttons
+// moved it, or Home Assistant did — the slider follows.
+//
+// The level is not sent back: the device program has just told us, and
+// the two telling each other about the same change for ever is what the
+// follower's settling is there to stop.
+function followDeviceVolume(percent) {
+  const value = Math.max(0, Math.min(100, Math.round(Number(percent))));
+  if (!Number.isFinite(value)) return;
+  if (value === systemVolume) return;
+  systemVolume = value;
+  sendState(true);
+}
+
+// sendDeviceVolume asks the device program for a level.
+//
+// The device program is the owner of the level, so the request goes over
+// the control socket rather than to the mixer.
+async function sendDeviceVolume(percent) {
+  if (!controlClient?.connected) return false;
+  return controlClient.sendVolume(percent);
 }
 
 // followDeviceMute makes the system microphone follow the device's.
@@ -844,11 +872,12 @@ function followDeviceMute() {
   sentDeviceMute = muted;
   wroteMicMuted = muted;
   micMuted = muted;
-  // The system microphone is the panel's microphone, so it is muted.
-  withMuteLock(async () => {
-    await setSystemMicMuted(muted);
-    sendState(true);
-  });
+  // The system microphone is not written.
+  //
+  // On the Echo Show 8 the mute is a hardware latch and the device
+  // program has already moved it: the state it reports is the latch's
+  // own position. The mixer is not where the microphone is cut.
+  sendState(true);
 }
 
 // followMicMute makes the device follow the system microphone.
@@ -876,7 +905,6 @@ function followMicMute(muted) {
 async function setMute(muted) {
   const value = Boolean(muted);
   await withMuteLock(async () => {
-    await setSystemMicMuted(value);
     // What the panel wrote and what it told the device are remembered,
     // so that neither is taken for a change from outside.
     //
@@ -885,13 +913,18 @@ async function setMute(muted) {
     // old value and take it for a change from outside — and undo it.
     wroteMicMuted = value;
     sentDeviceMute = value;
-    micMuted = value;
     // The device program owns the microphone, so it is told to be quiet.
     //
     // It is told rather than done here, so that Home Assistant's switch
     // and the microphone are the same thing: the switch is what Home
     // Assistant reads, and the microphone is what it means.
+    //
+    // On the Echo Show 8 the mute is a hardware latch, so the device
+    // program moves the latch and the latch says where it ended up. The
+    // mixer is not written: the microphone is cut at the board, and there
+    // is no mixer control for it.
     if (controlClient) controlClient.sendMute(value);
+    micMuted = value;
     // The drawer shows the mute, so it has to be told.
     sendState(true);
   });
@@ -943,7 +976,18 @@ async function handleCommand(command) {
     case "brightness": recordActivity("home-assistant"); setBrightness(command.value); break;
     // A remote volume change (Music Assistant or Home Assistant) is
     // applied to the system mixer, then read back into the panel state.
-    case "volume": recordActivity("home-assistant"); await setVolume(command.value); break;
+    case "volume":
+      recordActivity("home-assistant");
+      // The device program sends the level with a number, and Home
+      // Assistant sends it with a value. They are different directions:
+      // the first is the level being told to us, the second is a level
+      // being asked for.
+      if (typeof command.volume === "number") {
+        followDeviceVolume(command.volume);
+        break;
+      }
+      await setVolume(command.value);
+      break;
     case "notification": recordActivity("home-assistant"); showNotice(command); break;
     case "dismiss_notification": sendToOverlay("app:dismiss-notification"); break;
     case "set_mode":
@@ -1324,7 +1368,21 @@ function createOverlayView() {
   overlayView.setBackgroundColor("#00000000");
   const webContents = overlayView.webContents;
   webContents.loadFile(path.join(__dirname, "ui", "index.html"));
-  webContents.on("did-finish-load", sendState);
+  // The overlay carries the drawer and the touch keyboard, and the drawer is
+  // opened by dragging in from the edge of the screen. The touchscreen is
+  // reported as a mouse, so the drag has to be turned into touch events
+  // first, the way it is for the dashboard. Without this the buttons work
+  // but the drawer cannot be dragged open.
+  webContents.on("did-finish-load", () => {
+    enableTouchEmulation(webContents);
+    // The state is sent once the page is loaded, because a page that is
+    // still loading has nothing listening for it. The fingerprint is
+    // cleared first, so the state is sent even when it has not changed
+    // since the last time: the overlay may have been built after the
+    // state was last sent, and it would otherwise never hear about it.
+    lastSentState = "";
+    sendState();
+  });
   webContents.on("render-process-gone", (_event, details) => {
     if (details.reason === "clean-exit" || webContents.isDestroyed()) return;
     console.error("Panel overlay renderer stopped:", details.reason);

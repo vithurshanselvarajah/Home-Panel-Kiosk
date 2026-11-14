@@ -125,7 +125,7 @@ func startControlPlane(
 		Name:          name,
 		FriendlyName:  board,
 		MAC:           panelMAC(name),
-		Version:       "0.0.2",
+		Version:       "0.0.3",
 		EncryptionKey: key,
 		Registry:      registry,
 		Log:           log,
@@ -172,7 +172,7 @@ func startControlPlane(
 		FriendlyName: board,
 		MAC:          panelMAC(name),
 		Port:         chosen,
-		Version:      "0.0.2",
+		Version:      "0.0.3",
 		ProjectName:  name,
 		Encrypted:    key != "",
 		Addresses:    panelAddresses(),
@@ -556,6 +556,18 @@ func (p *ControlPlane) SendCommand(command ControlCommand) {
 	p.server.SendCommand(command)
 }
 
+// SendVolume tells the panels what the level is.
+//
+// The device program owns the level, and the panels show it, so when it
+// changes — from the physical buttons, or from Home Assistant — they are
+// told and their sliders follow.
+func (p *ControlPlane) SendVolume(level int) {
+	if p.server == nil {
+		return
+	}
+	p.server.SendVolume(level)
+}
+
 // SetCameraEnabled applies the camera preference restored from panel settings.
 func (p *ControlPlane) SetCameraEnabled(enabled bool) {
 	if p.camera == nil {
@@ -754,6 +766,21 @@ func (p *ControlPlane) OnMute() {
 		return
 	}
 	p.server.SetMuteHandler(p.setMuted)
+}
+
+// OnVolume wires the panel's volume to the device program.
+//
+// The level is the device program's, because it applies the level to
+// everything it plays — the reply, the music and the test sound — and a
+// level applied in two places is a level nobody can reason about.
+//
+// So the panel asks for the level and the device program applies it, and
+// the mixer is left alone.
+func (p *ControlPlane) OnVolume(fn func(level int)) {
+	if p.server == nil {
+		return
+	}
+	p.server.SetVolumeHandler(fn)
 }
 
 // OnListen sets what is called when something asks for a turn to
