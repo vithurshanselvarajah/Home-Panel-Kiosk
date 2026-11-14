@@ -9,7 +9,9 @@
 // network at install time.
 
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 
 // The name the device program is installed as.
 const BINARY_NAME = "home-panel-device";
@@ -122,4 +124,70 @@ function findRuntime(architecture) {
   return null;
 }
 
-module.exports = { copySidecar, BINARY_NAME };
+/**
+ * Takes the setuid bit off the Chromium sandbox helper in a package.
+ *
+ * The helper is setuid root, and Chromium re-executes the browser process
+ * through it. That re-execution does not carry the environment over: the
+ * browser process comes up with an empty environment, so it cannot find the
+ * Wayland socket or the session bus, and the panel comes up on a blank
+ * screen.
+ *
+ * Without the setuid bit there is no re-execution and the environment
+ * survives. The panel then runs its own sandbox as an unprivileged user,
+ * which is what the renderer needs anyway.
+ *
+ * The package is built with the bit set, because the packaging helper sets
+ * it whatever the application asks for, so it is taken off afterwards.
+ *
+ * @param {string} packagePath the .deb that was built
+ */
+function clearSandboxSetuid(packagePath) {
+  if (!packagePath.endsWith(".deb")) return;
+
+  const staging = fs.mkdtempSync(path.join(os.tmpdir(), "homepanel-sandbox-"));
+  try {
+    const unpacked = path.join(staging, "unpacked");
+    const unpack = spawnSync("dpkg-deb", ["-R", packagePath, unpacked], {
+      stdio: ["ignore", "ignore", "pipe"],
+      encoding: "utf8",
+    });
+    if (unpack.status !== 0) {
+      console.warn(`the package could not be unpacked: ${packagePath}`);
+      return;
+    }
+
+    const sandbox = path.join(unpacked, "usr/lib/homepanel-kiosk/chrome-sandbox");
+    if (!fs.existsSync(sandbox)) {
+      console.warn(`the Chromium sandbox helper is not in ${packagePath}`);
+      return;
+    }
+
+    const mode = fs.statSync(sandbox).mode & 0o7777;
+    if ((mode & 0o4000) === 0) {
+      console.log(`the sandbox helper in ${packagePath} is not setuid`);
+      return;
+    }
+    fs.chmodSync(sandbox, mode & ~0o4000);
+
+    // The files are put back owned by root, the way the package had them,
+    // without the build needing to be root itself.
+    const rebuild = spawnSync(
+      "dpkg-deb",
+      ["--root-owner-group", "-b", unpacked, packagePath],
+      {
+        stdio: ["ignore", "ignore", "pipe"],
+        encoding: "utf8",
+      }
+    );
+    if (rebuild.status !== 0) {
+      console.warn(`the package could not be rebuilt: ${packagePath}\n${rebuild.stderr}`);
+      return;
+    }
+    console.log(`the setuid bit was taken off the sandbox helper in ${packagePath}`);
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+module.exports = { copySidecar, clearSandboxSetuid, BINARY_NAME };

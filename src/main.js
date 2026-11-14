@@ -21,6 +21,18 @@ const {
 
 const HOSTNAME = hostIdentity(os.hostname());
 
+// The Wayland backend is selected before Electron starts, not through
+// app.commandLine: the ozone platform is chosen while the process is being
+// set up, and a switch added afterwards is too late, so Electron falls back
+// to X11 even though the Wayland socket is there.
+//
+// The switch is added to the command line itself, and the environment is
+// checked for the socket that goes with it. A session that has no Wayland
+// socket keeps the default backend, which is what a desktop with X11 wants.
+if (process.env.WAYLAND_DISPLAY && !process.argv.includes("--ozone-platform=wayland")) {
+  process.argv.push("--ozone-platform=wayland");
+}
+
 const DEFAULTS = {
   configured: false,
   dashboardUrl: "http://homeassistant.local:8123",
@@ -1357,6 +1369,10 @@ function applyDisplayMode() {
 
   if (mode === "fullscreen") {
     if (!win.isFullScreen()) win.setFullScreen(true);
+    // The window is shown in both modes. Leaving it to the default in
+    // fullscreen means a session that was never shown stays that way, and
+    // the panel is then running with nothing on the screen.
+    win.show();
     return;
   }
 
