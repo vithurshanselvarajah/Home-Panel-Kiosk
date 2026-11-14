@@ -52,6 +52,20 @@ function parseAlsa(text) {
   return Number.isFinite(value) ? value : null;
 }
 
+// Athena exposes its speaker as a raw ALSA mixer element rather than the
+// usual simple `Master` control. Convert that element's integer range to
+// the same percentage used by the UI.
+function parseAlsaElement(text) {
+  const range = /max=(-?\d+)/.exec(text || "");
+  const values = /: values=([-\d,]+)/.exec(text || "");
+  if (!range || !values) return null;
+  const maximum = Number(range[1]);
+  const numbers = values[1].split(",").map(Number).filter(Number.isFinite);
+  if (maximum <= 0 || numbers.length === 0) return null;
+  const average = numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+  return Math.round(Math.max(0, Math.min(100, average / maximum * 100)));
+}
+
 // Which mixer is the one, or null when there is none to change.
 //
 // The result is cached, because the tools are found once and a panel that
@@ -117,8 +131,12 @@ async function findMixer() {
 
   // ALSA is the fallback. The master control of the first card is the
   // one, because the panel is talking about the whole machine.
-  const controls = await run("amixer", ["scontrols", "Simple mixer control 'Master'"]);
-  if (controls !== null && /Simple mixer control 'Master'/.test(controls)) {
+  // `scontrols` accepts a card selector, not a mixer-control name. Asking
+  // it to list the control therefore makes ALSA-only systems look as if
+  // they have no mixer. Read the control itself and use amixer's normal
+  // control lookup instead.
+  const controls = await run("amixer", ["sget", "Master"]);
+  if (controls !== null && /\[(\d+)%\]/.test(controls)) {
     mixer = {
       read: async () => parseAlsa(await run("amixer", ["sget", "Master"])),
       write: (percent) => run("amixer", ["sset", "Master", `${percent}%`]),
@@ -131,6 +149,28 @@ async function findMixer() {
         return /\[off\]/.test(answer);
       },
       writeMicMuted: (muted) => run("amixer", ["sset", "Capture", muted ? "off" : "on"]),
+    };
+    return mixer;
+  }
+
+  const athenaMaster = await run("amixer", ["-c", "0", "cget", "name=Master Playback Volume"]);
+  if (athenaMaster !== null && parseAlsaElement(athenaMaster) !== null) {
+    const readRaw = async () => parseAlsaElement(await run("amixer", ["-c", "0", "cget", "name=Master Playback Volume"]));
+    const writeRaw = async (percent) => {
+      const answer = await run("amixer", ["-c", "0", "cget", "name=Master Playback Volume"]);
+      const range = /max=(-?\d+)/.exec(answer || "");
+      if (!range) return null;
+      const raw = Math.round(Number(range[1]) * percent / 100);
+      return run("amixer", ["-q", "-c", "0", "cset", "name=Master Playback Volume", `${raw},${raw}`]);
+    };
+    mixer = {
+      read: readRaw,
+      write: writeRaw,
+      readMicMuted: async () => {
+        const answer = await run("amixer", ["-c", "0", "sget", "Capture"]);
+        return answer === null ? null : /\[off\]/i.test(answer);
+      },
+      writeMicMuted: (muted) => run("amixer", ["-q", "-c", "0", "sset", "Capture", muted ? "off" : "on"]),
     };
     return mixer;
   }

@@ -14,7 +14,8 @@
     "test": "node --test",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "release": "electron-forge release"
+    "release": "electron-forge release",
+    "postinstall": "node tools/patch-debian13-deps.js"
   },
   "dependencies": {
     "qrcode": "^1.5.4"
