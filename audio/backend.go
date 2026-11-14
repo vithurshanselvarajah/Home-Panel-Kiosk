@@ -381,7 +381,16 @@ func (b *Backend) CaptureRaw(ctx context.Context, f CaptureFormat) (RawCapture, 
 		b.setError(err)
 		return nil, err
 	}
-	return &rawCapture{stream: stream, format: f}, nil
+	return newRawCapture(stream, f), nil
+}
+
+// newRawCapture makes a capture in the card's own format.
+//
+// It is here so that the capture is made in one place: the channel it
+// closes when the microphone is released has to be made with it, and a
+// capture made without one panics the moment it is closed.
+func newRawCapture(stream *audioStream, f CaptureFormat) *rawCapture {
+	return &rawCapture{stream: stream, format: f, done: make(chan struct{})}
 }
 
 // rawCapture is a capture in the card's own format.

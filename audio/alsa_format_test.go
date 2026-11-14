@@ -39,6 +39,31 @@ func TestTheSampleFormatsAreALSAsOwn(t *testing.T) {
 	}
 }
 
+// Every capture has to have the channel it closes.
+//
+// The raw capture's channel is closed when the microphone is released,
+// and closing a channel that was never made is a panic that takes the
+// whole program down. It happened: the raw capture was made without its
+// channel, and the panel died when it let go of the microphone.
+//
+// The capture is made by the constructor, so the constructor is what is
+// checked: the one that makes the raw capture is given a stream, and the
+// capture it returns has to have the channel its close needs.
+func TestTheRawCaptureHasTheChannelItCloses(t *testing.T) {
+	// The constructor is reached through the backend, and the backend
+	// opens a device to make one, which a machine with no sound card
+	// cannot do. So the capture is made the way the constructor makes
+	// it, with the channel the constructor has to give it.
+	capture := newRawCapture(&audioStream{}, CaptureFormat{})
+
+	if capture.done == nil {
+		t.Fatal("the raw capture has no channel to close, so closing it panics")
+	}
+	if err := capture.Close(); err != nil {
+		t.Errorf("the raw capture could not be closed: %v", err)
+	}
+}
+
 // The card's capture format is the same in both places.
 //
 // The audio package opens the card in this format to tell a real
