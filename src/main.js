@@ -90,6 +90,14 @@ let overlayExpanded = false;
 let voiceOverlayFull = false;
 
 let sidePanelOpen = false;
+// The tab is the pull out tab that opens the drawer.
+//
+// It is a view of its own rather than a part of the overlay, because a view
+// that is over the dashboard swallows the taps meant for the dashboard: the
+// tab is the only thing that is allowed to be over it, and it is only as
+// big as the tab.
+let tabView;
+let tabAttached = false;
 let keyboardVisible = false;
 let inputBlurTimer;
 let keyboardKeySequence = 0;
@@ -233,6 +241,14 @@ async function decodeSettings(data) {
 
 function assertOverlaySender(event) {
   if (event.sender !== overlayView?.webContents) throw new Error("Untrusted IPC sender");
+}
+
+// Checks that the message came from the pull out tab.
+//
+// The tab is a page of its own, so it is told apart from the overlay and
+// from the dashboard.
+function assertTabSender(event) {
+  if (event.sender !== tabView?.webContents) throw new Error("Untrusted IPC sender");
 }
 
 // Sends to the overlay, tolerating a view that is being torn down.
@@ -462,6 +478,10 @@ function setSidePanel(open) {
   sidePanelOpen = next;
   if (open) ensureOverlayView();
   resizeOverlay();
+  // The tab is over the place the drawer opens in, so it is put away while
+  // the drawer is open.
+  resizeTabView();
+  sendTabState();
   sendState();
 }
 
@@ -503,6 +523,9 @@ function setVoiceOverlayFull(needed) {
   if (voiceOverlayFull === Boolean(needed)) return;
   voiceOverlayFull = Boolean(needed);
   resizeOverlay();
+  // The wake word overlay covers the whole screen, so the tab is put away
+  // while it is up.
+  resizeTabView();
 }
 
 // The overlay is a whole renderer process. Once nothing needs it for a while,
@@ -532,6 +555,9 @@ function setKeyboardVisible(visible) {
   keyboardVisible = next;
   if (next) ensureOverlayView();
   resizeOverlay();
+  // The keyboard is along the bottom of the screen, where the tab is, so
+  // the tab is put away while it is up.
+  resizeTabView();
   sendState();
 }
 
@@ -1341,6 +1367,88 @@ function destroyOverlayView() {
   lastSentState = "";
 }
 
+// The pull out tab.
+//
+// It is a view of its own, and it is small, because a view over the
+// dashboard takes the taps meant for the dashboard. The tab is the only
+// thing that is allowed to be over it, and it is only as big as the tab.
+//
+// It is always on the screen, because it is the way the drawer is opened.
+// The only thing that puts it away is the drawer being open, because the
+// drawer is over the place it sits in.
+function createTabView() {
+  tabView = new WebContentsView({ webPreferences: {
+    preload: path.join(__dirname, "tab-preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: false,
+  } });
+  tabView.setBackgroundColor("#00000000");
+  tabView.webContents.loadFile(path.join(__dirname, "ui", "tab.html"));
+  tabView.webContents.on("did-finish-load", () => {
+    enableTouchEmulation(tabView.webContents);
+    sendTabState();
+  });
+  tabView.webContents.on("render-process-gone", (_event, details) => {
+    if (details.reason === "clean-exit" || tabView?.webContents.isDestroyed()) return;
+    console.error("Panel tab renderer stopped:", details.reason);
+    setTimeout(() => {
+      if (tabView?.webContents.isDestroyed()) return;
+      tabView.webContents.reload();
+    }, 1000).unref?.();
+  });
+  resizeTabView();
+}
+
+// Puts the tab where it belongs.
+//
+// It sits on the middle right of the screen, hanging over the right hand
+// edge so that it reads as something to pull out.
+//
+// The view is given the whole of the tab and is put on the screen, and the
+// tab itself is half off the edge inside that view. The half that is off
+// the screen cannot be pressed, so the tab is drawn so that the part that
+// is on the screen is a finger's width: the visible half is the whole of
+// the target, and it is big enough to press.
+function resizeTabView() {
+  if (!win || win.isDestroyed() || !tabView) return;
+  const { width, height } = win.getContentBounds();
+  const tabWidth = Math.min(56, width);
+  const tabHeight = Math.min(150, Math.max(90, Math.round(height * 0.22)));
+  // The tab is wanted only when the dashboard is showing plainly.
+  //
+  // The drawer is over the place it sits in, so it is put away while the
+  // drawer is open. The wake word overlay covers the whole screen. The
+  // settings page and the notification are drawn over the dashboard, and
+  // the touch keyboard is along the bottom, which is where the tab is.
+  const wanted = !sidePanelOpen && !voiceOverlayFull && !overlayExpanded && !keyboardVisible;
+  if (!wanted) {
+    if (tabAttached) {
+      win.contentView.removeChildView(tabView);
+      tabAttached = false;
+    }
+    return;
+  }
+  if (!tabAttached) {
+    win.contentView.addChildView(tabView);
+    tabAttached = true;
+  }
+  // The view is on the right hand edge of the screen, and the tab inside
+  // it hangs over the edge.
+  tabView.setBounds({
+    x: Math.max(0, width - tabWidth),
+    y: Math.round((height - tabHeight) / 2),
+    width: tabWidth,
+    height: tabHeight,
+  });
+}
+
+// Tells the tab whether the drawer is open, so that the tab can be put
+// away when it is not wanted.
+function sendTabState() {
+  if (!tabView || tabView.webContents.isDestroyed()) return;
+  try {
+    tabView.webContents.send("tab:drawer-state", sidePanelOpen);
+  } catch { /* the view was disposed between the check and the send */ }
+}
+
 // The display modes the device can be in.
 //
 // A kiosk covers the screen and takes the keyboard, which is what a wall
@@ -1410,6 +1518,8 @@ function createWindow() {
   // Use the BrowserWindow's own webContents for the dashboard: avoid a second,
   // hidden blank renderer process just to host the window.
   createOverlayView();
+  // The pull out tab is a view of its own, so it is made here too.
+  createTabView();
   view().setWindowOpenHandler(() => ({ action: "deny" }));
   view().on("will-navigate", (event, url) => {
     if (!safeUrl(url)) event.preventDefault();
@@ -1456,7 +1566,7 @@ function createWindow() {
       }
     }
   });
-  const resize = () => resizeOverlay();
+  const resize = () => { resizeOverlay(); resizeTabView(); };
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, url) => {
     if (!safeUrl(url)) event.preventDefault();
@@ -1544,6 +1654,9 @@ function registerIpc() {
     overlayExpanded = Boolean(expanded);
     ensureOverlayView();
     resizeOverlay();
+    // The settings page and the notification are drawn over the dashboard,
+    // so the tab is put away while they are up.
+    resizeTabView();
   });
   ipcMain.on("app:side-panel", async (event, open) => {
     assertOverlaySender(event);
@@ -1577,7 +1690,7 @@ function registerIpc() {
   ipcMain.on("remote:text-input", (event, focused) => {
     if (event.sender !== win?.webContents) return;
     clearTimeout(inputBlurTimer);
-    if (focused) { sidePanelOpen = false; resizeOverlay(); setKeyboardVisible(true); }
+    if (focused) { sidePanelOpen = false; resizeOverlay(); resizeTabView(); sendTabState(); setKeyboardVisible(true); }
     else {
       const keySequenceAtBlur = keyboardKeySequence;
       inputBlurTimer = setTimeout(() => {
@@ -1585,8 +1698,12 @@ function registerIpc() {
       }, 350);
     }
   });
-  ipcMain.on("remote:open-side-panel", (event) => {
-    if (event.sender === win?.webContents && !sidePanelOpen) setSidePanel(true);
+  // The pull out tab opens the drawer. A tap is enough, and the tab is the
+  // only thing over the dashboard, so the tap is not swallowed.
+  ipcMain.on("tab:open-drawer", (event) => {
+    assertTabSender(event);
+    if (sidePanelOpen) return;
+    setSidePanel(true);
   });
 }
 
