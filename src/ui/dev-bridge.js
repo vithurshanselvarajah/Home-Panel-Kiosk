@@ -104,6 +104,7 @@
     monitorMic: (on) => send("app:monitor-mic", on),
     activity: (source) => notify("app:activity", source),
     setOverlayExpanded: (expanded) => notify("app:overlay-expanded", expanded),
+    setOverlayPopup: (up) => notify("app:overlay-popup", up),
     setSidePanel: (open) => notify("app:side-panel", open),
     setKeyboard: (visible) => notify("app:keyboard", visible),
     setBrightness: (value) => send("app:set-brightness", value),
