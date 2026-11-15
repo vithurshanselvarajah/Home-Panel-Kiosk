@@ -110,8 +110,9 @@ function buildPage() {
     "mode-label", "version-label", "dashboard-action-label", "return-home",
     "slideshow-action", "display-mode-label", "control-state", "immich-state",
     "dashboard-state", "keyboard", "panel", "notice", "notice-title",
-    "notice-message", "mic-mute", "settings-panel", "settings-form",
+    "notice-message", "settings-panel", "settings-form",
     "brightness-value", "volume-value",
+    "mute-indicator", "volume-popup", "volume-popup-fill", "volume-popup-value",
   ]) {
     root.appendChild(element("div", { id }));
   }
@@ -160,11 +161,14 @@ function stateHandler(page) {
   sandbox.bindings = {
     brightnessSlider,
     volumeSlider,
-    micMute: find(page.root, "#mic-mute"),
     brightnessControl: page.brightnessControl,
     volumeControl: page.volumeControl,
     brightnessValue: find(page.root, "#brightness-value"),
     volumeValue: find(page.root, "#volume-value"),
+    volumePopup: find(page.root, "#volume-popup"),
+    volumePopupFill: find(page.root, "#volume-popup-fill"),
+    volumePopupValue: find(page.root, "#volume-popup-value"),
+    muteIndicator: find(page.root, "#mute-indicator"),
     // The slider is drawn by the script's own helper.
     paintSlider: (slider, percent) => {
       if (!slider) return;
@@ -176,9 +180,12 @@ function stateHandler(page) {
   vm.runInContext(
     `const brightnessSlider = bindings.brightnessSlider;` +
     `const volumeSlider = bindings.volumeSlider;` +
-    `const micMute = bindings.micMute;` +
     `const brightnessValue = bindings.brightnessValue;` +
     `const volumeValue = bindings.volumeValue;` +
+    `const volumePopup = bindings.volumePopup;` +
+    `const volumePopupFill = bindings.volumePopupFill;` +
+    `const volumePopupValue = bindings.volumePopupValue;` +
+    `const muteIndicator = bindings.muteIndicator;` +
     `const paintSlider = bindings.paintSlider;` +
     `const brightnessControl = bindings.brightnessControl;` +
     `const volumeControl = bindings.volumeControl;` +

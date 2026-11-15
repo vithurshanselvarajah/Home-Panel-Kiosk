@@ -187,7 +187,12 @@ test("the play button pauses what is playing", () => {
 
   sandbox.paintMedia(playingState());
 
-  assert.equal(page.play.textContent, "⏸", "the button does not show the pause sign");
+  // The signs are drawings rather than characters: the device's fonts
+  // have no pause sign, so a typed one is a blank box.
+  assert.ok(
+    page.play.innerHTML.includes("<svg"),
+    "the button does not show the pause sign",
+  );
   assert.equal(page.play.dataset.transport, "pause", "the button does not send pause");
 
   press(page.play);
@@ -203,7 +208,7 @@ test("the play button plays what is paused", () => {
 
   sandbox.paintMedia({ ...playingState(), music_playing: false });
 
-  assert.equal(page.play.textContent, "▶", "the button does not show the play sign");
+  assert.ok(page.play.innerHTML.includes("<svg"), "the button does not show the play sign");
   assert.equal(page.play.dataset.transport, "play", "the button does not send play");
 
   press(page.play);
@@ -237,7 +242,7 @@ test("the wait ends when the music starts", () => {
   sandbox.paintMedia(playingState());
 
   assert.ok(!page.play.classList.contains("is-loading"), "the button is still waiting");
-  assert.equal(page.play.textContent, "⏸", "the button does not show the music");
+  assert.ok(page.play.innerHTML.includes("<svg"), "the button does not show the pause sign");
 });
 
 test("the wait ends by itself when the music never comes", () => {
@@ -253,7 +258,7 @@ test("the wait ends by itself when the music never comes", () => {
   timers[timers.length - 1]();
 
   assert.ok(!page.play.classList.contains("is-loading"), "the button is still waiting for ever");
-  assert.equal(page.play.textContent, "▶", "the button did not go back to the play sign");
+  assert.ok(page.play.innerHTML.includes("<svg"), "the button did not go back to the play sign");
 });
 
 test("the wait does not follow the wrong music", () => {
