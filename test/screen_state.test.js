@@ -223,9 +223,55 @@ test("a notification turns the screen on", () => {
   const start = main.indexOf("function showNotice(");
   const body = main.slice(start, start + 600);
   assert.ok(
-    body.includes("turnDisplayOn();"),
+    body.includes("wakeScreen();"),
     "a notice arrives on a screen that is dark",
   );
+});
+
+test("a tap turns the screen on when it is off", () => {
+  // The screen is off and the panel is still there: the brightness only
+  // controls the PWM, and the touch controller does not know anything
+  // about it. So a person who taps a dark screen means to wake it.
+  assert.ok(
+    main.includes("function wakeOnTouch()"),
+    "there is nothing that turns the screen on for a tap",
+  );
+});
+
+test("a tap wakes the screen the way the switch in Home Assistant does", () => {
+  // The same way, so the brightness control still works afterwards: the
+  // screen comes on with the relight the panel needs.
+  const tap = main.indexOf("function wakeOnTouch()");
+  const tapBody = main.slice(tap, tap + 400);
+  assert.ok(
+    tapBody.includes("wakeScreen();"),
+    "a tap does not use the screen's own way of coming on",
+  );
+
+  // And the switch in Home Assistant uses it too.
+  const homeAssistant = main.indexOf('case "wake": {');
+  const command = main.slice(homeAssistant, homeAssistant + 200);
+  assert.ok(
+    command.includes("wakeScreen();"),
+    "the switch in Home Assistant does not use the screen's own way of coming on",
+  );
+});
+
+test("the screen is only woken when it is off", () => {
+  // A tap on a screen that is working is a tap on whatever is under it.
+  const start = main.indexOf("function wakeScreen()");
+  const body = main.slice(start, start + 500);
+  assert.ok(
+    body.includes("if (!off) return;"),
+    "the screen is woken even when it is already on",
+  );
+});
+
+test("every view that can be on top wakes the screen", () => {
+  // The main view, the overlay and the tab are the views that take a
+  // touch, and which one is on top depends on what is showing.
+  const wakes = main.match(/if \(input\.type === "mouseDown"\) wakeOnTouch\(\);/g) || [];
+  assert.equal(wakes.length, 3, "the screen is not woken from every view that takes a touch");
 });
 
 test("the screen comes back with the relight the panel needs", () => {
