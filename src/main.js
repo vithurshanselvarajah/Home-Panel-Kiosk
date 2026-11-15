@@ -757,32 +757,30 @@ const RELIGHT_HOLD_MS = 10;
 // the PWM has not been seen running, and the first one written is
 // treated as a light coming back on.
 //
-// The driver knows this better than the panel does: it says in
-// /sys/class/backlight/<backlight>/bl_power whether the backlight is
-// powered (0) or off (4). The brightness file does not say: it holds
-// the level that was last asked for, which is not the level the light
-// is at once the backlight has been switched off. And the backlight can
-// be switched off from outside the panel — the display driver does it
-// when the panel is blanked — so the driver is asked rather than
-// guessed at.
+// It is read rather than kept, so a backlight that was switched off
+// from outside the panel is seen as off. The display driver switches
+// it off when it blanks the panel, and the panel's own off takes the
+// brightness to zero, and neither of those is the panel's doing.
 let backlightIsOff = true;
 
-// backlightIsPowered reads the driver's own answer to whether the
-// backlight is on.
+// backlightIsPowered says whether the backlight is lit.
 //
 // It is read from the driver rather than kept, so a backlight that was
-// switched off from outside the panel is seen as off. A driver that
-// does not say (no bl_power file) is taken to be on, which is the
-// driver's own default.
+// switched off from outside the panel is seen as off.
 function backlightIsPowered() {
-  try {
-    for (const device of fsSync.readdirSync("/sys/class/backlight")) {
-      const file = path.join("/sys/class/backlight", device, "bl_power");
-      if (!fsSync.existsSync(file)) continue;
-      const power = Number(fsSync.readFileSync(file, "utf8"));
-      if (Number.isFinite(power)) return power === 0;
-    }
-  } catch { /* no backlight to read */ }
+  // The level is the answer, not the driver's power attribute.
+  //
+  // bl_power says whether the backlight has been powered off through
+  // the backlight class, and the display driver does that when it
+  // blanks the panel. But a panel that is turned off by taking the
+  // brightness to zero — which is how this one is turned off — leaves
+  // bl_power at "on": the driver switches the PWM off without touching
+  // the class's power state. So the attribute said "on" while the
+  // screen was dark.
+  //
+  // The level is the truth: a backlight at zero is a dark screen.
+  const level = backlightRawLevel();
+  if (level !== null) return level > 0;
   return !backlightIsOff;
 }
 
@@ -1049,8 +1047,8 @@ const screenWatchInterval = 400;
 // screen dark from a keyboard. None of those go through the panel, so
 // the panel's own answer went on saying the screen was on.
 //
-// The backlight's driver knows: it says in bl_power whether the
-// backlight is powered or off. So the screen's state is read from
+// The backlight's level is the answer: a backlight at zero is a dark
+// screen, whoever turned it off. So the screen's state is read from
 // there, and published.
 //
 // It only follows. The screen is not turned off because the backlight

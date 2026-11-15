@@ -31,9 +31,9 @@ const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
 // The driver's answer about the backlight is in it, because the watcher
 // asks for it.
 function screenSource() {
-  const start = main.indexOf("// backlightIsPowered reads the driver's own answer");
+  const start = main.indexOf("// backlightIsPowered says whether the backlight is lit.");
   const end = main.indexOf("// systemVolume is the volume of the mixer.");
-  assert.ok(start > 0, "the driver is not asked about the backlight");
+  assert.ok(start > 0, "the backlight's state is not read");
   assert.ok(end > start, "the screen's watcher is not where it should be");
   return main.slice(start, end);
 }
@@ -57,17 +57,18 @@ function harness({ powered = true, brightness = 500, level = 100 } = {}) {
   const states = [];
   let isPowered = powered;
   let current = brightness;
+  // The level and the light are the same thing: a backlight at zero is
+  // a dark screen. The level is what the driver is asked about.
+  if (!powered) current = 0;
 
   const sandbox = {
     fsSync: {
       readdirSync: () => ["backlight-lcd0"],
       readFileSync: (file) => {
         if (file.endsWith("max_brightness")) return "1023";
-        if (file.endsWith("bl_power")) return isPowered ? "0" : "4";
         if (file.endsWith("brightness")) return String(current);
         return "0";
       },
-      existsSync: (file) => file.endsWith("bl_power"),
     },
     fs: {
       writeFile: async (file, content) => {
@@ -104,7 +105,7 @@ function harness({ powered = true, brightness = 500, level = 100 } = {}) {
     written,
     states,
     // The backlight's own answer, for a test to change.
-    setPowered: (on) => { isPowered = on; },
+    setPowered: (on) => { isPowered = on; current = on ? current || 500 : 0; },
     isPowered: () => isPowered,
     brightness: () => current,
     // The panel's own answer. The script's variables live in the
@@ -145,6 +146,29 @@ test("a screen that goes off on its own is noticed", () => {
   screen.watchScreen();
 
   assert.equal(screen.displayIsOff(), true, "the screen went off and the panel did not notice");
+});
+
+test("a backlight at zero is a screen that is off", () => {
+  // The driver's power attribute is not the answer.
+  //
+  // bl_power says whether the backlight was powered off through the
+  // backlight class, and the display driver does that when it blanks
+  // the panel. But a panel that is turned off by taking the brightness
+  // to zero — which is how this one is turned off — leaves bl_power at
+  // "on": the driver switches the PWM off without touching the class's
+  // power state.
+  //
+  // So the level is what says, and the attribute is not asked.
+  // The attribute is not read: only the comment that explains why not.
+  const code = main.replace(/\/\/[^\n]*/g, "");
+  assert.ok(
+    !code.includes("bl_power"),
+    "the screen's state is read from an attribute that does not say",
+  );
+  assert.ok(
+    main.includes("const level = backlightRawLevel();"),
+    "the screen's state is not read from the level",
+  );
 });
 
 test("the screen's state is watched for as long as the panel runs", () => {
