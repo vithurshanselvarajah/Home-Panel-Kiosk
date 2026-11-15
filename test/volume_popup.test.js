@@ -33,6 +33,24 @@ test("the popup is on the screen", () => {
   );
 });
 
+test("the popup is not raised by something that is not the volume", () => {
+  // The mute button changes the state, and the state carries the level
+  // with it — so the renderer sees the level and raises the popup, and
+  // the mute indicator and the volume popup are on the screen together.
+  //
+  // The popup is raised when the level is one the popup does not
+  // already show, and a level that is the one it is showing raises
+  // nothing.
+  assert.ok(
+    renderer.includes("if (volumePopup && state.volume !== lastPopupVolume) {"),
+    "the popup is raised whatever the state says",
+  );
+  assert.ok(
+    !renderer.includes("if (volumePopup && volumePopup.hidden) showVolumePopup(state.volume);"),
+    "the popup is raised whenever it happens to be down",
+  );
+});
+
 test("the popup is on the main screen and not only in the drawer", () => {
   // The popup is drawn in the overlay view, and the overlay view is
   // taken off the screen when nothing in it is showing. So the main
