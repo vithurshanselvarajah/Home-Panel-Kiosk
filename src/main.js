@@ -289,6 +289,62 @@ function sendDeviceState() {
   if (!deviceClient) return;
   const state = deviceClient.state;
   sendToOverlay("app:device", state);
+  watchTheOverlay(state);
+}
+
+// The overlay watchdog.
+//
+// The voice overlay is drawn by the renderer, from the device's state.
+// The renderer tells this process when the overlay is up, so that the
+// view can be sized to cover the screen.
+//
+// That telling can be lost: the renderer may have been built after the
+// state was sent, and a state that arrives at a page that is not
+// listening yet is a state nobody saw. The overlay then does not come
+// up, and the panel sits there saying nothing while the assistant is
+// answering.
+//
+// So this process watches the state itself. When the state says the
+// voice is happening and the renderer has not said the overlay is up,
+// the state is sent again — the renderer gets a second chance, and the
+// overlay appears.
+//
+// The timer is short, because the thing being watched is a person
+// waiting for an answer, and it stops as soon as the overlay is up.
+const OVERLAY_WATCHDOG_MS = 400;
+
+let overlayWatchdogTimer = null;
+
+// watchTheOverlay watches for an overlay that did not come up.
+function watchTheOverlay(state) {
+  if (!overlayWanted(state)) {
+    clearTimeout(overlayWatchdogTimer);
+    overlayWatchdogTimer = null;
+    return;
+  }
+  // The overlay is up, or the renderer is about to say so.
+  if (voiceOverlayFull) {
+    clearTimeout(overlayWatchdogTimer);
+    overlayWatchdogTimer = null;
+    return;
+  }
+  if (overlayWatchdogTimer) return;
+  overlayWatchdogTimer = setTimeout(() => {
+    overlayWatchdogTimer = null;
+    // The state is sent again. The renderer may not have been listening
+    // the first time, and the state is the only thing it needs.
+    if (overlayWanted(deviceClient?.state)) sendDeviceState();
+  }, OVERLAY_WATCHDOG_MS);
+}
+
+// overlayWanted says whether the state says the overlay belongs on the
+// screen.
+//
+// It is the same rule the renderer draws by: the voice is happening and
+// the microphone is not muted.
+function overlayWanted(state) {
+  if (!state || state.muted) return false;
+  return Boolean(state.speaking || state.thinking || state.listening);
 }
 
 // publishState tells the device program what the panel is doing.
@@ -524,9 +580,15 @@ function resizeOverlay() {
 //
 // The renderer knows when it is up: the overlay is drawn there. The view
 // has to be sized to match, and the view is the main process's.
+//
+// The view is made first when the overlay is wanted, because a view that
+// does not exist cannot be sized and the overlay would be drawn in a
+// strip along the top right rather than over the screen.
 function setVoiceOverlayFull(needed) {
-  if (voiceOverlayFull === Boolean(needed)) return;
-  voiceOverlayFull = Boolean(needed);
+  const next = Boolean(needed);
+  if (voiceOverlayFull === next) return;
+  voiceOverlayFull = next;
+  if (next) ensureOverlayView();
   resizeOverlay();
   // The wake word overlay covers the whole screen, so the tab is put away
   // while it is up.
@@ -578,6 +640,24 @@ function sendKeyboardKey(key) {
   view().sendInputEvent({ type: "keyUp", keyCode });
 }
 
+// The brightness the screen was at before it was turned off.
+//
+// It is remembered because the way the screen is turned off on this
+// device is by taking the backlight to zero, and the level it was at is
+// what it is put back to.
+let brightnessBeforeOff = null;
+
+// runDisplayCommand turns the screen off or on.
+//
+// The screen is powered down with whatever the machine has: wlopm,
+// kscreen-doctor or xset. A machine with none of them — this one — has
+// no way to power the panel off, so the backlight is used instead: the
+// screen goes dark, which is what turning it off means to a person
+// standing in front of it.
+//
+// The backlight is the fallback rather than the only way, because the
+// backlight is not the screen: a panel with a display that can be
+// powered down should be powered down, so that it draws nothing at all.
 function runDisplayCommand(operation) {
   const requestId = ++displayCommandId;
   requestedDisplayStatus = operation;
@@ -586,8 +666,11 @@ function runDisplayCommand(operation) {
     : [["wlopm", ["--on", "*"]], ["kscreen-doctor", ["--dpms", "on"]], ["xset", ["dpms", "force", "on"]]];
   const tryNext = (index) => {
     if (index >= candidates.length) {
-      if (requestId === displayCommandId) requestedDisplayStatus = null;
-      showNotice({ title: "Display control unavailable", message: "No supported display power command succeeded." });
+      // None of them worked, so the backlight is the way.
+      if (requestId === displayCommandId) {
+        requestedDisplayStatus = null;
+        setBacklightOff(operation === "off");
+      }
       return;
     }
     const [command, args] = candidates[index];
@@ -602,6 +685,57 @@ function runDisplayCommand(operation) {
     });
   };
   tryNext(0);
+}
+
+// setBacklightOff turns the screen dark by taking the backlight to zero,
+// and puts it back where it was.
+//
+// The level it was at is remembered, because a screen that comes back
+// dark is a screen that looks broken.
+//
+// The level is published as the brightness, so that Home Assistant sees
+// a screen that is off rather than a screen that is at zero: a person
+// reading the entity should not think the brightness has been turned
+// down when the screen is merely off.
+async function setBacklightOff(off) {
+  if (off) {
+    const level = currentBrightness();
+    if (level === null || level === 0) {
+      // It is already dark, so there is nothing to remember.
+      displayIsOff = true;
+      sendState();
+      return;
+    }
+    brightnessBeforeOff = level;
+    await writeBacklight(0);
+    displayIsOff = true;
+    sendState();
+    return;
+  }
+  const level = brightnessBeforeOff;
+  brightnessBeforeOff = null;
+  // A screen that comes back at the level it was at is a screen that
+  // looks like it never went off.
+  await writeBacklight(level === null || level <= 0 ? 60 : level);
+  displayIsOff = false;
+  sendState();
+}
+
+// writeBacklight sets the backlight to a percentage.
+async function writeBacklight(percent) {
+  try {
+    const devices = await fs.readdir("/sys/class/backlight");
+    for (const device of devices) {
+      const root = path.join("/sys/class/backlight", device);
+      const maximum = Number(await fs.readFile(path.join(root, "max_brightness"), "utf8"));
+      if (!maximum) continue;
+      await fs.writeFile(path.join(root, "brightness"), String(Math.round(maximum * percent / 100)));
+      return true;
+    }
+  } catch (error) {
+    console.warn("Backlight control unavailable:", error.message);
+  }
+  return false;
 }
 
 function turnDisplayOff() {
@@ -622,13 +756,24 @@ function turnDisplayOn() {
 // The backlight is the truth: the panel may have been dimmed by something
 // else, or the setting may not have been applied. Reading it back means
 // the drawer never claims a brightness the screen is not at.
+//
+// A screen that has been turned off is the exception. It is turned off
+// by taking the backlight to zero on this device, so the backlight says
+// zero while the screen is off — and a brightness of zero published to
+// Home Assistant is a brightness that comes straight back as a command.
+// So the level the screen was at is published instead, which is the
+// truth about the setting, as opposed to the truth about the light.
 function currentBrightness() {
   try {
     for (const device of fsSync.readdirSync("/sys/class/backlight")) {
       const root = path.join("/sys/class/backlight", device);
       const maximum = Number(fsSync.readFileSync(path.join(root, "max_brightness"), "utf8"));
       const value = Number(fsSync.readFileSync(path.join(root, "brightness"), "utf8"));
-      if (maximum && Number.isFinite(value)) return Math.round((value / maximum) * 100);
+      if (maximum && Number.isFinite(value)) {
+        const percent = Math.round((value / maximum) * 100);
+        if (percent === 0 && brightnessBeforeOff !== null) return brightnessBeforeOff;
+        return percent;
+      }
     }
   } catch { /* no backlight to read */ }
   return null;
@@ -722,24 +867,16 @@ function watchVolume() {
 // ended up. A watch would only ever race them: the panel would read a
 // value the device program had not applied yet and undo the change.
 async function watchTick() {
-    // The whole reading is under the lock, and not just the part that
-    // changes things. A reading that happens while the button is
-    // writing sees the value from before the write, and takes it for a
-    // change from outside — which is a mute that turns itself off.
-    await withMuteLock(async () => {
-      // The device program's own state says where the microphone's mute
-      // is, and it is the latch's position on the Echo Show 8.
-      const muted = deviceClient?.state?.muted;
-      if (typeof muted !== "boolean") return;
-      // The panel's own change is not a change from outside, and it has
-      // already been sent.
-      if (muted === micMuted) return;
-      micMuted = muted;
-      // The microphone muted by something else turns the device's switch
-      // on, so that Home Assistant shows what is really happening.
-      followMicMute(muted);
-      sendState(true);
-    });
+    // The device program's own state says where the microphone's mute
+    // is, and it is the latch's position on the Echo Show 8. The latch
+    // is moved by the button on the unit and by nothing else, so this
+    // only ever follows: the panel cannot switch the mute, and so there
+    // is no write here to race with.
+    const muted = deviceClient?.state?.muted;
+    if (typeof muted !== "boolean") return;
+    if (muted === micMuted) return;
+    micMuted = muted;
+    sendState(true);
 }
 
 // stopWatchingVolume stops following the mixer.
@@ -765,8 +902,21 @@ function stopWatchingVolume() {
 const volumeWatchInterval = 1000;
 
 async function setBrightness(value) {
-  const percent = Math.max(0, Math.min(100, Number(value)));
+  const percent = Math.max(0, Math.min(100, Math.round(Number(value))));
   if (!Number.isFinite(percent)) return;
+  // A brightness the screen is already at is not a change.
+  //
+  // This is what stops the brightness from wedging itself at zero. The
+  // panel tells Home Assistant the brightness, Home Assistant sends its
+  // number entities back as commands, and so a brightness of zero came
+  // back as a command for a brightness of zero, over and over. The
+  // slider could be moved and the screen would go straight back to
+  // black, which on a screen that is already black looks like the
+  // slider is broken.
+  //
+  // The backlight is the truth, so the comparison is against it and not
+  // against what was last asked for.
+  if (currentBrightness() === percent) return;
   try {
     const devices = await fs.readdir("/sys/class/backlight");
     for (const device of devices) {
@@ -851,10 +1001,13 @@ async function sendDeviceVolume(percent) {
 // the panel mutes the microphone, the device says it is muted, the panel
 // sees that it said so itself and does nothing.
 //
-// sentDeviceMute is what the panel last told the device, and
-// wroteMicMuted is what it last wrote to the mixer.
-let sentDeviceMute = null;
-let wroteMicMuted = null;
+// The mute is the hardware latch's, and only the button on top of the
+// unit moves it. The latch is one-way from software: the button is also
+// the only thing that releases it. So the panel does not switch the
+// mute, and there is nothing here to remember about a change it made.
+//
+// What it does is follow the latch, so that the indicator on the screen
+// says where the microphones really are.
 
 // The mute is changed in one place at a time.
 //
@@ -867,10 +1020,7 @@ let muteLock = null;
 function followDeviceMute() {
   const muted = deviceClient?.state?.muted;
   if (typeof muted !== "boolean") return;
-  // A change the panel made itself is not a change to follow.
-  if (muted === sentDeviceMute) return;
-  sentDeviceMute = muted;
-  wroteMicMuted = muted;
+  if (muted === micMuted) return;
   micMuted = muted;
   // The system microphone is not written.
   //
@@ -878,56 +1028,6 @@ function followDeviceMute() {
   // program has already moved it: the state it reports is the latch's
   // own position. The mixer is not where the microphone is cut.
   sendState(true);
-}
-
-// followMicMute makes the device follow the system microphone.
-//
-// A microphone muted by something else — the keyboard's mute key, a
-// desktop's own control — turns the device's switch on, so that Home
-// Assistant shows what is really happening.
-function followMicMute(muted) {
-  // A change the panel made itself is not a change to follow.
-  if (muted === wroteMicMuted) return;
-  wroteMicMuted = muted;
-  sentDeviceMute = muted;
-  micMuted = muted;
-  if (controlClient) controlClient.sendMute(muted);
-}
-
-// setMute mutes the microphone, or unmutes it.
-//
-// The mute is the microphone's, because the microphone is what the
-// mute button is next to: the panel's own microphone, so the room
-// stops hearing the person in front of it.
-//
-// It is best effort: a machine with no mixer is not a failure, it is a
-// machine whose microphone cannot be muted from here.
-async function setMute(muted) {
-  const value = Boolean(muted);
-  await withMuteLock(async () => {
-    // What the panel wrote and what it told the device are remembered,
-    // so that neither is taken for a change from outside.
-    //
-    // They are remembered after the write, not before it, because a
-    // reading that happens while the write is on its way would see the
-    // old value and take it for a change from outside — and undo it.
-    wroteMicMuted = value;
-    sentDeviceMute = value;
-    // The device program owns the microphone, so it is told to be quiet.
-    //
-    // It is told rather than done here, so that Home Assistant's switch
-    // and the microphone are the same thing: the switch is what Home
-    // Assistant reads, and the microphone is what it means.
-    //
-    // On the Echo Show 8 the mute is a hardware latch, so the device
-    // program moves the latch and the latch says where it ended up. The
-    // mixer is not written: the microphone is cut at the board, and there
-    // is no mixer control for it.
-    if (controlClient) controlClient.sendMute(value);
-    micMuted = value;
-    // The drawer shows the mute, so it has to be told.
-    sendState(true);
-  });
 }
 
 // withMuteLock does one thing with the mute at a time.
@@ -1382,6 +1482,16 @@ function createOverlayView() {
     // state was last sent, and it would otherwise never hear about it.
     lastSentState = "";
     sendState();
+    // The device's state is sent as well, and for the same reason.
+    //
+    // The voice overlay is drawn from the device's state and from
+    // nothing else, so an overlay that was built after the device last
+    // changed would sit there blank until the device happened to change
+    // again — which, when the device is already talking, is when the
+    // answer is over. The overlay was built because the voice started,
+    // so the state that says the voice started is exactly the state the
+    // new overlay needs.
+    sendDeviceState();
   });
   webContents.on("render-process-gone", (_event, details) => {
     if (details.reason === "clean-exit" || webContents.isDestroyed()) return;
@@ -1743,7 +1853,6 @@ function registerIpc() {
   ipcMain.on("app:keyboard", (event, visible) => { assertOverlaySender(event); setKeyboardVisible(visible); });
   ipcMain.handle("app:set-brightness", (event, value) => { assertOverlaySender(event); return setBrightness(value); });
   ipcMain.handle("app:set-volume", (event, value) => { assertOverlaySender(event); return setVolume(value); });
-  ipcMain.handle("app:set-mute", (event, value) => { assertOverlaySender(event); return setMute(value); });
   ipcMain.on("app:keyboard-key", (event, key) => { assertOverlaySender(event); sendKeyboardKey(key); });
   ipcMain.on("remote:text-input", (event, focused) => {
     if (event.sender !== win?.webContents) return;

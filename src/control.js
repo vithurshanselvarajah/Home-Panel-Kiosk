@@ -225,23 +225,6 @@ class ControlClient {
   /**
    * Asks the device program to mute the microphone.
    *
-   * The mute is the microphone's, and the device program owns the
-   * microphone, so the panel asks for it rather than doing it itself.
-   *
-   * @param {boolean} muted whether the microphone is muted
-   * @returns {boolean} whether the request was sent
-   */
-  sendMute(muted) {
-    if (!this.connection || !this.connected) return false;
-    try {
-      this.connection.write(`${JSON.stringify({ action: "mute", muted: Boolean(muted) })}\n`);
-      return true;
-    } catch (error) {
-      this.onLog(`the mute could not be sent: ${error.message}`);
-      return false;
-    }
-  }
-
   sendTransport(command) {
     if (!this.connection || !this.connected) return false;
     try {

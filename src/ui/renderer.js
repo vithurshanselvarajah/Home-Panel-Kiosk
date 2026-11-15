@@ -513,11 +513,14 @@ if (voiceForm) {
 
 const brightnessSlider = $("#brightness-slider");
 const volumeSlider = $("#volume-slider");
-const micMute = $("#mic-mute");
 const brightnessValue = $("#brightness-value");
 const volumeValue = $("#volume-value");
 const brightnessControl = $("#brightness-control");
 const volumeControl = $("#volume-control");
+const volumePopup = $("#volume-popup");
+const volumePopupFill = $("#volume-popup-fill");
+const volumePopupValue = $("#volume-popup-value");
+const muteIndicator = $("#mute-indicator");
 
 // paintSlider draws a slider at a value.
 //
@@ -543,18 +546,57 @@ function paintVolume(value) {
 
 // paintMute shows whether the microphone is muted.
 //
-// The microphone and not the speaker: a person who mutes the panel
-// wants the room to stop hearing them, and they still want to hear the
-// music.
+// The microphone and not the speaker: a person who mutes the panel wants
+// the room to stop hearing them, and they still want to hear the music.
 //
-// The button is green when the microphone is open and red when it is
-// muted, so the state is seen rather than read.
+// It is an indicator and not a control. The mute is a hardware latch on
+// this board, and the button on top of the unit is the only thing that
+// moves it — the latch is one-way from software — so the screen says
+// where the latch is and nothing more.
+//
+// It is shown without the drawer being open, because a muted device that
+// only says so inside a drawer is a device that looks live.
 function paintMute(muted) {
-  if (!micMute) return;
+  if (!muteIndicator) return;
   const on = Boolean(muted);
-  micMute.classList.toggle("is-muted", on);
-  micMute.setAttribute("aria-pressed", String(on));
-  micMute.setAttribute("aria-label", on ? "Unmute the microphone" : "Mute the microphone");
+  muteIndicator.hidden = !on;
+  // The transition needs a frame between showing it and sliding it in,
+  // or the slide is not seen.
+  if (on) requestAnimationFrame(() => muteIndicator.classList.add("is-visible"));
+  else muteIndicator.classList.remove("is-visible");
+}
+
+// The volume popup.
+//
+// It comes down from the top when the level changes and goes away again
+// on its own. The level is changed with the buttons on the unit, and a
+// person holding the device cannot see the drawer, so this is where the
+// change is said out loud.
+//
+// The timer is restarted on every change rather than set once, so a run
+// of presses keeps the popup up for as long as the presses go on.
+let volumePopupTimer = null;
+
+function showVolumePopup(value) {
+  if (!volumePopup) return;
+  const percent = Math.max(0, Math.min(100, Math.round(value)));
+  if (volumePopupFill) volumePopupFill.style.width = `${percent}%`;
+  if (volumePopupValue) volumePopupValue.textContent = String(percent);
+  volumePopup.hidden = false;
+  requestAnimationFrame(() => volumePopup.classList.add("is-visible"));
+  clearTimeout(volumePopupTimer);
+  volumePopupTimer = setTimeout(hideVolumePopup, 2200);
+}
+
+function hideVolumePopup() {
+  if (!volumePopup) return;
+  volumePopup.classList.remove("is-visible");
+  clearTimeout(volumePopupTimer);
+  // The element is hidden after the slide, or the next change would
+  // have nothing to animate from.
+  volumePopupTimer = setTimeout(() => {
+    if (!volumePopup.classList.contains("is-visible")) volumePopup.hidden = true;
+  }, 220);
 }
 
 // The slider is set on release rather than on every movement, because a
@@ -577,19 +619,10 @@ bindSlider(brightnessSlider, (value) => {
 bindSlider(volumeSlider, (value) => {
   paintVolume(value);
   window.homePanel.setVolume(value);
+  // The popup is for the buttons on the unit, but a person moving the
+  // slider wants to see the level too, and it is the same thing.
+  showVolumePopup(value);
 });
-
-// The mute button mutes the microphone, or unmutes it.
-//
-// The microphone and not the speaker: a person who mutes the panel
-// wants the room to stop hearing them, and they still want to hear the
-// music.
-if (micMute) {
-  micMute.addEventListener("click", () => {
-    const muted = micMute.getAttribute("aria-pressed") !== "true";
-    window.homePanel.setMute(muted);
-  });
-}
 
 // ── The music ─────────────────────────────────────────────────────────────
 //
@@ -611,6 +644,15 @@ const mediaPosition = $("#media-position");
 const mediaElapsed = $("#media-elapsed");
 const mediaDuration = $("#media-duration");
 const mediaPlay = $("#media-play");
+
+// The play and pause signs.
+//
+// They are drawn rather than typed. The device has DejaVu's fonts and
+// nothing else, and DejaVu has no pause sign (U+23F8) and no transport
+// arrows (U+23ED, U+23EE): a character it does not have is a blank box,
+// or nothing at all.
+const playIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5z" fill="currentColor" /></svg>';
+const pauseIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5h3.2v13H8zM12.8 5.5H16v13h-3.2z" fill="currentColor" /></svg>';
 const mediaPrevious = $("#media-previous");
 const mediaNext = $("#media-next");
 
@@ -829,7 +871,10 @@ function paintMedia(state) {
       mediaPlay.setAttribute("aria-label", "Loading");
     } else {
       mediaPlay.classList.remove("is-loading");
-      mediaPlay.textContent = shown.playing ? "⏸" : "▶";
+      // The sign is drawn rather than typed, because the device's fonts
+      // do not have the pause sign — a character it does not have is a
+      // blank box, or nothing at all.
+      mediaPlay.innerHTML = shown.playing ? pauseIcon : playIcon;
       mediaPlay.setAttribute("aria-label", shown.playing ? "Pause" : "Play");
     }
     // The button has to send what it shows. A button that shows the
@@ -922,7 +967,13 @@ window.homePanel.onState((state) => {
   // The brightness and the volume are drawn from the state, so they are
   // right the moment the drawer opens.
   if (typeof state.brightness === "number") paintBrightness(state.brightness);
-  if (typeof state.volume === "number") paintVolume(state.volume);
+  if (typeof state.volume === "number") {
+    paintVolume(state.volume);
+    // A level that came from the device program — the buttons on the
+    // unit — is raised as a popup. The panel's own slider has already
+    // raised it, and raising it twice is only a second animation.
+    if (volumePopup && volumePopup.hidden) showVolumePopup(state.volume);
+  }
   if (typeof state.muted === "boolean") paintMute(state.muted);
   // A control that cannot change anything is hidden rather than shown at
   // a value that would do nothing.
@@ -1105,8 +1156,72 @@ if (voiceUI && window.homePanel.onDeviceState) {
       if (!keyboard.hidden) setKeyboard(false);
       if (!panel.hidden) closeSettings();
     }
+    // The watchdog is told what the state says, so it can put the
+    // overlay up if the state says it should be and it is not.
+    lastDeviceState = state;
+    checkOverlay();
   });
 }
+
+// The watchdog.
+//
+// The overlay is drawn from the device's state, and the state arrives
+// over a socket to a renderer that may have been built after the last
+// change. So the overlay is not guaranteed to appear: a state that
+// arrives at a renderer that is not listening yet is a state nobody
+// saw, and the panel sits there saying nothing while the assistant is
+// answering.
+//
+// The watchdog is the answer to that: it looks at the state it was last
+// given and at what is on the screen, and puts the overlay up if the
+// two disagree.
+//
+// It is deliberately not a timer that redraws everything. It only acts
+// when the state says the voice is happening and the overlay is not
+// there, which is the one case where something is wrong.
+const OVERLAY_WATCHDOG_MS = 250;
+
+let lastDeviceState = null;
+let overlayWatchdogTimer = null;
+
+// overlayShouldBeUp says whether the state says the overlay belongs on
+// the screen.
+//
+// It is the same rule the overlay is drawn by: the voice is happening
+// and the microphone is not muted.
+function overlayShouldBeUp(state) {
+  if (!state || state.muted) return false;
+  return Boolean(state.speaking || state.thinking || state.listening);
+}
+
+// checkOverlay puts the overlay up if the state says it should be there
+// and it is not.
+function checkOverlay() {
+  if (!voiceUI || !voiceUI.overlay) return;
+  const shouldBeUp = overlayShouldBeUp(lastDeviceState);
+  const isUp = !voiceUI.overlay.container.hidden;
+  if (!shouldBeUp || isUp) return;
+  // The overlay is not up and the state says it should be. The state is
+  // applied again, which is what puts it up.
+  voiceUI.apply(lastDeviceState);
+}
+
+// startOverlayWatchdog watches for an overlay that did not appear.
+//
+// It runs while the panel is running and stops when the renderer goes
+// away, which it does with the rest of the page.
+function startOverlayWatchdog() {
+  if (overlayWatchdogTimer) return;
+  overlayWatchdogTimer = setInterval(() => {
+    if (!overlayShouldBeUp(lastDeviceState)) return;
+    checkOverlay();
+  }, OVERLAY_WATCHDOG_MS);
+}
+
+// The watchdog starts with the page. It is the last thing in the file
+// because it needs the voice overlay to exist, and the overlay is made
+// above.
+if (voiceUI) startOverlayWatchdog();
 
 if (micTestButton) {
   micTestButton.addEventListener("click", async () => {
