@@ -62,7 +62,7 @@ test("the device name is read-only and comes from the host", () => {
   for (const name of ["deviceName", "esphomeDeviceName", "voiceDeviceId", "musicName"]) {
     assert.ok(!html.includes(`name="${name}"`), `${name} can still be changed on the device`);
   }
-  for (const name of ["idleToSlideshowMinutes", "slideshowToOffMinutes", "touchKeyboardEnabled", "displayMode", "voiceStartupVolume", "voiceDuckDb", "voiceVolume"]) {
+  for (const name of ["idleToSlideshowMinutes", "slideshowToOffMinutes", "touchKeyboardEnabled", "displayMode", "voiceDuckDb", "voiceVolume"]) {
     assert.ok(!html.includes(`name="${name}"`), `${name} is still duplicated in on-device settings`);
   }
 });

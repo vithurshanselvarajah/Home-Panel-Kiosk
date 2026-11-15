@@ -4,7 +4,7 @@ const fsSync = require("node:fs");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const os = require("node:os");
-const { safeUrl, settingNumber, settingBoolean, displayMode: readDisplayMode, windowBounds, hostIdentity, DISPLAY_MODES } = require("./utils");
+const { safeUrl, settingBoolean, displayMode: readDisplayMode, windowBounds, hostIdentity, DISPLAY_MODES } = require("./utils");
 const { generateEncryptionKey } = require("./encryption");
 const QRCode = require("qrcode");
 const { createHealthChecker, probeHttp } = require("./health");
@@ -41,7 +41,9 @@ const DEFAULTS = {
   // The microphone and speaker are local hardware choices.
   voiceAudioInput: "",
   voiceAudioOutput: "",
-  voiceStartupVolume: 50,
+  // The volume is not a setting here: the device program owns the level
+  // and keeps it, so a panel that has had a level keeps it across a
+  // restart. A panel that has never had one starts at fifty.
   musicEnabled: true,
   musicName: HOSTNAME,
   musicUnpaired: false,
@@ -399,7 +401,6 @@ function publishState(state) {
     idleToSlideshowMinutes: Math.max(0, Number(settings.idleToSlideshowMinutes) || 0),
     slideshowToOffMinutes: Math.max(0, Number(settings.slideshowToOffMinutes) || 0),
     touchKeyboardEnabled: Boolean(settings.touchKeyboardEnabled),
-    startupVolume: Math.max(0, Math.min(100, Number(settings.voiceStartupVolume) || 0)),
     musicEnabled: Boolean(settings.musicEnabled),
     musicUnpaired: Boolean(settings.musicUnpaired),
   };
@@ -716,11 +717,194 @@ function runDisplayCommand(operation) {
   tryNext(0);
 }
 
+// The backlight's own levels, as the driver counts them.
+//
+// The driver runs the panel's backlight from a PWM on the main chip, and
+// its range is 0 to 1023. Zero is not a level of light: the driver
+// treats it as "off" and switches the PWM off rather than running it at
+// no duty. Once that PWM has been switched off and on again, the panel
+// stops following the levels written to it — the screen comes back at a
+// fixed brightness and the brightness control is dead until the machine
+// is rebooted.
+//
+// So there are two rules here.
+//
+// The brightness the person sets has a floor of one level: the screen
+// is never taken to a level that switches the PWM off.
+//
+// The screen's own off is a separate thing and does write zero. Coming
+// back from it, the PWM is given a moment at full before the level it
+// should be at, because that is what makes the panel follow levels
+// again: the light has to be seen at full before it takes a level.
+const BACKLIGHT_FLOOR = 1;
+// The level the PWM is taken to for a moment when the screen comes back
+// on, and how long it is held there.
+const RELIGHT_LEVEL = 1000;
+const RELIGHT_HOLD_MS = 10;
+
+// Whether the backlight has been left switched off.
+//
+// It is what says whether the panel needs bringing back before it will
+// follow a level again. It starts true: until a level has been written,
+// the PWM has not been seen running, and the first one written is
+// treated as a light coming back on.
+//
+// The driver knows this better than the panel does: it says in
+// /sys/class/backlight/<backlight>/bl_power whether the backlight is
+// powered (0) or off (4). The brightness file does not say: it holds
+// the level that was last asked for, which is not the level the light
+// is at once the backlight has been switched off. And the backlight can
+// be switched off from outside the panel — the display driver does it
+// when the panel is blanked — so the driver is asked rather than
+// guessed at.
+let backlightIsOff = true;
+
+// backlightIsPowered reads the driver's own answer to whether the
+// backlight is on.
+//
+// It is read from the driver rather than kept, so a backlight that was
+// switched off from outside the panel is seen as off. A driver that
+// does not say (no bl_power file) is taken to be on, which is the
+// driver's own default.
+function backlightIsPowered() {
+  try {
+    for (const device of fsSync.readdirSync("/sys/class/backlight")) {
+      const file = path.join("/sys/class/backlight", device, "bl_power");
+      if (!fsSync.existsSync(file)) continue;
+      const power = Number(fsSync.readFileSync(file, "utf8"));
+      if (Number.isFinite(power)) return power === 0;
+    }
+  } catch { /* no backlight to read */ }
+  return !backlightIsOff;
+}
+
+// The backlight's writes are done one at a time.
+//
+// Turning the screen on and asking for a brightness at the same time
+// both write the backlight, and the one that finishes last is the one
+// the panel is left at. They are put in a line instead, so a screen
+// that comes back on is left at the brightness that was asked for.
+let backlightQueue = Promise.resolve();
+
+function queueBacklight(action) {
+  const done = backlightQueue.then(action, action);
+  backlightQueue = done.then(() => {}, () => {});
+  return done;
+}
+
+// writeBacklightLevel writes a level of the driver's own scale.
+async function writeBacklightLevel(level) {
+  try {
+    const devices = await fs.readdir("/sys/class/backlight");
+    for (const device of devices) {
+      const root = path.join("/sys/class/backlight", device);
+      const maximum = Number(await fs.readFile(path.join(root, "max_brightness"), "utf8"));
+      if (!maximum) continue;
+      await fs.writeFile(path.join(root, "brightness"), String(Math.max(0, Math.min(maximum, level))));
+      return true;
+    }
+  } catch (error) {
+    console.warn("Backlight control unavailable:", error.message);
+  }
+  return false;
+}
+
+// setAutomaticBrightness sets the backlight to the level the room's
+// light allows.
+//
+// The level comes from the device program, which reads the light sensor
+// and works out what the room allows. It is in the driver's own scale,
+// not a percentage.
+//
+// The level is smoothed here: the device program reads the light every
+// couple of seconds, and a level that jumps to each reading flickers
+// the panel. So the backlight moves a quarter of the way to the level
+// each time, which is what a passing shadow needs.
+async function setAutomaticBrightness(level) {
+  const wanted = Math.max(0, Math.min(1023, Math.round(Number(level))));
+  if (!Number.isFinite(wanted)) return;
+  // The screen being off is not a moment to change the brightness: the
+  // light comes back at the level it was at, and that is the moment the
+  // automatic brightness takes over.
+  if (displayIsOff) return;
+  const current = backlightLevel();
+  const target = current === null ? wanted : current;
+  const next = Math.round(target + (wanted - target) * AUTOMATIC_BRIGHTNESS_SMOOTH);
+  // Close enough is the level itself: smoothing alone would stop half a
+  // level short, which rounds a level under it.
+  const settled = Math.abs(wanted - next) < 0.5 ? wanted : next;
+  if (settled === current) return;
+  await writeBacklightLevel(settled);
+}
+
+// AUTOMATIC_BRIGHTNESS_SMOOTH is how much of the way to the level the
+// backlight moves each time.
+//
+// A quarter, so a shadow that passes does not flicker the panel.
+const AUTOMATIC_BRIGHTNESS_SMOOTH = 0.25;
+
+// writeBacklight sets the backlight to a percentage.
+//
+// The percentage is a number between 0 and 100, and it is never taken
+// below one level of the driver's own scale: zero switches the PWM off,
+// and the screen's off is setBacklightOff's business, not this one's.
+//
+// A backlight that is already off is brought back the way the screen is
+// brought back, rather than being given the level on its own: the panel
+// does not follow a level written to a backlight that has been switched
+// off.
+async function writeBacklight(percent) {
+  const maximum = await backlightMaximum();
+  if (!maximum) return false;
+  const level = Math.round(maximum * Math.max(0, Math.min(100, percent)) / 100);
+  if (!backlightIsPowered()) {
+    await relight(level);
+    return true;
+  }
+  const written = await writeBacklightLevel(Math.max(BACKLIGHT_FLOOR, level));
+  if (written) backlightIsOff = false;
+  return written;
+}
+
+// backlightMaximum is the top of the driver's own scale.
+//
+// It is read from the driver rather than assumed, so the levels written
+// are the driver's levels on any machine.
+async function backlightMaximum() {
+  try {
+    const devices = await fs.readdir("/sys/class/backlight");
+    for (const device of devices) {
+      const maximum = Number(await fs.readFile(path.join("/sys/class/backlight", device, "max_brightness"), "utf8"));
+      if (maximum) return maximum;
+    }
+  } catch (error) {
+    console.warn("Backlight control unavailable:", error.message);
+  }
+  return 0;
+}
+
+// relight brings the panel back from a light that was off.
+//
+// The PWM is taken to full and held there for a moment, and only then is
+// the level it should be at written. The panel needs to see the light at
+// full before it follows a level again, and the level written straight
+// after the full one is missed.
+async function relight(level) {
+  await writeBacklightLevel(RELIGHT_LEVEL);
+  await new Promise((resolve) => setTimeout(resolve, RELIGHT_HOLD_MS));
+  await writeBacklightLevel(Math.max(BACKLIGHT_FLOOR, level));
+  backlightIsOff = false;
+}
+
 // setBacklightOff turns the screen dark by taking the backlight to zero,
 // and puts it back where it was.
 //
 // The level it was at is remembered, because a screen that comes back
 // dark is a screen that looks broken.
+//
+// Zero is the only level that switches the panel's PWM off, so the way
+// back is not the way there: the light is brought back at full for a
+// moment first, or the panel does not follow the level it is given.
 //
 // The level is published as the brightness, so that Home Assistant sees
 // a screen that is off rather than a screen that is at zero: a person
@@ -736,7 +920,10 @@ async function setBacklightOff(off) {
       return;
     }
     brightnessBeforeOff = level;
-    await writeBacklight(0);
+    await queueBacklight(async () => {
+      await writeBacklightLevel(0);
+      backlightIsOff = true;
+    });
     displayIsOff = true;
     sendState();
     return;
@@ -745,26 +932,12 @@ async function setBacklightOff(off) {
   brightnessBeforeOff = null;
   // A screen that comes back at the level it was at is a screen that
   // looks like it never went off.
-  await writeBacklight(level === null || level <= 0 ? 60 : level);
+  const wanted = level === null || level <= 0 ? 60 : level;
+  await queueBacklight(async () => {
+    await relight(Math.round((await backlightMaximum()) * wanted / 100));
+  });
   displayIsOff = false;
   sendState();
-}
-
-// writeBacklight sets the backlight to a percentage.
-async function writeBacklight(percent) {
-  try {
-    const devices = await fs.readdir("/sys/class/backlight");
-    for (const device of devices) {
-      const root = path.join("/sys/class/backlight", device);
-      const maximum = Number(await fs.readFile(path.join(root, "max_brightness"), "utf8"));
-      if (!maximum) continue;
-      await fs.writeFile(path.join(root, "brightness"), String(Math.round(maximum * percent / 100)));
-      return true;
-    }
-  } catch (error) {
-    console.warn("Backlight control unavailable:", error.message);
-  }
-  return false;
 }
 
 function turnDisplayOff() {
@@ -940,8 +1113,21 @@ function stopWatchingVolume() {
 // milliseconds for as long as the panel is up.
 const volumeWatchInterval = 1000;
 
+// The brightness floor, as a percentage.
+//
+// The panel's driver runs the backlight from a PWM, and a level of zero
+// switches that PWM off rather than running it at no duty. Once it has
+// been switched off and on again the panel stops following the levels
+// written to it, so the brightness control stops working until the
+// machine is rebooted.
+//
+// The screen's own off is a separate thing and is allowed to be dark —
+// it is what the screen's off button does. The brightness the person
+// sets is never zero.
+const BRIGHTNESS_FLOOR_PERCENT = 1;
+
 async function setBrightness(value) {
-  const percent = Math.max(0, Math.min(100, Math.round(Number(value))));
+  const percent = Math.max(BRIGHTNESS_FLOOR_PERCENT, Math.min(100, Math.round(Number(value))));
   if (!Number.isFinite(percent)) return;
   // A brightness the screen is already at is not a change.
   //
@@ -962,21 +1148,21 @@ async function setBrightness(value) {
   // screen was at before it went off is taken for a change that has
   // already been made — and the screen stays dark.
   if (backlightLevel() === percent) return;
-  try {
-    const devices = await fs.readdir("/sys/class/backlight");
-    for (const device of devices) {
-      const root = path.join("/sys/class/backlight", device);
-      const maximum = Number(await fs.readFile(path.join(root, "max_brightness"), "utf8"));
-      if (!maximum) continue;
-      await fs.writeFile(path.join(root, "brightness"), String(Math.round(maximum * percent / 100)));
-      // The drawer shows the brightness, so it has to be told.
-      sendState();
-      return;
-    }
-  } catch (error) {
-    console.warn("Backlight control unavailable:", error.message);
+  if (displayIsOff) {
+    // The screen is off, so the light is left alone: a brightness asked
+    // for while the screen is off does not turn the screen on. The level
+    // is remembered, and the screen comes back at it.
+    brightnessBeforeOff = percent;
+    sendState();
+    return;
   }
-  showNotice({ title: "Brightness control unavailable", message: "No writable Linux backlight device was found." });
+  const written = await queueBacklight(() => writeBacklight(percent));
+  if (!written) {
+    showNotice({ title: "Brightness control unavailable", message: "No writable Linux backlight device was found." });
+    return;
+  }
+  // The drawer shows the brightness, so it has to be told.
+  sendState();
 }
 
 // setVolume changes the volume.
@@ -1005,15 +1191,19 @@ async function setVolume(value) {
   });
 }
 
-// followDeviceVolume shows the level the device program is using.
+// The volume the speaker is at.
 //
-// The level is the device program's, and the panel shows it. So when the
+// It is the device program's level, and the panel shows it. So when the
 // device program says where the level is — because the physical buttons
 // moved it, or Home Assistant did — the slider follows.
 //
 // The level is not sent back: the device program has just told us, and
 // the two telling each other about the same change for ever is what the
 // follower's settling is there to stop.
+//
+// The level is also kept, so a panel that is restarted comes back at the
+// level it was at rather than at a default. A panel that has never had a
+// level has no level to keep, and the device program starts it at fifty.
 function followDeviceVolume(percent) {
   const value = Math.max(0, Math.min(100, Math.round(Number(percent))));
   if (!Number.isFinite(value)) return;
@@ -1032,6 +1222,23 @@ function followDeviceVolume(percent) {
   // path that matters: a person using the buttons has the drawer shut.
   showVolumePopup(value);
   sendState(true);
+}
+
+// deviceConfig is the device program's configuration.
+//
+// It is what the panel writes and the device program reads. The volume
+// is part of it: the speaker keeps the level it was last at.
+function deviceConfig() {
+  return {
+    sendspinEnabled: settingBoolean(settings.musicEnabled),
+    sendspinName: settings.musicName || "",
+    sendspinUnpaired: settingBoolean(settings.musicUnpaired),
+    cameraEnabled: settingBoolean(settings.cameraEnabled),
+    audioInput: settings.voiceAudioInput || "",
+    audioOutput: settings.voiceAudioOutput || "",
+    monitorMic: voiceMonitorMic,
+    testSound: voiceTestSound,
+  };
 }
 
 // showVolumePopup puts the volume popup up, and takes it down again.
@@ -1174,6 +1381,10 @@ async function handleCommand(command) {
       openMode("url", command.url || command.target || command.value || "", command.duration);
       break;
     case "brightness": recordActivity("home-assistant"); setBrightness(command.value); break;
+    // The automatic brightness: the level the room's light allows, in the
+    // driver's own scale. The device program sends it when the light
+    // sensor has been read.
+    case "auto_brightness_level": setAutomaticBrightness(command.value); break;
     // A remote volume change (Music Assistant or Home Assistant) is
     // applied to the system mixer, then read back into the panel state.
     case "volume":
@@ -1203,7 +1414,6 @@ async function handleCommand(command) {
         idle_slideshow_minutes: "idleToSlideshowMinutes",
         slideshow_off_minutes: "slideshowToOffMinutes",
         touch_keyboard_enabled: "touchKeyboardEnabled",
-        startup_volume: "voiceStartupVolume",
         music_enabled: "musicEnabled",
         music_unpaired: "musicUnpaired",
         camera_enabled: "cameraEnabled",
@@ -1214,7 +1424,7 @@ async function handleCommand(command) {
       }
       const value = ["touch_keyboard_enabled", "music_enabled", "music_unpaired", "camera_enabled"].includes(command.setting)
         ? Boolean(command.value)
-        : Math.max(0, Math.min(command.setting === "startup_volume" ? 100 : 1440, Math.round(Number(command.value) || 0)));
+        : Math.max(0, Math.min(1440, Math.round(Number(command.value) || 0)));
       saveSettings({ [setting]: value }).catch((error) => console.error("Home Assistant setting could not be saved:", error.message));
       break;
     }
@@ -1292,7 +1502,9 @@ async function saveSettings(next) {
   clean.slideshowUrl = clean.slideshowUrl ? safeUrl(clean.slideshowUrl) || "" : "";
   // The voice settings. The panel is a voice satellite, and these are
   // what make it one.
-  clean.voiceStartupVolume = settingNumber(clean.voiceStartupVolume) ?? DEFAULTS.voiceStartupVolume;
+  //
+  // The volume is not one of them: the device program owns the level and
+  // keeps it, so there is no level to save here.
   clean.musicEnabled = Boolean(clean.musicEnabled);
   clean.musicUnpaired = Boolean(clean.musicUnpaired);
   clean.cameraEnabled = Boolean(clean.cameraEnabled);
@@ -1365,7 +1577,7 @@ async function saveSettings(next) {
   }
   const restartDevice = ["voiceAudioInput", "voiceAudioOutput", "esphomeEncryptionEnabled", "esphomeEncryptionKey"]
     .some((key) => previous[key] !== settings[key]);
-  const deviceConfigChanged = ["voiceStartupVolume", "musicEnabled", "musicUnpaired", "cameraEnabled"]
+  const deviceConfigChanged = ["musicEnabled", "musicUnpaired", "cameraEnabled"]
     .some((key) => previous[key] !== settings[key]);
   if (restartDevice) await startDeviceProgram();
   else if (deviceConfigChanged) sendDeviceConfig();
@@ -1383,17 +1595,7 @@ function sendDeviceConfig() {
   // The wake word's settings are not here: they are entities on the
   // panel, so Home Assistant owns them. Writing them from here would
   // undo whatever Home Assistant had set.
-  deviceClient.sendConfig({
-    startupVolume: settingNumber(settings.voiceStartupVolume),
-    sendspinEnabled: settingBoolean(settings.musicEnabled),
-    sendspinName: settings.musicName || "",
-    sendspinUnpaired: settingBoolean(settings.musicUnpaired),
-    cameraEnabled: settingBoolean(settings.cameraEnabled),
-    audioInput: settings.voiceAudioInput || "",
-    audioOutput: settings.voiceAudioOutput || "",
-    monitorMic: voiceMonitorMic,
-    testSound: voiceTestSound,
-  });
+  deviceClient.sendConfig(deviceConfig());
 }
 
 // Writes the settings file atomically so a power cut cannot leave a half
@@ -1506,6 +1708,10 @@ async function startDeviceProgram() {
   const stateFile = path.join(runtimeDir, "state.json");
   const levelFile = path.join(runtimeDir, "level");
   const configFile = path.join(app.getPath("userData"), "device-config.json");
+  // The settings the device program owns have a file of their own, so
+  // the panel's file and the device program's file are never written by
+  // both at once.
+  const settingsFile = path.join(app.getPath("userData"), "device-settings.json");
   // The data directory is where the device program keeps what it has to
   // keep — the music player's identity and its pairing records. It is on
   // the disk, because the music player's identity has to survive a
@@ -1517,6 +1723,7 @@ async function startDeviceProgram() {
     stateFile,
     levelFile,
     configFile,
+    settingsFile,
     dataDirectory,
     deviceId: identity,
     board: HOSTNAME,

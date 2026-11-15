@@ -40,12 +40,23 @@ type Config struct {
 	BargeIn *bool `json:"bargeIn,omitempty"`
 
 	// ── Playback ────────────────────────────────────────────────────────
-	// StartupVolume is the level the speaker starts at.
-	StartupVolume *int `json:"startupVolume,omitempty"`
 	// Volume is the current level.
+	//
+	// It is the level the speaker was last at, and it is what the
+	// speaker starts at on the next launch. There is no startup volume
+	// of its own: a level that was chosen is kept.
 	Volume *int `json:"volume,omitempty"`
 	// DuckDb is how far the music is turned down while a reply plays.
-	DuckDb *int `json:"duckDb,omitempty"`
+	//
+	// It is in decibels and it is negative, so the music is quieter
+	// under a reply than it would be rather than louder.
+	DuckDb *float64 `json:"duckDb,omitempty"`
+
+	// AutoBrightness says whether the screen follows the room's light.
+	//
+	// With it on, the brightness setting is a ceiling and the room's
+	// light decides how much of that ceiling the screen gets.
+	AutoBrightness *bool `json:"autoBrightness,omitempty"`
 
 	// ── Music ───────────────────────────────────────────────────────────
 	// SendspinEnabled turns the music player on and off.
