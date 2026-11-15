@@ -12,8 +12,12 @@
 // depending on which path the audio took.
 //
 // The curve is TECHO5's (github.com/HuskerMinion/techo5), MIT licensed: about 1.5 dB a step up to
-// half the dial, 1.2 dB a step above it, with the top at -6 dB rather than at unity, so the
-// amplifier's own protection stays in front of the signal.
+// half the dial, 1.2 dB a step above it, with the top a few decibels below unity rather than at it,
+// so the amplifier's own protection stays in front of the signal.
+//
+// The top has been raised from -6 dB to -3.1 dB. At -6 dB the top of the dial was not loud enough
+// for a room: forty per cent more amplitude is about 1.9 dB, and that is what the top is now. It
+// is still below unity, so the amplifier's protection is still in front of the signal.
 package volume
 
 import "math"
@@ -28,9 +32,9 @@ const Steps = 30
 // 1.2 dB a step above it, so that half the dial is a quiet conversation and the top is room-loud
 // rather than painful.
 var curve = [Steps + 1]float64{
-	-90, -45, -43.5, -42, -40.5, -39, -37.5, -36, -34.5, -33,
-	-31.5, -30, -28.5, -27, -25.5, -24, -22.8, -21.6, -20.4, -19.2,
-	-18, -16.8, -15.6, -14.4, -13.2, -12, -10.8, -9.6, -8.4, -7.2, -6,
+	-90, -43.1, -41.6, -40.1, -38.6, -37.1, -35.6, -34.1, -32.6, -31.1,
+	-29.6, -28.1, -26.6, -25.1, -23.6, -22.1, -20.9, -19.7, -18.5, -17.3,
+	-16.1, -14.9, -13.7, -12.5, -11.3, -10.1, -8.9, -7.7, -6.5, -5.3, -3.1,
 }
 
 // Mute is the attenuation the curve uses for step 0.
