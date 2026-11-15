@@ -298,6 +298,28 @@ test("every view that can be on top wakes the screen", () => {
   assert.equal(wakes.length, 3, "the screen is not woken from every view that takes a touch");
 });
 
+test("the overlay is on the screen while the screen is off", () => {
+  // The panel is a remote page — the dashboard — and a remote page has
+  // no way of telling the panel that it was tapped. The panel's own page
+  // is the overlay's, so the overlay has to be there to catch the touch.
+  assert.ok(
+    main.includes("|| displayIsOff;"),
+    "the overlay is not on the screen while the screen is off",
+  );
+  // And the page has to take the touch rather than let it fall through
+  // to the dashboard underneath.
+  const renderer = fs.readFileSync(path.join(root, "src", "ui", "renderer.js"), "utf8");
+  assert.ok(
+    renderer.includes('document.body.classList.toggle("screen-off"'),
+    "the page does not know the screen is off",
+  );
+  const css = fs.readFileSync(path.join(root, "src", "ui", "style.css"), "utf8");
+  assert.ok(
+    css.includes("body.screen-off{pointer-events:auto}"),
+    "a screen that is off lets the touch through to the dashboard",
+  );
+});
+
 test("the screen comes back with the relight the panel needs", () => {
   // The screen is turned on through the backlight on this panel, and the
   // backlight has to be brought back at full for a moment or the panel
