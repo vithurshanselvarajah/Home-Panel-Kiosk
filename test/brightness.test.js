@@ -153,7 +153,11 @@ function stateHandler(page) {
     $: (selector) => find(page.root, selector),
     setInterval() { return 0; },
     setTimeout() { return 0; },
+    clearTimeout() {},
     clearInterval() {},
+    // The mute indicator slides in on the next frame, and the popup does
+    // the same, so the frame is asked for.
+    requestAnimationFrame: (fn) => fn(),
     Date, Math, Number, Boolean, Array, Object,
     console,
   };
