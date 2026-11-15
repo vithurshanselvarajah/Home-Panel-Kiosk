@@ -149,6 +149,8 @@ function stateHandler(page) {
       querySelector: (selector) => find(page.root, selector),
       querySelectorAll: (selector) => findAll(page.root, selector),
       addEventListener() {},
+      // The page's body, whose class says whether the screen is off.
+      body: { classList: { toggle() {}, contains() { return false; } } },
     },
     $: (selector) => find(page.root, selector),
     setInterval() { return 0; },
