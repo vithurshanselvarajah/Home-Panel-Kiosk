@@ -65,11 +65,11 @@ test("the popup is on the main screen and not only in the drawer", () => {
     "the overlay view is not made for the popup",
   );
   assert.ok(
-    main.includes("|| overlayNeeded();"),
+    main.includes("|| overlayNeeded()"),
     "the overlay view is not kept on the screen for the popup",
   );
   assert.ok(
-    main.includes("overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayNeeded()) {"),
+    main.includes("overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayNeeded() || displayIsOff) {"),
     "the overlay view is not the size of the screen for the popup",
   );
   // And the renderer is told what to draw.

@@ -1001,6 +1001,13 @@ if (mediaPosition) {
 
 const statusLabels = { online: "Online", connecting: "Connecting", offline: "Offline", unknown: "Unknown" };
 window.homePanel.onState((state) => {
+  // A screen that is off takes the touch that wakes it.
+  //
+  // The page is transparent either way, so the dashboard is not hidden
+  // by this. What it does is stop the touch falling through to the
+  // dashboard underneath, which is a remote page that has no way of
+  // telling the panel it was tapped.
+  document.body.classList.toggle("screen-off", Boolean(state.displayIsOff));
   $("#mode-label").textContent = state.displayIsOff ? "Screen off" : ({ dashboard: "Dashboard", slideshow: "Slideshow" }[state.mode] || state.mode);
   // The version is at the bottom of the drawer. It is the thing a person
   // is asked for when something goes wrong.

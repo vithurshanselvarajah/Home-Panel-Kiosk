@@ -580,7 +580,16 @@ function resizeOverlay() {
   // The pull tab is the way the drawer is opened, so the overlay has to be
   // on the screen for the tab to be caught, even when nothing else in it
   // is showing.
-  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlayFull || overlayNeeded();
+  // The overlay is on the screen while the screen is off as well.
+  //
+  // The panel is a remote page — the dashboard — and a remote page has
+  // no way of telling the panel that it was tapped: the panel's own
+  // page is the overlay's. So the overlay has to be there to catch the
+  // touch, or a tap on a dark screen is a tap on nothing.
+  //
+  // It is transparent when nothing is showing, so it does not get in
+  // the way of the dashboard.
+  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlayFull || overlayNeeded() || displayIsOff;
   if (!needsOverlay) {
     if (overlayAttached) {
       win.contentView.removeChildView(overlayView);
@@ -595,12 +604,15 @@ function resizeOverlay() {
     win.contentView.addChildView(overlayView);
     overlayAttached = true;
   }
-  if (overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayNeeded()) {
+  if (overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayNeeded() || displayIsOff) {
     // The wake word overlay covers the whole screen, and so does the
     // drawer and the settings page. So does the volume popup and the
     // mute indicator: the popup is across the top and the indicator is
     // in the corner, and the strip along the top right is not where
     // either of them is.
+    //
+    // And so does a screen that is off: the overlay is there to catch
+    // the touch that wakes it.
     overlayView.setBounds({ x: 0, y: 0, width, height });
   } else if (keyboardVisible) {
     const keyboardHeight = Math.min(300, height);
