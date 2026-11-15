@@ -480,6 +480,21 @@
         overlay.setMode("off");
         return;
       }
+      // A new turn clears what the last one said.
+      //
+      // The words are kept while the overlay is up, which is what keeps
+      // the question on the screen while the assistant thinks about it.
+      // But the next question comes with the overlay up again and the
+      // old answer still on it, and the answer is only replaced when
+      // the new one arrives — so for a moment the panel says the
+      // answer to the last question while it is listening to this one.
+      //
+      // A turn that starts with no words of its own clears the old ones,
+      // and the text comes back when the new words arrive.
+      if (mode === "listening" && overlay.mode !== "listening") {
+        overlay.setHeard("");
+        overlay.setSaid("");
+      }
       overlay.setMode(mode);
       if (mode === "listening") overlay.setLevel((state.level || 0) / 100);
     }

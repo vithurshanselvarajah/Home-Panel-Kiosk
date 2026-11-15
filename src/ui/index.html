@@ -13,10 +13,35 @@
     <script src="./dev-bridge.js"></script>
   </head>
   <body>
-    <button id="return-home" class="return-home" hidden>⌂ <span>Return to Home</span></button>
+    <!-- The volume popup. It comes down from the top when the level changes,
+         the way a phone does it, and goes away again on its own. It is here
+         because the level is changed with the buttons on the unit, and a
+         person holding the device cannot see the drawer. -->
+    <div id="volume-popup" class="volume-popup" role="status" aria-live="polite" hidden>
+      <div class="volume-popup__bar">
+        <svg class="volume-popup__icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+          <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+        <div class="volume-popup__track"><i id="volume-popup-fill"></i></div>
+        <span id="volume-popup-value" class="volume-popup__value">0</span>
+      </div>
+    </div>
+    <!-- The mute indicator. The mute is the hardware latch's, and the button
+         on top of the unit is the only thing that moves it, so this says
+         where the latch is rather than changing it. -->
+    <div id="mute-indicator" class="mute-indicator" role="status" aria-live="polite" hidden>
+      <svg class="mute-indicator__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z" fill="currentColor" />
+        <path d="M6 11a6 6 0 0 0 12 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+        <path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" />
+      </svg>
+      <span>Microphone muted</span>
+    </div>
+    <button id="return-home" class="return-home" hidden><span class="return-home__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.2 12 4l8 7.2V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg></span> <span>Return to Home</span></button>
     <div id="side-panel-backdrop" class="side-panel-backdrop" hidden></div>
     <main id="notice" class="notice" aria-live="polite" hidden>
-      <div class="notice-icon">⌁</div><div class="notice-copy"><strong id="notice-title"></strong><span id="notice-message"></span></div>
+      <div class="notice-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a5.5 5.5 0 0 1 5.5 5.5v4l1.6 3.2H4.9L6.5 13V9A5.5 5.5 0 0 1 12 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 19a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div><div class="notice-copy"><strong id="notice-title"></strong><span id="notice-message"></span></div>
       <button class="notice-close" data-action="dismiss_notification" aria-label="Dismiss">×</button>
     </main>
     <aside id="side-panel" class="side-panel" aria-hidden="true">
@@ -26,7 +51,7 @@
       <section class="quick-controls" aria-label="Display and sound">
         <div class="quick-control" id="brightness-control" hidden>
           <div class="quick-control__head">
-            <span class="quick-control__icon" aria-hidden="true">☀</span>
+            <span class="quick-control__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6M18.6 5.4l-1.6 1.6M7 17l-1.6 1.6M18.6 18.6 17 17M7 7 5.4 5.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>
             <span class="quick-control__label">Brightness</span>
             <span class="quick-control__value" id="brightness-value">—</span>
           </div>
@@ -34,16 +59,11 @@
         </div>
         <div class="quick-control" id="volume-control" hidden>
           <div class="quick-control__head">
-            <span class="quick-control__icon" aria-hidden="true">♪</span>
+            <span class="quick-control__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18.5V6.2l10-2v12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="7" cy="18.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="17" cy="16.2" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/></svg></span>
             <span class="quick-control__label">Volume</span>
             <span class="quick-control__value" id="volume-value">—</span>
           </div>
-          <div class="quick-control__row">
-            <input class="slider" id="volume-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Volume" />
-            <button class="mic-mute" id="mic-mute" aria-label="Mute the microphone" aria-pressed="false">
-              <span class="mic-mute__icon" aria-hidden="true">🎙</span>
-            </button>
-          </div>
+          <input class="slider" id="volume-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Volume" />
         </div>
       </section>
       <!-- The music. It is here rather than in the settings because it is
@@ -59,7 +79,7 @@
         </div>
         <div class="media-panel__art">
           <img id="media-artwork" class="media-panel__image" alt="" hidden />
-          <span id="media-artwork-fallback" class="media-panel__fallback" aria-hidden="true">♪</span>
+          <span id="media-artwork-fallback" class="media-panel__fallback" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18.5V6.2l10-2v12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="7" cy="18.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="17" cy="16.2" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/></svg></span>
         </div>
         <div class="media-panel__details">
           <span id="media-title" class="media-panel__title">Nothing playing</span>
@@ -70,18 +90,18 @@
           <div class="media-panel__times"><span id="media-elapsed">0:00</span><span id="media-duration">0:00</span></div>
         </div>
         <div class="media-panel__transport" role="group" aria-label="Playback">
-          <button class="media-button" id="media-previous" data-transport="previous" aria-label="Previous track">⏮</button>
-          <button class="media-button media-button--play" id="media-play" data-transport="play" aria-label="Play">▶</button>
-          <button class="media-button" id="media-next" data-transport="next" aria-label="Next track">⏭</button>
+          <button class="media-button" id="media-previous" data-transport="previous" aria-label="Previous track"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6v12M19 6l-9 6 9 6V6z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" /></svg></button>
+          <button class="media-button media-button--play" id="media-play" data-transport="play" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5z" fill="currentColor" /></svg></button>
+          <button class="media-button" id="media-next" data-transport="next" aria-label="Next track"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6v12M5 6l9 6-9 6V6z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" /></svg></button>
         </div>
       </section>
       <div class="drawer-actions">
-        <button class="drawer-button" data-action="dashboard"><span>⌂</span><span id="dashboard-action-label" class="button-label">Dashboard</span></button>
-        <button class="drawer-button" data-action="slideshow" id="slideshow-action"><span>▧</span>Photo slideshow</button>
-        <button id="settings-button" class="drawer-button"><span>⚙</span>Settings</button>
+        <button class="drawer-button" data-action="dashboard"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.2 12 4l8 7.2V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg></span><span id="dashboard-action-label" class="button-label">Dashboard</span></button>
+        <button class="drawer-button" data-action="slideshow" id="slideshow-action"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M4.5 17.5 10 12l3.5 3.5L16 13l4 4.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg></span>Photo slideshow</button>
+        <button id="settings-button" class="drawer-button"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 3.2v2.4M12 18.4v2.4M20.8 12h-2.4M5.6 12H3.2M18.2 5.8l-1.7 1.7M7.5 16.5l-1.7 1.7M18.2 18.2l-1.7-1.7M7.5 7.5 5.8 5.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>Settings</button>
         <div class="drawer-divider"></div>
-        <button class="drawer-button" id="display-mode-button"><span>⛶</span><span id="display-mode-label" class="button-label">Window mode</span></button>
-        <button class="drawer-button drawer-button--exit" id="exit-button"><span>⏻</span>Exit</button>
+        <button class="drawer-button" id="display-mode-button"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg></span><span id="display-mode-label" class="button-label">Window mode</span></button>
+        <button class="drawer-button drawer-button--exit" id="exit-button"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /><path d="M7 6.5a7 7 0 1 0 10 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span>Exit</button>
       </div>
       <!-- The status is at the bottom of the drawer because it is the
            thing that is looked at least: it says whether the panel is
