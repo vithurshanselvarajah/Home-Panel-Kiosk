@@ -21,9 +21,16 @@ const root = path.join(__dirname, "..");
 const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
 
 test("a brightness the screen is already at is not applied again", () => {
+  // The comparison is against the backlight's own level and not against
+  // the published brightness, which is the level the screen was at when
+  // it was turned off rather than the level the light is at.
   assert.ok(
-    main.includes("if (currentBrightness() === percent) return;"),
+    main.includes("if (backlightLevel() === percent) return;"),
     "the brightness is applied again even when it is already there",
+  );
+  assert.ok(
+    main.includes("function backlightLevel()"),
+    "the backlight's own level is not read",
   );
 });
 
