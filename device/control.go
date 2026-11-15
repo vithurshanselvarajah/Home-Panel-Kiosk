@@ -120,13 +120,14 @@ type ControlServer struct {
 	setCameraPassword    func(string)
 	onCameraConnected    func(string)
 	cameraPassword       string
-	// onMute is called when the panel asks for the microphone to be
-	// muted.
+	// onMute is gone: the panel cannot mute the microphone.
 	//
-	// The mute is the microphone's: a person who mutes the panel wants
-	// the room to stop hearing them, and they still want to hear the
-	// music.
-	onMute func(muted bool)
+	// The mute is a hardware latch on this board, and the latch is
+	// one-way from software: the button on top of the unit sets it and
+	// only the button releases it. A panel that could ask for the
+	// microphones to be cut would be a panel that could cut them and
+	// then not bring them back, so the panel is told where the latch
+	// is and nothing more.
 	// onVolume is called when the panel reports a volume.
 	//
 	// The panel's volume is the speaker's volume, and the speaker is
@@ -327,17 +328,11 @@ func (s *ControlServer) handle(conn net.Conn, message ControlMessage) {
 			handler(message.Command)
 		}
 	case "mute":
-		// The panel mutes the microphone.
+		// A mute from the panel is ignored.
 		//
-		// The mute is the microphone's, and the device is the one that
-		// owns the microphone, so the panel asks for it rather than
-		// doing it itself.
-		s.mu.Lock()
-		handler := s.onMute
-		s.mu.Unlock()
-		if handler != nil {
-			handler(message.Muted)
-		}
+		// The mute is the hardware latch's, and the latch is one-way
+		// from software, so there is nothing the panel could ask for
+		// that the hardware would do.
 	case "volume":
 		// The panel sets the volume.
 		//
@@ -399,11 +394,11 @@ type ControlMessage struct {
 	// The volume is the device program's, the same way the mute is: the
 	// device program owns the speaker and applies the level to
 	// everything it plays. The panel is a control surface for it.
-	Volume          int    `json:"volume,omitempty"`
-	CameraPassword  string `json:"cameraPassword,omitempty"`
-	RequestID       string `json:"requestId,omitempty"`
-	SendspinToken   string `json:"sendspinToken,omitempty"`
-	Error           string `json:"error,omitempty"`
+	Volume         int    `json:"volume,omitempty"`
+	CameraPassword string `json:"cameraPassword,omitempty"`
+	RequestID      string `json:"requestId,omitempty"`
+	SendspinToken  string `json:"sendspinToken,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 // TransportCommand is what the panel asks of the music transport.
@@ -473,14 +468,6 @@ func (s *ControlServer) writeMessage(conn net.Conn, message ControlMessage) erro
 func (s *ControlServer) SetListenHandler(fn func(phrase string)) {
 	s.mu.Lock()
 	s.onListen = fn
-	s.mu.Unlock()
-}
-
-// SetMuteHandler sets what is called when the panel asks for the
-// microphone to be muted.
-func (s *ControlServer) SetMuteHandler(fn func(muted bool)) {
-	s.mu.Lock()
-	s.onMute = fn
 	s.mu.Unlock()
 }
 

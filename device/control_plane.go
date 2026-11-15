@@ -68,8 +68,6 @@ type ControlPlane struct {
 	onWakeEnabled func(enabled bool)
 	// onDucking is called when the ducking is changed.
 	onDucking func(db float64)
-	// onMuted is called when the panel's mute switch is changed.
-	onMuted func(muted bool)
 	// onLink is called when the link to Home Assistant comes up or goes
 	// down.
 	//
@@ -329,7 +327,14 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, plane *Cont
 			case "music_ducking_db":
 				plane.setDucking(value.Number)
 			case "muted":
-				plane.setMuted(value.Bool)
+				// The panel cannot mute the microphone.
+				//
+				// The mute is a hardware latch, and the latch is
+				// one-way from software: the button on the unit sets
+				// it and only the button releases it. So there is
+				// nothing here to do, and the entity is published
+				// from where the latch actually is.
+				plane.publishVoiceSettings()
 			case "camera_stream":
 				if plane.camera != nil {
 					if err := plane.camera.SetEnabled(value.Bool); err != nil {
@@ -591,15 +596,6 @@ func (p *ControlPlane) SetMediaPlayerVolume(volume float32) {
 	p.api.PushMediaPlayerState()
 }
 
-// SetMediaPlayerMute records whether the speaker is muted.
-func (p *ControlPlane) SetMediaPlayerMute(muted bool) {
-	if p.mediaPlayer == nil {
-		return
-	}
-	p.mediaPlayer.SetMuted(muted)
-	p.api.PushMediaPlayerState()
-}
-
 // SetMediaPlayerState records what the speaker is doing and tells Home
 // Assistant.
 //
@@ -751,21 +747,14 @@ func (p *ControlPlane) OnTransport(fn func(command TransportCommand)) {
 	p.server.SetTransportHandler(fn)
 }
 
-// OnMute sets what is called when the panel asks for the microphone to
-// be muted.
+// OnMute does nothing, because there is nothing to wire.
 //
-// The mute is the microphone's, and the device program owns the
-// microphone, so the panel asks for it.
-// The mute is switched from two places: Home Assistant's switch on the
-// device, and the panel's own button. They are the same thing, so they
-// are handled the same way, and the entity is published either way —
-// so that what Home Assistant shows is what the microphone is really
-// doing.
+// The mute is the hardware latch's, and the latch is one-way from
+// software: the button on top of the unit sets it and only the button
+// releases it. The panel and Home Assistant are both told where the
+// latch is — the entity is published from where it actually is — and
+// neither can move it.
 func (p *ControlPlane) OnMute() {
-	if p.server == nil {
-		return
-	}
-	p.server.SetMuteHandler(p.setMuted)
 }
 
 // OnVolume wires the panel's volume to the device program.
@@ -902,14 +891,6 @@ func (p *ControlPlane) setDucking(db float64) {
 	p.publishVoiceSettings()
 }
 
-// setMuted turns the panel's own mute switch on or off.
-func (p *ControlPlane) setMuted(muted bool) {
-	if p.onMuted != nil {
-		p.onMuted(muted)
-	}
-	p.publishVoiceSettings()
-}
-
 // OnWakeThreshold sets what happens when the wake word's sensitivity
 // is changed.
 func (p *ControlPlane) OnWakeThreshold(fn func(threshold float64)) {
@@ -925,11 +906,6 @@ func (p *ControlPlane) OnWakeEnabled(fn func(enabled bool)) {
 // OnDucking sets what happens when the ducking is changed.
 func (p *ControlPlane) OnDucking(fn func(db float64)) {
 	p.onDucking = fn
-}
-
-// OnMuted sets what happens when the panel's mute switch is changed.
-func (p *ControlPlane) OnMuted(fn func(muted bool)) {
-	p.onMuted = fn
 }
 
 // OnWakeWord sets the callback for the wake word being switched.

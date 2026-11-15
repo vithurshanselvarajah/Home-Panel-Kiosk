@@ -896,7 +896,7 @@ func (a *deviceAudio) setWakeEnabled(enabled bool) {
 	a.mu.Unlock()
 }
 
-// setMuted turns the panel's own mute switch on or off.
+// setMuted turns the microphone's mute on or off.
 //
 // On the Echo Show 8 the mute is a hardware latch, and the latch is asked
 // to move: what it says afterwards is what the application uses, because
@@ -905,6 +905,10 @@ func (a *deviceAudio) setWakeEnabled(enabled bool) {
 //
 // On a board with no latch the software mute stands on its own, and the
 // microphone's frames are silenced before anything sees them.
+//
+// It is the microphone's and not the speaker's. A person who mutes the
+// panel wants the room to stop hearing them, and they still want to hear
+// the music.
 func (a *deviceAudio) setMuted(muted bool) {
 	if a.mute != nil {
 		if err := a.mute.Set(muted); err != nil {
