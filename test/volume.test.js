@@ -15,8 +15,9 @@ const vm = require("node:vm");
 // involved: a level applied in two places is a level nobody can reason
 // about.
 //
-// The microphone's mute is still read from the mixer, because that is
-// what says whether the room is being cut.
+// The microphone's mute comes from the device program, because on the
+// Echo Show 8 it is the hardware latch's position and only the button on
+// the unit moves it.
 //
 // This is checked by running the code with a device program that
 // answers with whatever the test says it should.
@@ -150,15 +151,18 @@ test("the drawer follows a mute changed outside the panel", async () => {
   assert.equal(sent.length, 1, "the drawer was not told about the mute");
 });
 
-test("the mute is the microphone's", async () => {
+test("the mute is the microphone's and comes from the device", async () => {
   // A person who mutes the panel wants the room to stop hearing them,
   // and they still want to hear the music.
+  //
+  // The mute is the hardware latch's and the latch is one-way from
+  // software, so the panel follows it rather than setting it.
   deviceMuted = false;
   const { sandbox } = run();
 
-  await sandbox.setMute(true);
+  sandbox.deviceClient.state.muted = true;
+  sandbox.followDeviceMute();
 
-  assert.equal(deviceMuted, true, "the microphone was not muted");
   assert.equal(sandbox.currentMute(), true, "the panel does not say it is muted");
 });
 
