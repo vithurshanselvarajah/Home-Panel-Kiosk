@@ -33,6 +33,55 @@ test("the popup is on the screen", () => {
   );
 });
 
+test("the popup is on the main screen and not only in the drawer", () => {
+  // The popup is drawn in the overlay view, and the overlay view is
+  // taken off the screen when nothing in it is showing. So the main
+  // process has to be told, or the popup is drawn in a view that is not
+  // on the screen — which is why it only showed while the drawer was
+  // open.
+  assert.ok(
+    renderer.includes("setOverlayPopup(true);"),
+    "the popup does not tell the main process it is up",
+  );
+  assert.ok(
+    renderer.includes("setOverlayPopup(false);"),
+    "the popup does not tell the main process it is down",
+  );
+  assert.ok(
+    main.includes('ipcMain.on("app:overlay-popup"'),
+    "the main process does not listen for the popup",
+  );
+  assert.ok(
+    main.includes("|| overlayPopup;"),
+    "the overlay view is not kept on the screen for the popup",
+  );
+  assert.ok(
+    main.includes("overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayPopup) {"),
+    "the overlay view is not the size of the screen for the popup",
+  );
+});
+
+test("the mute indicator is on the main screen too", () => {
+  assert.ok(
+    renderer.includes("setOverlayPopup(on);"),
+    "the mute indicator does not tell the main process it is up",
+  );
+});
+
+test("the popup shows the level every time it changes", () => {
+  // A person pressing the button again expects the number to move. A
+  // popup that showed the first number and then nothing was not saying
+  // what the level was.
+  assert.ok(
+    renderer.includes("else if (volumePopup && lastPopupVolume !== state.volume) showVolumePopup(state.volume);"),
+    "the popup is not raised again when the level changes",
+  );
+  assert.ok(
+    renderer.includes("lastPopupVolume = percent;"),
+    "the popup does not remember what it is showing",
+  );
+});
+
 test("the popup is raised by a change of level", () => {
   // The device program's state carries the level, and it is what the
   // buttons on the unit change.
