@@ -36,35 +36,67 @@ test("the popup is on the screen", () => {
 test("the popup is on the main screen and not only in the drawer", () => {
   // The popup is drawn in the overlay view, and the overlay view is
   // taken off the screen when nothing in it is showing. So the main
-  // process has to be told, or the popup is drawn in a view that is not
-  // on the screen — which is why it only showed while the drawer was
-  // open.
+  // process puts it up, because a renderer that is not on the screen
+  // never hears that the buttons on the unit were pressed.
   assert.ok(
-    renderer.includes("setOverlayPopup(true);"),
-    "the popup does not tell the main process it is up",
+    main.includes("showVolumePopup(value);"),
+    "the main process does not raise the popup when the level changes",
   );
   assert.ok(
-    renderer.includes("setOverlayPopup(false);"),
-    "the popup does not tell the main process it is down",
+    main.includes("ensureOverlayView();"),
+    "the overlay view is not made for the popup",
   );
   assert.ok(
-    main.includes('ipcMain.on("app:overlay-popup"'),
-    "the main process does not listen for the popup",
-  );
-  assert.ok(
-    main.includes("|| overlayPopup;"),
+    main.includes("|| overlayNeeded();"),
     "the overlay view is not kept on the screen for the popup",
   );
   assert.ok(
-    main.includes("overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayPopup) {"),
+    main.includes("overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayNeeded()) {"),
     "the overlay view is not the size of the screen for the popup",
+  );
+  // And the renderer is told what to draw.
+  assert.ok(
+    main.includes('sendToOverlay("app:volume-popup"'),
+    "the renderer is not told about the popup",
+  );
+  assert.ok(
+    renderer.includes("window.homePanel.onVolumePopup("),
+    "the renderer does not listen for the popup",
   );
 });
 
 test("the mute indicator is on the main screen too", () => {
+  // The same reason: the button on top of the unit flips the latch, and
+  // the panel is the one that hears about it.
   assert.ok(
-    renderer.includes("setOverlayPopup(on);"),
-    "the mute indicator does not tell the main process it is up",
+    main.includes("showMuteIndicator(muted);"),
+    "the main process does not raise the mute indicator",
+  );
+  assert.ok(
+    main.includes('sendToOverlay("app:mute-indicator"'),
+    "the renderer is not told about the mute indicator",
+  );
+  assert.ok(
+    renderer.includes("window.homePanel.onMuteIndicator("),
+    "the renderer does not listen for the mute indicator",
+  );
+});
+
+test("the popup and the indicator do not take each other down", () => {
+  // The popup goes down after a couple of seconds and the indicator
+  // stays up for as long as the microphones are cut, so they are kept
+  // apart.
+  assert.ok(
+    main.includes("let overlayPopup = false;"),
+    "the popup's flag is gone",
+  );
+  assert.ok(
+    main.includes("let overlayMute = false;"),
+    "the indicator's flag is gone",
+  );
+  assert.ok(
+    main.includes("return overlayPopup || overlayMute;"),
+    "the two are not kept apart",
   );
 });
 
@@ -72,13 +104,20 @@ test("the popup shows the level every time it changes", () => {
   // A person pressing the button again expects the number to move. A
   // popup that showed the first number and then nothing was not saying
   // what the level was.
+  //
+  // The main process raises it every time the level changes, and the
+  // renderer draws what it is given.
   assert.ok(
-    renderer.includes("else if (volumePopup && lastPopupVolume !== state.volume) showVolumePopup(state.volume);"),
+    main.includes("showVolumePopup(value);"),
     "the popup is not raised again when the level changes",
   );
   assert.ok(
-    renderer.includes("lastPopupVolume = percent;"),
-    "the popup does not remember what it is showing",
+    renderer.includes("if (volumePopupFill) volumePopupFill.style.width = `${percent}%`;"),
+    "the popup does not show the level",
+  );
+  assert.ok(
+    renderer.includes("if (volumePopupValue) volumePopupValue.textContent = String(percent);"),
+    "the popup does not show the number",
   );
 });
 

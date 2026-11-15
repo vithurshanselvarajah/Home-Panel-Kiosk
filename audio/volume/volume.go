@@ -12,18 +12,12 @@
 // depending on which path the audio took.
 //
 // The curve is TECHO5's (github.com/HuskerMinion/techo5), MIT licensed: about 1.5 dB a step up to
-// half the dial, with the top a couple of decibels below unity rather than at it, so the
-// amplifier's own protection stays in front of the signal.
+// half the dial, 1.2 dB a step above it, with the top a few decibels below unity rather than at it,
+// so the amplifier's own protection stays in front of the signal.
 //
-// The top has been raised from -6 dB to -2 dB. At -6 dB the top of the dial was not loud enough
-// for a room, and at -3.1 dB it was still not: the card's master mixer was taking a further
-// twenty per cent off the signal before the curve had said anything about it, so the top of the
-// dial was twenty decibels down rather than three. The mixer is at unity now — the level is
-// applied in one place, in the samples — and the top is two decibels below unity, which is as
-// loud as it goes without the amplifier's own protection being asked to do the work that the
-// curve should have done.
-//
-// The bottom half of the curve has not moved: half the dial is still a quiet conversation.
+// The top has been raised from -6 dB to -3.1 dB. At -6 dB the top of the dial was not loud enough
+// for a room: forty per cent more amplitude is about 1.9 dB, and that is what the top is now. It
+// is still below unity, so the amplifier's protection is still in front of the signal.
 package volume
 
 import "math"
@@ -39,9 +33,8 @@ const Steps = 30
 // rather than painful.
 var curve = [Steps + 1]float64{
 	-90, -43.1, -41.6, -40.1, -38.6, -37.1, -35.6, -34.1, -32.6, -31.1,
-	-29.6, -28.1, -26.6, -25.1, -23.6, -22.1, -20.9, -19.5, -18.1, -16.8,
-	-15.5, -14.2, -12.8, -11.5, -10.2, -8.8, -7.5, -6.2, -4.8, -3.4,
-	-2,
+	-29.6, -28.1, -26.6, -25.1, -23.6, -22.1, -20.9, -19.7, -18.5, -17.3,
+	-16.1, -14.9, -13.7, -12.5, -11.3, -10.1, -8.9, -7.7, -6.5, -5.3, -3.1,
 }
 
 // Mute is the attenuation the curve uses for step 0.

@@ -33,6 +33,9 @@ function run() {
   const deviceState = { muted: false };
   const sandbox = {
     sendState: () => {},
+    ensureOverlayView: () => {},
+    resizeOverlay: () => {},
+    sendToOverlay: () => {},
     controlClient: { sendMute: (muted) => sent.push(muted) },
     deviceClient: { state: deviceState },
     console,

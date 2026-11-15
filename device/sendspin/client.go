@@ -354,6 +354,33 @@ func (c *Client) OnVolume(f func(v int)) {
 	c.player.setGain(c.gainVolume(set.Volume), set.Muted)
 }
 
+// OnServerVolume is told the volume the server asked for.
+//
+// It is the same thing OnVolume is for — the server's volume becomes the
+// device's volume — but it is a separate hook, because the two answer
+// different questions. OnVolume is the command path: the server says
+// "set the volume to this" and the device does it. OnServerVolume is
+// the report path: the server says what it has settled on and the
+// device shows it.
+//
+// They are separate because a device that owns the volume has to report
+// its level back to the server, and a server that is told its own
+// volume back would answer with a command, and the two would talk for
+// ever.
+//
+// The player's own gain is dropped when this is set: the device applies
+// the level to everything it plays, in one place, and a second gain on
+// the music alone is a level applied in two places.
+func (c *Client) OnServerVolume(f func(v int)) {
+	c.mu.Lock()
+	c.onVolume = f
+	c.mu.Unlock()
+	set := c.store.settings()
+	// The player applies no gain of its own: the device's level is the
+	// level, and it is applied to the music with everything else.
+	c.player.setGain(100, set.Muted)
+}
+
 // SetVolume reports the device's volume (0-100) when it changes by any
 // route: its buttons, Home Assistant, or a command this client passed on.
 // Sent to the server only when it differs from what it last heard.
