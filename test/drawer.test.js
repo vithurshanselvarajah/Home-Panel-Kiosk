@@ -119,9 +119,11 @@ function page() {
   mediaPanel.appendChild(sourceHome);
   mediaPanel.appendChild(scrubber);
 
-  // The quick controls, with the microphone's mute button.
+  // The quick controls. The microphone's mute button is not here: the
+  // mute is the hardware latch's and only the button on the unit moves
+  // it, so the screen shows it rather than switching it.
   const quick = element("section", { class: "quick-controls" });
-  const mute = element("button", { id: "mic-mute" });
+  const mute = element("div", { id: "mute-indicator" });
   quick.appendChild(mute);
 
   // The drawer's own actions.

@@ -9,9 +9,11 @@ const path = require("node:path");
 // mutes the panel wants the room to stop hearing them, and they still
 // want to hear the music.
 //
-// It is also the same thing said in two places. Home Assistant has a
-// switch on the device, and the system has a microphone that can be
-// muted, and each one tells the other what it has just been told.
+// On the Echo Show 8 the microphone's mute is a hardware latch, and
+// only the button on top of the unit moves it. The latch is one-way
+// from software: the button is also the only thing that releases it.
+// So neither the panel nor Home Assistant can switch it, and the panel
+// shows where the latch is instead.
 //
 // These are checked by looking at the code, because what matters is
 // that the two sides are wired to each other and not that a line of
@@ -22,6 +24,8 @@ const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
 const deviceMain = fs.readFileSync(path.join(root, "device", "main.go"), "utf8");
 const deviceAudio = fs.readFileSync(path.join(root, "device", "audio.go"), "utf8");
 const deviceControl = fs.readFileSync(path.join(root, "device", "control.go"), "utf8");
+const devicePlane = fs.readFileSync(path.join(root, "device", "control_plane.go"), "utf8");
+const devicePlayer = fs.readFileSync(path.join(root, "device", "esphome", "mediaplayer.go"), "utf8");
 const renderer = fs.readFileSync(path.join(root, "src", "ui", "renderer.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "src", "ui", "index.html"), "utf8");
 
@@ -40,25 +44,59 @@ test("the mute silences the microphone and not the speaker", () => {
   );
 });
 
-test("the device microphone switch does not call the speaker mute", () => {
-  const start = deviceMain.indexOf("control.OnMuted(func(muted bool) {");
-  const end = deviceMain.indexOf("\n\t})", start);
-  assert.notEqual(start, -1, "the device has no microphone mute handler");
-  assert.notEqual(end, -1, "the microphone mute handler is incomplete");
-  const handler = deviceMain.slice(start, end);
-  assert.ok(handler.includes("reporter.setMuted(muted)"), "the device mute state is not reported");
-  assert.ok(!handler.includes("speaker_.setMuted"), "the microphone mute also mutes the speaker");
-});
-
-test("the panel asks the device program to mute the microphone", () => {
-  // The device program owns the microphone, so the panel asks for it.
+test("there is no speaker mute", () => {
+  // There is one mute on this device and it is the microphone's, and
+  // it is the hardware latch's: only the button on top of the unit
+  // moves it.
+  //
+  // The speaker has a level rather than a mute. A level of zero is
+  // silence when a person wants it, and the media player is not offered
+  // a mute that the hardware would not honour.
   assert.ok(
-    deviceControl.includes('case "mute":'),
-    "the device program cannot be asked to mute",
+    !deviceAudio.includes("speakerMuted"),
+    "the speaker still has a mute of its own",
   );
   assert.ok(
-    main.includes("controlClient.sendMute(value)"),
-    "the panel does not tell the device program to mute",
+    !deviceMain.includes("setSpeakerMuted"),
+    "the media player's mute still silences the speaker",
+  );
+  assert.ok(
+    !deviceMain.includes("speaker_.setMuted(muted)"),
+    "the media player's mute still moves the microphone's latch",
+  );
+  // And the media player does not offer the mute to Home Assistant.
+  assert.ok(
+    !devicePlayer.includes("mediaPlayerVolumeMute"),
+    "the media player still offers a mute",
+  );
+});
+
+test("the panel cannot switch the mute", () => {
+  // The latch is one-way from software, so there is nothing for the
+  // panel to ask for that the hardware would do.
+  assert.ok(
+    !main.includes("controlClient.sendMute("),
+    "the panel still tells the device program to mute",
+  );
+  assert.ok(
+    !main.includes("async function setMute("),
+    "the panel still has a way to mute",
+  );
+  // The device program still hears a mute from the panel, and ignores
+  // it. A panel that has not been updated yet asks for one, and the
+  // hardware would refuse it anyway — so the ask is heard and dropped
+  // rather than being a command the device program does not know.
+  assert.ok(
+    deviceControl.includes('case "mute":'),
+    "the device program does not hear a mute from the panel",
+  );
+  assert.ok(
+    deviceControl.includes("A mute from the panel is ignored."),
+    "the device program does not say that it ignores a mute",
+  );
+  assert.ok(
+    !devicePlane.includes("p.server.SetMuteHandler"),
+    "the device program still has a mute handler to wire",
   );
 });
 
@@ -67,10 +105,10 @@ test("the device's mute is the hardware latch's", () => {
   // microphone's mute that it means.
   //
   // On the Echo Show 8 the microphone's mute is a hardware latch, and
-  // the device program owns it: it moves the latch and reports where
-  // the latch ended up. So the panel follows the device program's
-  // state rather than writing the mixer, which is not where the
-  // microphone is cut.
+  // the device program owns it: it watches the latch and reports where
+  // it ended up. So the panel follows the device program's state
+  // rather than writing the mixer, which is not where the microphone
+  // is cut.
   assert.ok(
     main.includes("followDeviceMute"),
     "the device's mute does not reach the microphone",
@@ -83,37 +121,53 @@ test("the device's mute is the hardware latch's", () => {
     !main.includes("setSystemMicMuted(muted)"),
     "the panel still writes the mixer for the mute",
   );
-  // And the device program is what moves the latch.
+  // And the device program is what watches the latch.
   assert.ok(
     deviceMain.includes("newMuteController"),
     "the device program does not own the microphone's mute",
   );
 });
 
-test("a muted microphone turns the device's switch on", () => {
-  // The other way round: the microphone muted by something else turns
-  // the device's switch on, so Home Assistant shows what is really
-  // happening.
+test("the mute is shown on the screen", () => {
+  // The mute is the hardware's, so the screen cannot change it. It
+  // says where it is, and it says it without the drawer being open:
+  // a muted device that only says so inside a drawer is a device that
+  // looks live.
   assert.ok(
-    main.includes("controlClient.sendMute(muted)"),
-    "a muted microphone does not turn the device's switch on",
+    html.includes('id="mute-indicator"'),
+    "there is no mute indicator on the screen",
+  );
+  assert.ok(
+    !html.includes('id="mic-mute"'),
+    "the drawer still has a mute button, which the hardware does not allow",
+  );
+  assert.ok(
+    renderer.includes("function paintMute("),
+    "the indicator is not painted from the state",
+  );
+  assert.ok(
+    renderer.includes("muteIndicator.hidden = !on"),
+    "the indicator does not follow the latch",
   );
 });
 
-test("the mute is the microphone's own button", () => {
-  // The mute is beside the volume's slider and not in its heading, and
-  // it is the microphone's and not the speaker's.
+test("the mute light follows the latch", () => {
+  // The button's light is the red bar on the top of the unit, and it
+  // is what says at a glance that the microphones are cut.
   assert.ok(
-    html.includes('id="mic-mute"'),
-    "there is no microphone mute button",
+    deviceMain.includes("setMicMuteLED(muted)"),
+    "the light does not follow the latch",
+  );
+  // The light is found by its name: the LED class on this kernel has
+  // no "function" file, so a lookup by function finds nothing.
+  const mute = fs.readFileSync(path.join(root, "device", "mute.go"), "utf8");
+  assert.ok(
+    mute.includes("isMicMuteLED(name)"),
+    "the light is not found by its name",
   );
   assert.ok(
-    !html.includes('id="volume-mute"'),
-    "the mute is still the volume's own icon",
-  );
-  assert.ok(
-    html.includes('aria-label="Mute the microphone"'),
-    "the mute button does not say what it mutes",
+    !mute.includes('"/function"'),
+    "the light is still looked for by a function the kernel does not have",
   );
 });
 
