@@ -436,7 +436,7 @@ function sendTransport(command) {
 // control still works afterwards.
 function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {
   const safeDuration = Math.max(1000, Math.min(Number(duration) || 8000, 120000));
-  turnDisplayOn();
+  wakeScreen();
   ensureOverlayView();
   sendToOverlay("app:notification", {
     title: String(title).slice(0, 100),
@@ -986,6 +986,35 @@ function turnDisplayOff() {
   runDisplayCommand("off");
 }
 
+// wakeScreen turns the screen on.
+//
+// It is the one way the screen comes on, whatever asked for it: the
+// switch in Home Assistant, a wake word, a notification, or a tap on
+// the screen itself.
+//
+// The screen comes on the way it comes on otherwise, with the relight
+// the panel needs, so the brightness control still works afterwards.
+//
+// A screen that is already on is left alone, so a tap on a screen that
+// is working is a tap on whatever is under it.
+function wakeScreen() {
+  const off = displayIsOff || requestedDisplayStatus === "off" || !backlightIsPowered();
+  if (!off) return;
+  turnDisplayOn();
+}
+
+// wakeOnTouch turns the screen on when it is off and somebody taps it.
+//
+// The screen is off and the panel is still there: the brightness only
+// controls the PWM, and the touch controller does not know anything
+// about it. So a person who taps a dark screen means to wake it.
+//
+// It is the same way the screen comes on when Home Assistant's switch
+// turns it on, so the brightness control still works afterwards.
+function wakeOnTouch() {
+  wakeScreen();
+}
+
 // turnDisplayOn turns the screen on.
 //
 // It goes through the backlight on a panel that has no way to power the
@@ -1422,10 +1451,9 @@ function followDeviceTurn() {
   // listening, thinking or speaking.
   const busy = Boolean(state.listening || state.thinking || state.speaking);
   if (!busy) return;
-  if (!displayIsOff && backlightIsPowered()) return;
   // The screen was off. It comes back at the level it was at, and the
   // automatic brightness takes over again from there.
-  turnDisplayOn();
+  wakeScreen();
 }
 
 // followDeviceMute makes the system microphone follow the device's.
@@ -1521,9 +1549,7 @@ async function handleCommand(command) {
   const action = command.action;
   switch (action) {
     case "wake": {
-      const wasOff = displayIsOff || requestedDisplayStatus === "off";
-      recordActivity("home-assistant");
-      if (!wasOff) runDisplayCommand("on");
+      wakeScreen();
       break;
     }
     case "dashboard": recordActivity("home-assistant"); openMode("dashboard"); break;
@@ -1964,6 +1990,14 @@ function createOverlayView() {
       webContents.reload();
     }, 1000).unref?.();
   });
+  // A tap on the overlay turns the screen on when it is off.
+  //
+  // The overlay is the view that is on top when it is up, so it is the
+  // one that sees the touch when the drawer, the keyboard or the voice
+  // overlay is showing.
+  webContents.on("before-mouse-event", (_event, input) => {
+    if (input.type === "mouseDown") wakeOnTouch();
+  });
 }
 
 function waitForOverlayLoad(webContents) {
@@ -2024,6 +2058,13 @@ function createTabView() {
       if (tabView?.webContents.isDestroyed()) return;
       tabView.webContents.reload();
     }, 1000).unref?.();
+  });
+  // A tap on the tab turns the screen on when it is off.
+  //
+  // The tab is the view on top when it is up, so it is the one that
+  // sees the touch along the edge of the screen.
+  tabView.webContents.on("before-mouse-event", (_event, input) => {
+    if (input.type === "mouseDown") wakeOnTouch();
   });
   resizeTabView();
 }
@@ -2183,6 +2224,17 @@ function createWindow() {
   });
   view().on("before-input-event", (_event, input) => {
     if (["mouseDown", "keyDown", "char"].includes(input.type)) recordActivity(input.type);
+  });
+  // A tap on the screen turns it on when it is off.
+  //
+  // The screen is off and the panel is still there: the brightness only
+  // controls the PWM, and the touch controller does not know anything
+  // about it. So a person who taps a dark screen means to wake it.
+  //
+  // It only wakes the screen. It does nothing when the screen is on, so
+  // a tap on a screen that is working is a tap on whatever is under it.
+  view().on("before-mouse-event", (_event, input) => {
+    if (input.type === "mouseDown") wakeOnTouch();
   });
   view().on("before-mouse-event", (_event, input) => {
     if (input.type === "mouseDown") {
