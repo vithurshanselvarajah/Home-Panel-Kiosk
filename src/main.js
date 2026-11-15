@@ -590,6 +590,9 @@ function resizeOverlay() {
   // It is transparent when nothing is showing, so it does not get in
   // the way of the dashboard.
   const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlayFull || overlayNeeded() || displayIsOff;
+  // The overlay has to exist to be put on the screen. A screen that is
+  // off needs it to catch the touch that wakes it, so it is made.
+  if (needsOverlay && !overlayView) ensureOverlayView();
   if (!needsOverlay) {
     if (overlayAttached) {
       win.contentView.removeChildView(overlayView);
@@ -976,6 +979,10 @@ async function setBacklightOff(off) {
       backlightIsOff = true;
     });
     displayIsOff = true;
+    // The overlay is put on the screen, so that a tap on the dark screen
+    // reaches the panel and wakes it.
+    ensureOverlayView();
+    resizeOverlay();
     sendState();
     return;
   }
@@ -1079,6 +1086,10 @@ function watchScreen() {
     // The screen is dark, so the level it was at is remembered for the
     // way back.
     brightnessBeforeOff = currentBrightness();
+    // The overlay is put on the screen, so that a tap on the dark
+    // screen reaches the panel and wakes it.
+    ensureOverlayView();
+    resizeOverlay();
   } else {
     brightnessBeforeOff = null;
   }

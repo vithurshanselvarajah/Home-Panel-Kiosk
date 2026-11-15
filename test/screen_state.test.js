@@ -89,6 +89,10 @@ function harness({ powered = true, brightness = 500, level = 100 } = {}) {
     brightnessBeforeOff: null,
     relighting: false,
     sendState: (force) => states.push({ force }),
+    // The overlay is put on the screen when the screen goes off, so
+    // that a tap on it reaches the panel.
+    ensureOverlayView: () => {},
+    resizeOverlay: () => {},
     setTimeout: (fn, ms) => { fn(); return 0; },
     clearTimeout: () => {},
     console,
