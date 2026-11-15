@@ -55,7 +55,11 @@
             <span class="quick-control__label">Brightness</span>
             <span class="quick-control__value" id="brightness-value">—</span>
           </div>
-          <input class="slider" id="brightness-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Brightness" />
+          <!-- The lowest is 1%, not 0%: a brightness of zero switches the
+               panel's backlight PWM off, and the panel does not follow the
+               levels written to it after that, so the brightness control
+               stops working. The screen's own off is a separate button. -->
+          <input class="slider" id="brightness-slider" type="range" min="1" max="100" step="1" value="50" aria-label="Brightness" />
         </div>
         <div class="quick-control" id="volume-control" hidden>
           <div class="quick-control__head">

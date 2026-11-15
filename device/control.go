@@ -96,7 +96,6 @@ type ControlState struct {
 	IdleToSlideshowMinutes int    `json:"idleToSlideshowMinutes"`
 	SlideshowToOffMinutes  int    `json:"slideshowToOffMinutes"`
 	TouchKeyboardEnabled   bool   `json:"touchKeyboardEnabled"`
-	StartupVolume          int    `json:"startupVolume"`
 	MusicEnabled           bool   `json:"musicEnabled"`
 	MusicUnpaired          bool   `json:"musicUnpaired"`
 }
@@ -139,6 +138,11 @@ type ControlServer struct {
 	// and the speaker sends its volume when it changes, and a change
 	// settles rather than going round for ever.
 	onVolume func(level int)
+	// onBrightness is called when the panel reports a brightness.
+	//
+	// The brightness the person set is the ceiling the automatic
+	// brightness works under, so the device program needs to hear it.
+	onBrightness func(percent int)
 	// onTransport is called when the panel asks for the music transport
 	// to be driven.
 	//
@@ -505,18 +509,37 @@ func (s *ControlServer) SetVolumeFollower(fn func(level int)) {
 	s.onVolume = fn
 }
 
+// SetBrightnessFollower sets what is called when the panel reports a
+// brightness.
+//
+// The brightness the person set is the ceiling the automatic brightness
+// works under, so the device program needs to hear it.
+func (s *ControlServer) SetBrightnessFollower(fn func(percent int)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onBrightness = fn
+}
+
 func (s *ControlServer) SetState(state ControlState) {
 	s.mu.Lock()
 	changed := s.state != state
 	volumeChanged := s.state.Volume == nil != (state.Volume == nil) ||
 		(state.Volume != nil && s.state.Volume != nil && *s.state.Volume != *state.Volume)
+	brightnessChanged := s.state.Brightness != state.Brightness
 	s.state = state
 	follower := s.onVolume
+	brightnessFollower := s.onBrightness
 	s.mu.Unlock()
 	if !changed {
 		return
 	}
 	s.applyEntities(state)
+
+	// The brightness is handed on when it changes, and only then: it is
+	// the ceiling the automatic brightness works under.
+	if brightnessChanged && brightnessFollower != nil {
+		brightnessFollower(state.Brightness)
+	}
 
 	// The volume is handed on when it changes, and only then: a change
 	// that is passed on every time would go round for ever between the
@@ -538,13 +561,48 @@ func (s *ControlServer) State() ControlState {
 	return s.state
 }
 
+// SetLux publishes the room's light.
+//
+// It is a reading, so it is published as it is read.
+func (s *ControlServer) SetLux(lux float64) {
+	if s.registry == nil {
+		return
+	}
+	for _, entity := range s.registry.All() {
+		if entity.ObjectID != "light_lux" {
+			continue
+		}
+		s.registry.SetState(entity.Key, esphome.EntityValue{
+			Kind: esphome.KindSensor, Number: lux,
+		})
+	}
+}
+
+// SetAutoBrightness publishes whether the screen follows the room.
+func (s *ControlServer) SetAutoBrightness(on bool) {
+	if s.registry == nil {
+		return
+	}
+	for _, entity := range s.registry.All() {
+		if entity.ObjectID != "auto_brightness" {
+			continue
+		}
+		s.registry.SetState(entity.Key, esphome.EntityValue{
+			Kind: esphome.KindSwitch, Bool: on,
+		})
+	}
+}
+
 // SetVoiceSettings puts the voice settings into the entities.
 //
 // The voice settings are the device's own rather than the panel's, so
 // they are not in the panel's state. They are pushed into the entities
 // so Home Assistant can read them, and so a change made in Home
 // Assistant is not undone by the next state the panel sends.
-func (s *ControlServer) SetVoiceSettings(threshold float64, wakeEnabled bool, duckDB float64, muted bool) {
+//
+// The mute is not among them: it is the hardware latch, and software
+// cannot release it, so there is no switch to offer.
+func (s *ControlServer) SetVoiceSettings(threshold float64, wakeEnabled bool, duckDB float64) {
 	if s.registry == nil {
 		return
 	}
@@ -561,10 +619,6 @@ func (s *ControlServer) SetVoiceSettings(threshold float64, wakeEnabled bool, du
 		case "music_ducking_db":
 			s.registry.SetState(entity.Key, esphome.EntityValue{
 				Kind: esphome.KindNumber, Number: duckDB,
-			})
-		case "muted":
-			s.registry.SetState(entity.Key, esphome.EntityValue{
-				Kind: esphome.KindSwitch, Bool: muted,
 			})
 		}
 	}
@@ -638,8 +692,6 @@ func (s *ControlServer) applyEntities(state ControlState) {
 			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindNumber, Number: float64(state.SlideshowToOffMinutes)})
 		case "touch_keyboard_enabled":
 			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: state.TouchKeyboardEnabled})
-		case "startup_volume":
-			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindNumber, Number: float64(state.StartupVolume)})
 		case "music_enabled":
 			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindSwitch, Bool: state.MusicEnabled})
 		case "music_unpaired":
