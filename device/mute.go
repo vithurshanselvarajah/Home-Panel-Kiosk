@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -178,11 +179,27 @@ func (m *muteController) Close() error {
 // but the mainline wiring drives it from the LED subsystem, so it is set
 // here from the latch's state.
 //
-// The LED is found by its function, which the device tree gives as
-// LED_FUNCTION_MICMUTE.
-const micMuteLED = "micmute"
+// The LED is found by its name rather than by its function. The device
+// tree gives the function as LED_FUNCTION_MICMUTE, but the LED class only
+// exposes a "function" file when the kernel has the attribute, and this
+// one does not: the light is simply named "red:micmute", and a lookup by
+// function finds nothing and leaves the mute silent.
+const (
+	// micMuteLED is the name of the mute button's light, as the LED
+	// class names it: the colour, then a colon, then the label from
+	// the device tree.
+	micMuteLED = "micmute"
+)
 
 // setMicMuteLED lights the mute button's light.
+//
+// The light is the red bar along the top of the unit, and it is what
+// says at a glance that the microphones are cut.
+//
+// Writing the brightness needs to be permitted for the program's user,
+// which the udev rule in the kernel's install does; without it the write
+// is refused and the error says so rather than the mute being silently
+// dark.
 func setMicMuteLED(lit bool) error {
 	root := "/sys/class/leds"
 	entries, err := os.ReadDir(root)
@@ -191,25 +208,45 @@ func setMicMuteLED(lit bool) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		function, err := os.ReadFile(root + "/" + name + "/function")
-		if err != nil {
-			continue
-		}
-		if strings.TrimSpace(string(function)) != micMuteLED {
+		if !isMicMuteLED(name) {
 			continue
 		}
 		brightness := "0"
 		if lit {
-			max, err := os.ReadFile(root + "/" + name + "/max_brightness")
-			if err != nil || strings.TrimSpace(string(max)) == "0" {
-				brightness = "1"
-			} else {
-				brightness = strings.TrimSpace(string(max))
-			}
+			brightness = ledBrightness(root + "/" + name)
 		}
 		return os.WriteFile(root+"/"+name+"/brightness", []byte(brightness), 0o644)
 	}
-	return nil
+	return fmt.Errorf("the mute light %s was not found", micMuteLED)
+}
+
+// isMicMuteLED says whether a name in the LED class is the mute light.
+//
+// The name is the colour and the label, joined by a colon: "red:micmute".
+// The label is matched on its own, so a light under a different colour
+// is still found.
+func isMicMuteLED(name string) bool {
+	_, label, found := strings.Cut(name, ":")
+	if !found {
+		label = name
+	}
+	return strings.EqualFold(label, micMuteLED)
+}
+
+// ledBrightness is the level that lights an LED fully.
+//
+// It is the LED's own maximum, which is what a light with a range wants
+// rather than a number that happens to be bright.
+func ledBrightness(path string) string {
+	max, err := os.ReadFile(path + "/max_brightness")
+	if err != nil {
+		return "1"
+	}
+	level := strings.TrimSpace(string(max))
+	if level == "" || level == "0" {
+		return "1"
+	}
+	return level
 }
 
 // The latch's own timing, for the wait after a change.

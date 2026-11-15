@@ -510,7 +510,14 @@ func main() {
 			speaker_.setVolume(int(volume * 100))
 		},
 		OnMute: func(muted bool) {
-			speaker_.setMuted(muted)
+			// The media player's mute is not acted on.
+			//
+			// There is one mute on this device and it is the
+			// microphone's, and it is the hardware latch's: only the
+			// button on top of the unit moves it. The speaker has a
+			// level rather than a mute, and a level of zero is
+			// silence when a person wants it.
+			log.Info("the speaker's mute was ignored", "muted", muted)
 		},
 	})
 	// The reply is played on the speaker, so the speaker's state follows
@@ -728,21 +735,17 @@ func main() {
 		speaker_.setDuckDb(db)
 		log.Info("the ducking was set", "decibels", db)
 	})
-	// The mute is switched on or off.
+	// The mute is the hardware latch's, and only the hardware moves it.
 	//
-	// It is switched from two places: Home Assistant's switch on the
-	// device, and the panel's own button. They are the same thing, so
-	// they are handled the same way, and the entity is published either
-	// way — so that what Home Assistant shows is what the microphone is
-	// really doing.
+	// The button on top of the unit sets the latch, and the latch is
+	// one-way from software: the button is also the only thing that
+	// releases it. So there is nothing for the panel or for Home
+	// Assistant to switch — they are told where the latch is, and the
+	// microphone is cut or not cut by the hardware.
 	//
 	// The mute is the microphone's and not the speaker's: a person who
 	// mutes the panel wants the room to stop hearing them, and they
 	// still want to hear the music.
-	control.OnMuted(func(muted bool) {
-		reporter.setMuted(muted)
-		log.Info("the mute was switched", "muted", muted)
-	})
 
 	// The latch is followed, and the button's light follows the latch.
 	//
