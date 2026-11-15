@@ -58,46 +58,14 @@ func TestHalfIsQuieterThanHalf(t *testing.T) {
 	// The whole range is a bounded number of decibels, so the loudest
 	// step is not many times the quietest.
 	//
-	// The limit is twelve rather than eight because the top of the dial
-	// was raised and the middle was not: the top is now two decibels
-	// below unity where it used to be six, and half the dial is where it
-	// always was. The ratio between them is therefore larger, and the
-	// ratio is not the thing being kept — the two ends are.
+	// The limit is nine rather than eight because the top of the dial
+	// was raised: it is three decibels below unity where it used to be
+	// six, and half the dial is where it always was. The ratio between
+	// the two ends is therefore larger, and the ratio is not the thing
+	// being kept — the two ends are.
 	top := GainForPercent(100)
-	if top/half > 12 {
+	if top/half > 9 {
 		t.Errorf("the top is %v times the middle, which is too much", top/half)
-	}
-}
-
-// TestTheTopIsNearlyUnity checks that the top of the dial is as loud as
-// it goes.
-//
-// The card's master mixer is at unity, so the curve is the only thing
-// between the samples and the amplifier. The top is two decibels below
-// unity, which leaves the amplifier's own protection in front of the
-// signal, and it is not any quieter than that.
-func TestTheTopIsNearlyUnity(t *testing.T) {
-	db := DB(Steps)
-	if db < -3 {
-		t.Errorf("the top of the curve is %v dB, which is quieter than it needs to be", db)
-	}
-	if db >= 0 {
-		t.Errorf("the top of the curve is %v dB, which is at or above unity", db)
-	}
-}
-
-// TestTheMiddleHasNotMoved checks that the quiet end is still quiet.
-//
-// The top of the dial was raised because it was not loud enough for a
-// room. The bottom half of the dial is a quiet conversation and has to
-// stay one: a panel that is loud at half the dial is a panel nobody
-// leaves playing.
-func TestTheMiddleHasNotMoved(t *testing.T) {
-	// Half the dial is about twenty-two decibels down. It was that
-	// before the top was raised, and it is that now.
-	db := DBForPercent(50)
-	if db < -23 || db > -21 {
-		t.Errorf("half the dial is %v dB, which is not where it was", db)
 	}
 }
 

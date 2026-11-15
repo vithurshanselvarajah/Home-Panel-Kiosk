@@ -564,10 +564,16 @@ function paintMute(muted) {
   // or the slide is not seen.
   if (on) requestAnimationFrame(() => muteIndicator.classList.add("is-visible"));
   else muteIndicator.classList.remove("is-visible");
-  // The main process is told, for the same reason the popup tells it:
-  // the indicator is drawn in the overlay view, and the view has to be
-  // on the screen for the indicator to be seen.
-  setOverlayPopup(on);
+}
+
+// The main process tells the renderer that the latch has moved.
+//
+// The indicator is drawn in the overlay view, and the overlay view is
+// only on the screen when something needs it — so a renderer that is
+// not on the screen never hears that the button on top of the unit was
+// pressed. The main process hears it and says so.
+if (window.homePanel.onMuteIndicator) {
+  window.homePanel.onMuteIndicator((on) => paintMute(on));
 }
 
 // The volume popup.
@@ -588,6 +594,13 @@ let volumePopupTimer = null;
 // twice does not make it flicker.
 let lastPopupVolume = null;
 
+// showVolumePopup puts the popup up at a level.
+//
+// It is called from the main process, which is what knows that the
+// level changed: the popup is drawn in the overlay view, and the
+// overlay view is only on the screen when something needs it — so a
+// renderer that was not on the screen never hears that the buttons were
+// pressed.
 function showVolumePopup(value) {
   if (!volumePopup) return;
   const percent = Math.max(0, Math.min(100, Math.round(value)));
@@ -597,14 +610,12 @@ function showVolumePopup(value) {
   volumePopup.hidden = false;
   requestAnimationFrame(() => volumePopup.classList.add("is-visible"));
   clearTimeout(volumePopupTimer);
+  // The timer is here as well as in the main process, so the popup goes
+  // away even if the main process's message does not arrive.
   volumePopupTimer = setTimeout(hideVolumePopup, 2200);
-  // The main process is told, because the popup is drawn in the overlay
-  // view and the view has to be on the screen for it to be seen. The
-  // drawer is where the slider is, and a person using the buttons on
-  // the unit has the drawer shut.
-  setOverlayPopup(true);
 }
 
+// hideVolumePopup takes the popup down.
 function hideVolumePopup() {
   if (!volumePopup) return;
   volumePopup.classList.remove("is-visible");
@@ -614,21 +625,20 @@ function hideVolumePopup() {
   volumePopupTimer = setTimeout(() => {
     if (!volumePopup.classList.contains("is-visible")) {
       volumePopup.hidden = true;
-      setOverlayPopup(false);
     }
   }, 220);
 }
 
-// setOverlayPopup tells the main process that the popup or the mute
-// indicator is up.
-//
-// They are drawn in the overlay view, and the overlay view is taken off
-// the screen when nothing in it is showing. So the main process has to
-// know, or the popup is drawn in a view that is not on the screen —
-// which is why it only showed while the drawer was open.
-function setOverlayPopup(up) {
-  if (window.homePanel.setOverlayPopup) window.homePanel.setOverlayPopup(Boolean(up));
+// The main process raises the popup, because it is the one that knows
+// the level changed.
+if (window.homePanel.onVolumePopup) {
+  window.homePanel.onVolumePopup((payload) => {
+    if (payload && typeof payload.percent === "number") showVolumePopup(payload.percent);
+    else hideVolumePopup();
+  });
 }
+
+
 
 // The slider is set on release rather than on every movement, because a
 // backlight is written to for every value and a drag would write it

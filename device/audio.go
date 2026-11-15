@@ -2486,6 +2486,20 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 		player.OnVolume(func(level int) {
 			a.setVolume(level)
 		})
+		// The music server's volume is the DEVICE's volume.
+		//
+		// One volume, whoever moves it: the panel's slider, the buttons on
+		// the unit, Home Assistant or the music server. The server's
+		// commands are handed to the device, which applies them to
+		// everything it plays, and the device's level is reported back so
+		// the server and the panel agree.
+		//
+		// Without this the music carried the server's own gain AND the
+		// device's, so the music was quieter than everything else and the
+		// dial did not say by how much.
+		player.OnServerVolume(func(level int) {
+			a.setVolume(level)
+		})
 		player.OnSettings(func(_ int, muted bool, _ int) {
 			// The server can mute the music, and it is not the panel's
 			// own switch. It is kept apart from it so that unmuting on

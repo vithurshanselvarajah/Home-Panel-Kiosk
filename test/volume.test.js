@@ -50,6 +50,9 @@ function run() {
   const deviceState = { muted: deviceMuted };
   const sandbox = {
     sendState: (force) => sent.push({ force }),
+    ensureOverlayView: () => {},
+    resizeOverlay: () => {},
+    sendToOverlay: () => {},
     // The device program's state carries the mute, which is the
     // hardware latch's position.
     deviceClient: { state: deviceState },

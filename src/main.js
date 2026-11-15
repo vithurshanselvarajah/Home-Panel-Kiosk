@@ -73,7 +73,8 @@ let notificationTimer;
 let urlTimer;
 let overlayAttached = false;
 let overlayExpanded = false;
-// overlayPopup is whether the volume popup or the mute indicator is up.
+// overlayPopup is whether the volume popup is up, and overlayMute is
+// whether the mute indicator is up.
 //
 // They are drawn on the main screen rather than in the drawer, because
 // the volume is changed with the buttons on the unit and the mute is
@@ -85,7 +86,19 @@ let overlayExpanded = false;
 // screen: the popup is across the top and the indicator is in the
 // corner, and neither is inside the strip along the top right that the
 // drawer and the tab share.
+//
+// They are kept apart, because one of them going down must not take
+// the other with it: the volume popup goes down after a couple of
+// seconds, and the mute indicator stays up for as long as the
+// microphones are cut.
 let overlayPopup = false;
+let overlayMute = false;
+
+// overlayNeeded says whether the overlay view has to be on the screen
+// for the popup or the indicator.
+function overlayNeeded() {
+  return overlayPopup || overlayMute;
+}
 // voiceOverlayFull is whether the wake word overlay is covering the
 // screen.
 //
@@ -558,7 +571,7 @@ function resizeOverlay() {
   // The pull tab is the way the drawer is opened, so the overlay has to be
   // on the screen for the tab to be caught, even when nothing else in it
   // is showing.
-  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlayFull || overlayPopup;
+  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlayFull || overlayNeeded();
   if (!needsOverlay) {
     if (overlayAttached) {
       win.contentView.removeChildView(overlayView);
@@ -573,7 +586,7 @@ function resizeOverlay() {
     win.contentView.addChildView(overlayView);
     overlayAttached = true;
   }
-  if (overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayPopup) {
+  if (overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayNeeded()) {
     // The wake word overlay covers the whole screen, and so does the
     // drawer and the settings page. So does the volume popup and the
     // mute indicator: the popup is across the top and the indicator is
@@ -618,7 +631,7 @@ function scheduleOverlayRecycle() {
   if (overlayRecycleTimer) return;
   overlayRecycleTimer = setTimeout(() => {
     overlayRecycleTimer = undefined;
-    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url" || voiceOverlayFull || overlayPopup) return;
+    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url" || voiceOverlayFull || overlayNeeded()) return;
     destroyOverlayView();
   }, OVERLAY_RECYCLE_DELAY_MS);
 }
@@ -1006,7 +1019,43 @@ function followDeviceVolume(percent) {
   if (!Number.isFinite(value)) return;
   if (value === systemVolume) return;
   systemVolume = value;
+  // The popup is raised from here, and not from the renderer.
+  //
+  // The popup is drawn in the overlay view, and the overlay view is only
+  // on the screen when something needs it — the drawer, the keyboard or
+  // the voice overlay. The renderer cannot raise the popup on its own,
+  // because a renderer that is not on the screen never hears that the
+  // level changed. So the panel raises it, and the overlay view is put
+  // on the screen to hold it.
+  //
+  // The level is changed with the buttons on the unit, so this is the
+  // path that matters: a person using the buttons has the drawer shut.
+  showVolumePopup(value);
   sendState(true);
+}
+
+// showVolumePopup puts the volume popup up, and takes it down again.
+//
+// It is done here rather than in the renderer because the renderer is
+// only on the screen when something else needs it, and the popup is
+// wanted when nothing else does.
+let volumePopupTimer = null;
+
+function showVolumePopup(percent) {
+  ensureOverlayView();
+  overlayPopup = true;
+  resizeOverlay();
+  sendToOverlay("app:volume-popup", { percent });
+  clearTimeout(volumePopupTimer);
+  volumePopupTimer = setTimeout(hideVolumePopup, 2200);
+}
+
+function hideVolumePopup() {
+  clearTimeout(volumePopupTimer);
+  volumePopupTimer = null;
+  overlayPopup = false;
+  resizeOverlay();
+  sendToOverlay("app:volume-popup", null);
 }
 
 // sendDeviceVolume asks the device program for a level.
@@ -1059,7 +1108,26 @@ function followDeviceMute() {
   // On the Echo Show 8 the mute is a hardware latch and the device
   // program has already moved it: the state it reports is the latch's
   // own position. The mixer is not where the microphone is cut.
+  //
+  // The indicator is put up from here, for the same reason the volume
+  // popup is: it is drawn in the overlay view, and the overlay view is
+  // only on the screen when something needs it. A renderer that is not
+  // on the screen never hears that the latch moved.
+  showMuteIndicator(muted);
   sendState(true);
+}
+
+// showMuteIndicator puts the mute indicator up, or takes it down.
+//
+// It is here rather than in the renderer for the same reason the volume
+// popup is: the button on top of the unit flips the latch, and the
+// panel is the one that hears about it.
+function showMuteIndicator(muted) {
+  const on = Boolean(muted);
+  overlayMute = on;
+  if (on) ensureOverlayView();
+  resizeOverlay();
+  sendToOverlay("app:mute-indicator", on);
 }
 
 // withMuteLock does one thing with the mute at a time.
@@ -1849,14 +1917,6 @@ function registerIpc() {
     return voiceMonitorMic;
   });
   ipcMain.on("app:activity", (event, source) => { assertOverlaySender(event); recordActivity(source === "keydown" ? "overlay-key" : "overlay"); });
-  ipcMain.on("app:overlay-popup", (event, up) => {
-    assertOverlaySender(event);
-    const next = Boolean(up);
-    if (overlayPopup === next) return;
-    overlayPopup = next;
-    ensureOverlayView();
-    resizeOverlay();
-  });
   ipcMain.on("app:overlay-expanded", (event, expanded) => {
     assertOverlaySender(event);
     overlayExpanded = Boolean(expanded);
