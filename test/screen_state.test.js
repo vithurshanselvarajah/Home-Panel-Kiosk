@@ -324,6 +324,51 @@ test("the overlay is on the screen while the screen is off", () => {
   );
 });
 
+test("the overlay is put back when the screen comes on", () => {
+  // The overlay was over the whole screen to catch the touch that woke
+  // it. Now it has to be out of the way of the dashboard, or it would
+  // swallow the taps on it.
+  const start = main.indexOf("async function setBacklightOff");
+  const end = main.indexOf("// wakeOnTouch turns the screen on");
+  const body = main.slice(start, end);
+  const on = body.lastIndexOf("displayIsOff = false;");
+  assert.ok(on > 0, "the screen's own off does not say the screen is on");
+  const after = body.slice(on, on + 300);
+  assert.ok(
+    after.includes("resizeOverlay();"),
+    "the overlay is left over the whole screen when the screen comes on",
+  );
+});
+
+test("the automatic brightness publishes the level it set", () => {
+  // The slider has to follow what the screen is actually at, or the
+  // automatic brightness looks like it is not working.
+  const start = main.indexOf("async function setAutomaticBrightness");
+  const end = main.indexOf("// AUTOMATIC_BRIGHTNESS_SMOOTH is how much");
+  const body = main.slice(start, end);
+  assert.ok(
+    body.includes("sendState(true);"),
+    "the level the automatic brightness set is not published",
+  );
+});
+
+test("the slider is the setting while the automatic brightness is on", () => {
+  // The setting does not move with the room's light: the level the room
+  // allows is a different thing, and it moves.
+  assert.ok(
+    main.includes("if (automaticCeiling !== null) return automaticCeiling;"),
+    "the slider chases the room's light instead of showing the setting",
+  );
+  // And moving the slider sets the ceiling rather than fighting the
+  // automatic brightness for the backlight.
+  const start = main.indexOf("async function setBrightness");
+  const body = main.slice(start, start + 2500);
+  assert.ok(
+    body.includes("automaticCeiling = percent;"),
+    "moving the slider does not set the ceiling",
+  );
+});
+
 test("the screen comes back with the relight the panel needs", () => {
   // The screen is turned on through the backlight on this panel, and the
   // backlight has to be brought back at full for a moment or the panel
