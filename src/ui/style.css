@@ -1,4 +1,35 @@
-:root{font-family:'DM Sans',sans-serif;color:#f5f7fa;font-synthesis:none;--ink:#10161f;--muted:#aab3c1;--accent:#8fe3c2;--panel:rgba(16,22,31,.97)}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:transparent;overflow:hidden}body{pointer-events:none}.side-panel{position:absolute;right:0;top:0;bottom:0;width:min(330px,calc(100vw - 32px));display:flex;flex-direction:column;overflow-y:auto;padding:22px 20px 14px;border-left:1px solid rgba(255,255,255,.14);border-radius:24px 0 0 24px;background:var(--panel);backdrop-filter:blur(25px);box-shadow:-24px 0 90px rgba(0,0,0,.48);pointer-events:auto;transform:translateX(100%);visibility:hidden;transition:transform .22s ease,visibility 0s linear .22s,bottom .16s ease}.side-panel.open{transform:translateX(0);visibility:visible;transition:transform .22s ease,visibility 0s,bottom .16s ease}.side-panel.with-home-bar{top:58px}.side-panel.dragging{visibility:visible;transition:transform none,bottom .16s ease}.drawer-heading{flex:none}.side-panel .service-status,.side-panel .drawer-actions{flex:none}.drawer-heading{display:flex;align-items:flex-start;justify-content:space-between}.eyebrow{color:var(--accent);font-size:9px;font-weight:700;letter-spacing:.16em}.drawer-heading h2{margin:0;font-size:20px;letter-spacing:-.04em}.close-button{border:0;background:transparent;color:#a7b2bf;font-size:29px;line-height:1;cursor:pointer}.service-status{display:grid;gap:3px;margin:auto 0 12px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.035)}.service-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:9px;min-height:29px;color:#d5dce5;font-size:12px}.service-row b{color:#8d99a8;font-size:10px;font-weight:500}.service-led{width:8px;height:8px;border-radius:50%;background:#657180}.service-led[data-status="online"]{background:#75e0a8;box-shadow:0 0 11px rgba(117,224,168,.65)}.service-led[data-status="connecting"]{background:#f0c568;box-shadow:0 0 10px rgba(240,197,104,.55)}.service-led[data-status="offline"]{background:#ef7777;box-shadow:0 0 10px rgba(239,119,119,.5)}/* ── The quick controls ─────────────────────────────────────────────── */
+:root{font-family:'DM Sans',sans-serif;color:#f5f7fa;font-synthesis:none;--ink:#10161f;--muted:#aab3c1;--accent:#8fe3c2;--panel:rgba(16,22,31,.97)}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:transparent;overflow:hidden}body{pointer-events:none}.side-panel{position:absolute;right:0;top:0;bottom:0;width:min(330px,calc(100vw - 32px));display:flex;flex-direction:column;overflow-y:auto;padding:22px 20px 14px;border-left:1px solid rgba(255,255,255,.14);border-radius:24px 0 0 24px;background:var(--panel);backdrop-filter:blur(25px);box-shadow:-24px 0 90px rgba(0,0,0,.48);pointer-events:auto;transform:translateX(100%);visibility:hidden;transition:transform .22s ease,visibility 0s linear .22s,bottom .16s ease}.side-panel.open{transform:translateX(0);visibility:visible;transition:transform .22s ease,visibility 0s,bottom .16s ease}.side-panel.with-home-bar{top:58px}.side-panel.dragging{visibility:visible;transition:transform none,bottom .16s ease}.drawer-heading{flex:none}.side-panel .service-status,.side-panel .drawer-actions{flex:none}.drawer-heading{display:flex;align-items:flex-start;justify-content:space-between}.eyebrow{color:var(--accent);font-size:9px;font-weight:700;letter-spacing:.16em}.drawer-heading h2{margin:0;font-size:20px;letter-spacing:-.04em}.close-button{border:0;background:transparent;color:#a7b2bf;font-size:29px;line-height:1;cursor:pointer}.service-status{display:grid;gap:3px;margin:auto 0 12px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.035)}.service-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:9px;min-height:29px;color:#d5dce5;font-size:12px}.service-row b{color:#8d99a8;font-size:10px;font-weight:500}.service-led{width:8px;height:8px;border-radius:50%;background:#657180}.service-led[data-status="online"]{background:#75e0a8;box-shadow:0 0 11px rgba(117,224,168,.65)}.service-led[data-status="connecting"]{background:#f0c568;box-shadow:0 0 10px rgba(240,197,104,.55)}.service-led[data-status="offline"]{background:#ef7777;box-shadow:0 0 10px rgba(239,119,119,.5)}/* ── The volume popup ───────────────────────────────────────────────────
+
+   It comes down from the top when the level changes and goes away again
+   on its own, the way a phone does it.
+
+   It is here because the level is changed with the buttons on the unit,
+   and a person holding the device cannot see the drawer. The drawer
+   still has the slider; this is the one that says what just happened. */
+.volume-popup{position:absolute;top:0;left:0;right:0;z-index:14;display:flex;justify-content:center;padding:18px 0 0;pointer-events:none;opacity:0;transform:translateY(-100%);transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1)}
+.volume-popup[hidden]{display:none}
+.volume-popup.is-visible{opacity:1;transform:translateY(0)}
+.volume-popup__bar{display:flex;align-items:center;gap:13px;min-width:300px;max-width:min(460px,calc(100vw - 48px));padding:13px 17px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(13,19,27,.94);backdrop-filter:blur(22px);box-shadow:0 18px 60px rgba(0,0,0,.34)}
+.volume-popup__icon{width:21px;height:21px;flex:none;color:var(--accent)}
+.volume-popup__track{position:relative;flex:1;height:6px;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden}
+.volume-popup__track i{position:absolute;inset:0 auto 0 0;width:0;border-radius:999px;background:linear-gradient(90deg,#8fe3c2,#cfe9a8);transition:width .16s ease}
+.volume-popup__value{min-width:26px;color:#dbe3ec;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ── The mute indicator ─────────────────────────────────────────────────
+
+   The mute is the hardware latch's, and the button on top of the unit is
+   the only thing that moves it. So this says where the latch is rather
+   than changing it: it is there while the microphones are cut, and gone
+   when they are not.
+
+   It is red, because a device that cannot hear is closer to being
+   broken than to being a colour somebody chose. */
+.mute-indicator{position:absolute;top:18px;left:18px;z-index:13;display:flex;align-items:center;gap:9px;padding:10px 15px 10px 12px;border:1px solid rgba(255,107,107,.34);border-radius:999px;background:rgba(46,17,20,.92);backdrop-filter:blur(20px);box-shadow:0 14px 44px rgba(0,0,0,.34);color:#ff8f8f;font-size:12px;font-weight:600;pointer-events:none;opacity:0;transform:translateY(-10px);transition:opacity .2s ease,transform .2s ease}
+.mute-indicator[hidden]{display:none}
+.mute-indicator.is-visible{opacity:1;transform:translateY(0)}
+.mute-indicator__icon{width:19px;height:19px;flex:none}
+
+/* ── The quick controls ─────────────────────────────────────────────── */
 
 /* Brightness and volume sit at the top of the drawer because they are
    the two things a person reaches for most often. */
@@ -8,25 +39,7 @@
 .quick-control__label{flex:1;color:#d5dce5;font-size:12px;font-weight:600}
 .quick-control__value{color:#8d99a8;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
 
-/* The row the slider and the microphone's mute sit in. The mute is
-   beside the slider rather than in the heading, because it is a
-   control and not a label. */
-.quick-control__row{display:flex;align-items:center;gap:10px}
-.quick-control__row .slider{flex:1;min-width:0}
 
-/* The microphone's mute.
-   It is the microphone and not the speaker: a person who mutes the
-   panel wants the room to stop hearing them, and they still want to
-   hear the music.
-
-   It is green when the microphone is open and red when it is muted,
-   because the two are what a person looks for. */
-.mic-mute{display:grid;place-items:center;width:38px;height:38px;flex:none;padding:0;border:0;border-radius:11px;background:rgba(143,227,194,.14);color:var(--accent);font-size:17px;cursor:pointer;transition:background .15s ease,color .15s ease}
-.mic-mute:hover{background:rgba(143,227,194,.24)}
-.mic-mute:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.mic-mute.is-muted{background:rgba(255,107,107,.2);color:#ff6b6b}
-.mic-mute.is-muted:hover{background:rgba(255,107,107,.3)}
-.mic-mute.is-muted .mic-mute__icon{opacity:.55}
 
 /* A slider that is meant to be dragged with a thumb, so it is tall and
    the thumb is big enough to hit. The filled part is a gradient that
@@ -82,7 +95,20 @@
 .slider--slim::-webkit-slider-thumb{width:14px;height:14px;margin-top:-5px;border-width:2px}
 .slider--slim:disabled{cursor:default;opacity:.55}
 
-.drawer-actions{display:grid;gap:5px}.drawer-button{width:100%;min-height:45px;display:flex;align-items:center;gap:12px;padding:0 12px;border:0;border-radius:12px;background:transparent;color:#e6ebf1;text-align:left;font:500 13px 'DM Sans',sans-serif;cursor:pointer}.drawer-button>span{width:22px;color:#a5b5c2;text-align:center;font-size:19px}.drawer-button:hover,.drawer-button.selected{background:rgba(255,255,255,.09);color:var(--accent)}.drawer-button:hover>span,.drawer-button.selected>span{color:var(--accent)}/* The footer says what the panel is doing and what it is. The version is
+.drawer-actions{display:grid;gap:5px}/* The icons are drawn rather than typed.
+   The device has DejaVu's fonts and nothing else, and DejaVu has no
+   pause sign and no transport arrows, so a character it does not have
+   is a blank box or nothing at all. Every icon is a drawing, so it
+   looks the same on every machine. */
+.drawer-button__icon{display:grid;place-items:center;width:17px;height:17px;flex:none}
+.drawer-button__icon svg{width:100%;height:100%;display:block}
+.media-button svg{width:19px;height:19px;display:block}
+.quick-control__icon svg{width:14px;height:14px;display:block}
+.notice-icon svg{width:19px;height:19px;display:block}
+.media-panel__fallback svg{width:26px;height:26px;display:block}
+.return-home__icon{display:inline-grid;place-items:center;width:15px;height:15px;vertical-align:-2px}
+.return-home__icon svg{width:100%;height:100%;display:block}
+.drawer-button{width:100%;min-height:45px;display:flex;align-items:center;gap:12px;padding:0 12px;border:0;border-radius:12px;background:transparent;color:#e6ebf1;text-align:left;font:500 13px 'DM Sans',sans-serif;cursor:pointer}.drawer-button>span{width:22px;color:#a5b5c2;text-align:center;font-size:19px}.drawer-button:hover,.drawer-button.selected{background:rgba(255,255,255,.09);color:var(--accent)}.drawer-button:hover>span,.drawer-button.selected>span{color:var(--accent)}/* The footer says what the panel is doing and what it is. The version is
    here because it is the thing a person is asked for when something goes
    wrong, and the drawer is where they would look. */
 .side-panel footer{padding-top:12px;border-top:1px solid rgba(255,255,255,.09);display:flex;align-items:baseline;justify-content:space-between;gap:12px}
@@ -252,9 +278,6 @@ body{color:var(--ink)}
 .slider{height:40px;background-size:100% 6px}
 .slider::-webkit-slider-runnable-track{height:6px}
 .slider::-webkit-slider-thumb{width:28px;height:28px;margin-top:-11px;background:var(--accent);box-shadow:0 1px 5px rgba(0,0,0,.35)}
-.mic-mute{width:52px;height:52px;border-radius:15px;background:rgba(131,200,160,.14);color:var(--success);font-size:21px}
-.mic-mute:hover{background:rgba(131,200,160,.22)}
-.mic-mute.is-muted{background:rgba(228,135,126,.16);color:var(--danger)}
 .media-panel{padding:16px;gap:13px}
 .media-panel__art{border-radius:16px}
 .media-panel__title{font-size:16px;color:var(--ink)}
