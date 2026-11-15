@@ -45,6 +45,7 @@ function volumeSource() {
 // run runs the volume handling with a device program that answers.
 function run() {
   const sent = [];
+  const configs = [];
   const timers = [];
   const requested = [];
   const deviceState = { muted: deviceMuted };
@@ -54,8 +55,9 @@ function run() {
     resizeOverlay: () => {},
     sendToOverlay: () => {},
     // The device program's state carries the mute, which is the
-    // hardware latch's position.
-    deviceClient: { state: deviceState },
+    // hardware latch's position. The configuration is where the level
+    // is kept, so the panel writes the level there.
+    deviceClient: { state: deviceState, sendConfig: (config) => { configs.push(config); } },
     // The control client is what tells the device program. It answers
     // with the level it now holds, which is what the device program
     // would have applied.
@@ -77,6 +79,11 @@ function run() {
     clearInterval: (id) => { if (timers[id]) timers[id].alive = false; },
     setTimeout: () => 0,
     clearTimeout: () => {},
+    // The settings the device configuration is built from.
+    settings: { musicEnabled: true, musicName: "home-panel", musicUnpaired: false, cameraEnabled: false, voiceAudioInput: "", voiceAudioOutput: "" },
+    settingBoolean: (value) => Boolean(value),
+    voiceMonitorMic: false,
+    voiceTestSound: 0,
     Math,
     Number,
   };
@@ -90,7 +97,7 @@ function run() {
       if (timer.alive) await timer.fn();
     }
   };
-  return { sandbox, sent, requested };
+  return { sandbox, sent, configs, requested };
 }
 
 test("the panel asks the device program for a volume", async () => {

@@ -137,11 +137,12 @@ function findSidecar(appPath, resourcesPath, execPath) {
  * DeviceClient runs the sidecar and reads the state it reports.
  */
 class DeviceClient {
-  constructor({ binary, stateFile, levelFile, configFile, dataDirectory, deviceId, board, mic, speaker, runtimeDirectory, controlSocket, esphomeKey, esphomeName, onState, onLog }) {
+  constructor({ binary, stateFile, levelFile, configFile, settingsFile, dataDirectory, deviceId, board, mic, speaker, runtimeDirectory, controlSocket, esphomeKey, esphomeName, onState, onLog }) {
     this.binary = binary;
     this.stateFile = stateFile;
     this.levelFile = levelFile || `${stateFile}.level`;
     this.configFile = configFile;
+    this.settingsFile = settingsFile;
     // The data directory is where the device program keeps the things it
     // has to keep: the music player's identity and its pairing records.
     //
@@ -197,6 +198,7 @@ class DeviceClient {
       "--level-file", this.levelFile,
     ];
     if (this.configFile) args.push("--config-file", this.configFile);
+    if (this.settingsFile) args.push("--settings-file", this.settingsFile);
     // The audio devices are named here as well as in the configuration, so
     // the device opens the right ones before the configuration is read.
     if (this.mic) args.push("--mic", this.mic);
@@ -424,8 +426,23 @@ class DeviceClient {
   async sendConfig(config) {
     if (!this.configFile) return;
     try {
+      // The file is merged, not replaced.
+      //
+      // Some of the settings in it belong to the device program: the
+      // wake word's sensitivity, the ducking and the level. The panel
+      // does not know about them, and replacing the file would take
+      // them out of it — so a setting that was chosen would be lost the
+      // next time the panel wrote the file, which is on every start.
+      //
+      // So what is written is put into what is there, and what the
+      // panel does not know about is left alone.
+      let existing = {};
+      try {
+        existing = JSON.parse(await fsp.readFile(this.configFile, "utf8"));
+      } catch { /* there is no file yet, or it is not readable */ }
+      const merged = { ...existing, ...config };
       const temporary = `${this.configFile}.tmp`;
-      await fsp.writeFile(temporary, JSON.stringify(config, null, 2), { mode: 0o600 });
+      await fsp.writeFile(temporary, JSON.stringify(merged, null, 2), { mode: 0o600 });
       await fsp.rename(temporary, this.configFile);
     } catch (error) {
       this.onLog(`the device configuration could not be written: ${error.message}`);

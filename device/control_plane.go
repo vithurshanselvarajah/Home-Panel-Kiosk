@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/ambient"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 )
 
@@ -26,6 +28,8 @@ import (
 
 // ControlPlane is everything the control plane needs.
 type ControlPlane struct {
+	// mu guards the light's reading and the automatic brightness.
+	mu sync.Mutex
 	// server is the socket the panel talks over.
 	server *ControlServer
 	// advertiser is the announcement on the network.
@@ -44,6 +48,18 @@ type ControlPlane struct {
 	camera *CameraService
 	// audio is the panel's own audio, so the volume can be set on it.
 	audio *deviceAudio
+	// wake is the wake word, so the state published to Home Assistant is
+	// the state the wake word is really in.
+	wake *wakeWord
+	// light is the board's light sensor, where it has one.
+	light *ambient.Sensor
+	// autoBrightness says whether the screen follows the room's light.
+	autoBrightness bool
+	// lightLux is the last reading of the room's light.
+	lightLux float64
+	// brightnessCeiling is the brightness the person set, as a
+	// percentage: the brightest the panel is allowed to be.
+	brightnessCeiling int
 	// voice is the voice assistant.
 	//
 	// The panel is a voice satellite: the wake word fires here, the
@@ -66,6 +82,9 @@ type ControlPlane struct {
 	onWakeThreshold func(threshold float64)
 	// onWakeEnabled is called when the wake word is switched.
 	onWakeEnabled func(enabled bool)
+	// onAutoBrightness is called when the automatic brightness is
+	// switched on or off.
+	onAutoBrightness func(on bool)
 	// onDucking is called when the ducking is changed.
 	onDucking func(db float64)
 	// onLink is called when the link to Home Assistant comes up or goes
@@ -99,8 +118,10 @@ func startControlPlane(
 	board string,
 	socket string,
 	audio *deviceAudio,
+	wake *wakeWord,
+	light *ambient.Sensor,
 ) *ControlPlane {
-	plane := &ControlPlane{log: log, audio: audio}
+	plane := &ControlPlane{log: log, audio: audio, wake: wake, light: light}
 	if camera, err := NewCameraService(log, ""); err == nil {
 		plane.camera = camera
 	} else {
@@ -118,6 +139,9 @@ func startControlPlane(
 	// The voice settings are entities too, so Home Assistant can read
 	// them and change them.
 	voiceEntities(registry)
+	// The light sensor and the automatic brightness, when the board has
+	// a sensor to read.
+	lightEntities(registry, plane.light != nil)
 
 	serverOptions := esphome.ServerOptions{
 		Name:          name,
@@ -262,6 +286,11 @@ func startControlPlane(
 				plane.audio.setVolume(level)
 			}
 		})
+		// The brightness the person set is the ceiling the automatic
+		// brightness works under.
+		server.SetBrightnessFollower(func(percent int) {
+			plane.setBrightnessCeiling(percent)
+		})
 	}
 
 	// The services and the entities are what Home Assistant acts on.
@@ -326,15 +355,8 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, plane *Cont
 				plane.setWakeEnabled(value.Bool)
 			case "music_ducking_db":
 				plane.setDucking(value.Number)
-			case "muted":
-				// The panel cannot mute the microphone.
-				//
-				// The mute is a hardware latch, and the latch is
-				// one-way from software: the button on the unit sets
-				// it and only the button releases it. So there is
-				// nothing here to do, and the entity is published
-				// from where the latch actually is.
-				plane.publishVoiceSettings()
+			case "auto_brightness":
+				plane.setAutoBrightness(value.Bool)
 			case "camera_stream":
 				if plane.camera != nil {
 					if err := plane.camera.SetEnabled(value.Bool); err != nil {
@@ -358,7 +380,7 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, plane *Cont
 						log.Warn("the camera resolution could not change", "error", err)
 					}
 				}
-			case "idle_slideshow_minutes", "slideshow_off_minutes", "touch_keyboard_enabled", "startup_volume", "music_enabled", "music_unpaired":
+			case "idle_slideshow_minutes", "slideshow_off_minutes", "touch_keyboard_enabled", "music_enabled", "music_unpaired":
 				var settingValue any
 				switch value.Kind {
 				case esphome.KindSwitch:
@@ -866,10 +888,102 @@ func (p *ControlPlane) publishVoiceSettings() {
 	}
 	p.server.SetVoiceSettings(
 		p.audio.wakeThreshold(),
-		p.audio.wakeEnabled(),
+		p.wakeEnabled(),
 		p.audio.duckLevel(),
-		p.audio.mutedNow(),
 	)
+}
+
+// SetAutoBrightness says whether the screen follows the room's light.
+//
+// It is the setting being put into force, rather than the entity being
+// changed: the device program reads it back at the start.
+func (p *ControlPlane) SetAutoBrightness(on bool) {
+	p.setAutoBrightness(on)
+}
+
+// setAutoBrightness says whether the screen follows the room's light.
+func (p *ControlPlane) setAutoBrightness(on bool) {
+	p.mu.Lock()
+	p.autoBrightness = on
+	p.mu.Unlock()
+	p.server.SetAutoBrightness(on)
+	if p.onAutoBrightness != nil {
+		p.onAutoBrightness(on)
+	}
+}
+
+// SetLux publishes the room's light.
+//
+// It is a reading, so it is published as it is read. The reading is
+// rounded, because a lux that moves by a fraction is not a different
+// light, and a sensor entity that changes every poll is one nobody can
+// read.
+func (p *ControlPlane) SetLux(lux float64) {
+	rounded := math.Round(lux)
+	p.mu.Lock()
+	changed := rounded != p.lightLux
+	p.lightLux = rounded
+	p.mu.Unlock()
+	if changed {
+		p.server.SetLux(rounded)
+	}
+}
+
+// BrightnessCeiling is the brightness the person set, as a percentage.
+//
+// It is the ceiling the automatic brightness works under: the room's
+// light decides how much of it the screen gets.
+//
+// It is the panel's own setting, which the panel reports in its state.
+func (p *ControlPlane) BrightnessCeiling() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.brightnessCeiling
+}
+
+// setBrightnessCeiling records the brightness the person set.
+func (p *ControlPlane) setBrightnessCeiling(percent int) {
+	p.mu.Lock()
+	p.brightnessCeiling = percent
+	p.mu.Unlock()
+}
+
+// AutoBrightness says whether the screen follows the room's light.
+func (p *ControlPlane) AutoBrightness() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.autoBrightness
+}
+
+// Lux is the room's light, in lux.
+func (p *ControlPlane) Lux() float64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.lightLux
+}
+
+// OnAutoBrightness sets what happens when the automatic brightness is
+// switched on or off.
+func (p *ControlPlane) OnAutoBrightness(fn func(on bool)) {
+	p.onAutoBrightness = fn
+}
+
+// wakeEnabled is whether the wake word is really listening.
+//
+// It is read from the wake word itself rather than from the audio's own
+// copy of the answer. The copy is only written when the wake word is
+// switched, so on a panel that was never switched it holds the zero
+// value — off — while the wake word is listening. Publishing that would
+// tell Home Assistant the wake word is off, and Home Assistant would
+// switch it off to match.
+//
+// So the state that is published is the one that is true. The wake word
+// is the thing that knows.
+func (p *ControlPlane) wakeEnabled() bool {
+	if p.wake != nil {
+		return p.wake.Enabled()
+	}
+	return p.audio.wakeEnabled()
 }
 
 // setWakeEnabled switches the wake word on or off.

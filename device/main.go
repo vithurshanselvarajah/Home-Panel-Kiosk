@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/ambient"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/autobrightness"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/config"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/sendspin"
@@ -204,6 +206,126 @@ func readConfig(path string) (Config, error) {
 	return c, nil
 }
 
+// writeConfig writes the device configuration.
+//
+// It writes the file through a temporary one and renames it into place,
+// so a reader never sees half of it.
+//
+// The file is the panel's: it is written by the panel when the panel's
+// settings change. But some of the settings in it belong to the device
+// program — the wake word's sensitivity, the ducking, the level — and
+// the panel does not know about them. So the device program writes them
+// back, and the two write to the same file at different times.
+//
+// The settings the device program owns have a file of their own, which
+// only the device program writes. The panel's file is left alone: the
+// panel owns it and the panel writes it, and nothing else touches it.
+//
+// So the two never write the same file, and neither can lose the
+// other's change.
+func writeConfig(path string, update func(c *Config)) error {
+	if path == "" {
+		return nil
+	}
+	c, err := readConfig(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	update(&c)
+
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	temporary := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
+	if err := os.WriteFile(temporary, data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(temporary, path); err != nil {
+		os.Remove(temporary)
+		return err
+	}
+	return nil
+}
+
+// keepSetting writes a setting the device program owns to the
+// configuration file.
+//
+// The write is not waited for: a setting is a reading, and the device
+// program should not stop what it is doing for it. A failure is logged
+// rather than returned, because there is nowhere for it to go: the
+// setting is in force either way, and it is only its keeping that is
+// lost.
+func keepSetting(path string, log *slog.Logger, update func(c *Config)) {
+	if path == "" {
+		return
+	}
+	if err := writeConfig(path, update); err != nil {
+		log.Warn("the setting could not be kept", "error", err)
+	}
+}
+
+// lightPollInterval is how often the light is read.
+//
+// It is slow: the sensor's own integration time is a quarter of a
+// second, and the room's light does not change faster than a person
+// moves through it.
+const lightPollInterval = 2 * time.Second
+
+// watchLight reads the room's light and keeps the screen's brightness
+// to it.
+//
+// The reading is published so Home Assistant can show it, and the
+// brightness is worked out from it when the automatic brightness is on.
+//
+// The brightness is the panel's to write: it owns the backlight and
+// knows about the relight that a screen coming back from off needs. So
+// the level is asked for rather than written here.
+func watchLight(ctx context.Context, light *ambient.Sensor, control *ControlPlane, log *slog.Logger) {
+	if light == nil {
+		return
+	}
+	ticker := time.NewTicker(lightPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		lux, ok, err := light.Lux()
+		if err != nil {
+			log.Debug("the light could not be read", "error", err)
+			continue
+		}
+		if !ok {
+			// The gain has just moved, so the counts are from the old
+			// gain. The next reading is the one to report.
+			continue
+		}
+		control.SetLux(lux)
+		// The screen's brightness follows the room when the automatic
+		// brightness is on.
+		//
+		// The level is asked of the panel rather than written here: the
+		// panel owns the backlight and knows about the relight that a
+		// screen coming back from off needs.
+		if control.AutoBrightness() {
+			ceiling := control.BrightnessCeiling()
+			level := autobrightness.Level(ceiling, true, lux)
+			control.SendCommand(ControlCommand{Action: "auto_brightness_level", Value: level})
+		}
+	}
+}
+
+// defaultVolume is the level the speaker is at on a panel that has never
+// had a level.
+//
+// There is no startup volume to choose any more: the speaker keeps the
+// level it was last at, so a panel that has had a level comes back at
+// it. This is where a panel that has not starts.
+const defaultVolume = 50
+
 // bargeInThreshold is the score the wake word has to reach while the
 // panel is speaking.
 //
@@ -228,6 +350,7 @@ func main() {
 		stateFile     = flag.String("state-file", "", "write the state here as JSON")
 		levelFile     = flag.String("level-file", "", "write the live microphone level here; empty derives it from the state file")
 		configFile    = flag.String("config-file", "", "read the device configuration from here")
+		settingsFile  = flag.String("settings-file", "", "keep the settings the device program owns in here")
 		mic           = flag.String("mic", "", "the microphone to use; empty is the system default")
 		speaker       = flag.String("speaker", "", "the speaker to use; empty is the system default")
 		micFile       = flag.String("mic-file", "", "play this recording as the microphone instead of using a sound card")
@@ -296,6 +419,14 @@ func main() {
 		backend:        backend,
 		log:            log,
 		credentialsDir: *creds,
+		// The wake word starts on, so the copy of its answer starts on
+		// too. A copy that started off would say the wake word was off
+		// on a panel that was listening.
+		wakeWordEnabled: true,
+		// The speaker starts at half. There is no startup volume to
+		// choose any more: the speaker keeps the level it was last at,
+		// and a panel that has never had a level starts here.
+		volume: defaultVolume,
 	}
 
 	// The microphone's mute is the hardware latch, where the board has
@@ -342,6 +473,11 @@ func main() {
 	// The reply ends when the speaker has drained it, which is later than
 	// the end of the stream. The mixer is what knows when that is.
 	speaker_.voiceEnded = reporter.replyEnded
+	// The reply begins when the first of its audio arrives, which is
+	// before the end of the stream and before the answer has all been
+	// written. The panel's overlay is drawn from this, so the screen has
+	// to know a reply is coming before the words are there.
+	speaker_.voiceStarted = reporter.replyStarted
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -370,10 +506,37 @@ func main() {
 		}
 	}
 
+	// The light sensor, where the board has one.
+	//
+	// It is not an error for a board to have none: the screen's
+	// brightness is then set by hand and nothing else.
+	light, lightErr := ambient.Open()
+	if lightErr != nil {
+		log.Info("the light sensor is not available", "reason", lightErr)
+		light = nil
+	} else {
+		log.Info("the light sensor is ready")
+	}
+
 	// The control plane: the Home Assistant connection and the socket
 	// the panel talks over.
-	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket, speaker_)
+	control := startControlPlane(ctx, log, *esphomePort, *esphomeKey, *esphomeName, *board, *controlSocket, speaker_, wake, light)
 	defer control.Close()
+
+	// The settings the device program owns are read back, so a panel
+	// that is restarted comes back at the settings that were chosen
+	// rather than at the defaults.
+	//
+	// They are read before the control plane's callbacks are wired, so
+	// a setting that was kept is the setting in force before Home
+	// Assistant asks about it.
+	if *settingsFile != "" {
+		if c, err := readConfig(*settingsFile); err == nil {
+			applyVoiceSettings(c, speaker_, wake, control, log)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			log.Warn("the kept settings could not be read", "error", err)
+		}
+	}
 
 	// The drawer says whether the panel can reach Home Assistant, and
 	// the link is what says. Nothing else knows it.
@@ -720,20 +883,44 @@ func main() {
 	// without this a person who interrupts is not heard at all.
 	wake.SetBargeThreshold(bargeInThreshold, speaker_.speaking)
 
+	// The settings the device program owns are kept.
+	//
+	// They are set from Home Assistant, and Home Assistant is not
+	// always there: a panel that is restarted with the link down would
+	// come back at the defaults rather than at the settings that were
+	// chosen. So each one is written to the configuration file when it
+	// changes, and read back at the next start.
 	control.OnWakeThreshold(func(threshold float64) {
 		wake.SetThreshold(threshold)
 		speaker_.setWakeThreshold(threshold)
 		log.Info("the wake word sensitivity was set", "threshold", threshold)
+		keepSetting(*settingsFile, log, func(c *Config) {
+			c.WakeThreshold = &threshold
+		})
 	})
 	control.OnWakeEnabled(func(enabled bool) {
 		wake.SetEnabled(enabled)
 		speaker_.setListening(enabled && wake.Ready())
 		speaker_.setWakeEnabled(enabled)
 		log.Info("the wake word was switched", "enabled", enabled)
+		keepSetting(*settingsFile, log, func(c *Config) {
+			c.WakeWordEnabled = &enabled
+		})
 	})
 	control.OnDucking(func(db float64) {
 		speaker_.setDuckDb(db)
 		log.Info("the ducking was set", "decibels", db)
+		keepSetting(*settingsFile, log, func(c *Config) {
+			c.DuckDb = &db
+		})
+	})
+	// The automatic brightness is kept, so a panel that is restarted
+	// comes back with the screen following the room or not, as it was.
+	control.OnAutoBrightness(func(on bool) {
+		log.Info("the automatic brightness was switched", "on", on)
+		keepSetting(*settingsFile, log, func(c *Config) {
+			c.AutoBrightness = &on
+		})
 	})
 	// The mute is the hardware latch's, and only the hardware moves it.
 	//
@@ -779,6 +966,11 @@ func main() {
 	// different depending on which path the audio took.
 	control.OnVolume(func(level int) {
 		speaker_.setVolume(level)
+		// The level is kept, so a panel that is restarted comes back at
+		// the level it was at.
+		keepSetting(*settingsFile, log, func(c *Config) {
+			c.Volume = &level
+		})
 	})
 
 	// The microphone's frames go to home assistant over the ESPHome
@@ -808,6 +1000,7 @@ func main() {
 
 	go reporter.run(ctx)
 	go watchConfig(ctx, *configFile, reporter, speaker_, wake, control, log)
+	go watchLight(ctx, light, control, log)
 
 	// The buttons on top of the device.
 	//
@@ -1032,15 +1225,16 @@ func (r *stateReporter) setThinking(thinking bool) {
 // It is kept here rather than taken from the voice assistant, because
 // the voice assistant clears it when the reply has all arrived, and the
 // reply is not over until the speaker has drained it.
+//
+// So the end is not taken from it either. The voice assistant saying
+// that the reply has all arrived is not the reply ending: the last of
+// the words is said after the last frame has arrived. The reply ends
+// when the speaker has drained it, which is replyEnded.
 func (r *stateReporter) setSpeaking(speaking bool) {
-	r.mu.Lock()
-	r.speaking = speaking
-	r.mu.Unlock()
-
-	r.state.SetSpeaking(speaking)
-	if speaking {
-		r.state.SetPhase(state.PhaseSpeaking, "")
+	if !speaking {
+		return
 	}
+	r.replyStarted()
 }
 
 // setMuted records that the microphone is muted.
@@ -1068,6 +1262,9 @@ func (r *stateReporter) replyStarted() {
 	r.mu.Lock()
 	r.speaking = true
 	r.mu.Unlock()
+
+	r.state.SetSpeaking(true)
+	r.state.SetPhase(state.PhaseSpeaking, "")
 }
 
 // replyEnded records that a reply finished.
@@ -1078,6 +1275,9 @@ func (r *stateReporter) replyEnded() {
 	r.mu.Lock()
 	r.speaking = false
 	r.mu.Unlock()
+
+	r.state.SetSpeaking(false)
+	r.state.SetPhase(state.PhaseIdle, "")
 }
 
 // publish writes the state if it changed.
@@ -1106,9 +1306,10 @@ func (r *stateReporter) publish(s state.Snapshot) {
 	// while they are being played. Both have to be true.
 	//
 	// A link that is down cannot be playing a reply, so the reply ends
-	// with it.
-	r.speaking = r.speaking && s.LinkUp
-	speaking := r.speaking
+	// with it — but the flag is not cleared here. It is cleared by the
+	// end of the reply, which happens on its own account, and clearing
+	// it here as well would lose a reply that is still playing.
+	speaking := r.speaking && s.LinkUp
 	listening := r.listening && s.LinkUp
 	r.mu.Unlock()
 
@@ -1385,14 +1586,42 @@ func applySendspinOnly(c Config, audio *deviceAudio, log *slog.Logger) {
 //
 // The configuration is a set of instructions, not a picture of the panel:
 // a key that is absent was not set, and the panel keeps what it had.
+// applyVoiceSettings applies the voice settings that were kept.
+//
+// These are the settings the device program owns: the wake word's
+// sensitivity, whether it is on, and how far the music ducks under a
+// reply. They are set from Home Assistant, and Home Assistant is not
+// always there, so they are kept and read back.
+func applyVoiceSettings(c Config, audio *deviceAudio, wake *wakeWord, control *ControlPlane, log *slog.Logger) {
+	if c.Volume != nil {
+		audio.setVolume(*c.Volume)
+		log.Info("the volume was kept", "volume", *c.Volume)
+	}
+	if c.WakeThreshold != nil {
+		wake.SetThreshold(*c.WakeThreshold)
+		audio.setWakeThreshold(*c.WakeThreshold)
+		log.Info("the wake word threshold was kept", "threshold", *c.WakeThreshold)
+	}
+	if c.WakeWordEnabled != nil {
+		wake.SetEnabled(*c.WakeWordEnabled)
+		audio.setWakeEnabled(*c.WakeWordEnabled)
+		audio.setListening(*c.WakeWordEnabled && wake.Ready())
+		log.Info("the wake word was kept", "enabled", *c.WakeWordEnabled)
+	}
+	if c.DuckDb != nil {
+		audio.setDuckDb(*c.DuckDb)
+		log.Info("the ducking was kept", "decibels", *c.DuckDb)
+	}
+	if c.AutoBrightness != nil {
+		control.SetAutoBrightness(*c.AutoBrightness)
+		log.Info("the automatic brightness was kept", "on", *c.AutoBrightness)
+	}
+}
+
 func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wakeWord, control *ControlPlane, log *slog.Logger) {
 	if c.Volume != nil {
 		audio.setVolume(*c.Volume)
 		log.Info("the volume was set", "volume", *c.Volume)
-	}
-	if c.StartupVolume != nil {
-		audio.setVolume(*c.StartupVolume)
-		log.Info("the startup volume was set", "volume", *c.StartupVolume)
 	}
 	if c.DuckDb != nil {
 		audio.setDuckDb(float64(*c.DuckDb))

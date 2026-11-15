@@ -224,6 +224,11 @@ type deviceAudio struct {
 	// words is said after the last frame has arrived. The mixer is what
 	// knows when the reply is really over.
 	voiceEnded func()
+	// voiceStarted is called when the reply's first audio arrives.
+	//
+	// The panel's overlay is drawn from this, so the screen has to know
+	// a reply is coming before the words are there.
+	voiceStarted func()
 	// spokenTotal is how many bytes of reply have arrived.
 	//
 	// It is what the spoken progress is measured against: the audio
@@ -299,6 +304,11 @@ type deviceAudio struct {
 	// wakeThresholdValue is how sensitive the wake word is.
 	wakeThresholdValue float64
 	// wakeWordEnabled is whether the wake word is listening.
+	//
+	// It is a copy of the wake word's own answer, kept so the audio can
+	// be asked without reaching for the wake word. It starts on, because
+	// the wake word starts on: a copy that started off would say the
+	// wake word was off on a panel that was listening.
 	wakeWordEnabled bool
 
 	// sendspin is the music player.
@@ -957,9 +967,6 @@ func clampVolume(level int) int {
 
 // applyConfig applies the configuration the controller pushed.
 func (a *deviceAudio) applyConfig(c Config) {
-	if c.StartupVolume != nil {
-		a.setVolume(*c.StartupVolume)
-	}
 	if c.DuckDb != nil {
 		a.mu.Lock()
 		a.duckDB = float64(*c.DuckDb)
@@ -1513,6 +1520,19 @@ func (a *deviceAudio) endVoice() {
 func (a *deviceAudio) playReply(pcm []byte, final bool) {
 	if len(pcm) > 0 {
 		a.setMediaState(esphome.MediaPlayerState_MEDIA_PLAYER_STATE_PLAYING)
+		// The reply has begun, so the panel's overlay is told. The
+		// screen shows that the answer is coming before the words are
+		// there, which is what a person waiting for an answer wants.
+		//
+		// It is told once: the reply's audio arrives in many frames and
+		// the overlay is told once.
+		a.mu.Lock()
+		started := a.voiceStarted
+		first := !a.voiceActive
+		a.mu.Unlock()
+		if first && started != nil {
+			started()
+		}
 	}
 	// The music is turned down under the reply, so the words can be
 	// heard over it.
