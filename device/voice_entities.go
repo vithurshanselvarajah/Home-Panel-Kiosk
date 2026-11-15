@@ -12,12 +12,22 @@ import (
 //
 // As entities they are read and written the way everything else is. The
 // wake word's threshold is a number, the ducking is a number, the wake
-// word on and off is a switch, and the panel's mute is a switch.
+// word on and off is a switch.
 //
 // The settings that are not here are the ones that are not settings:
 // the microphone's gain and the voice activity detection's levels are
 // the device's own business, and the music player's name is a name
 // rather than a setting.
+//
+// Two things that used to be here are not.
+//
+// The startup volume is gone: the speaker keeps the level it was last
+// at, so there is nothing to start up with. A panel that has never had
+// a level starts at fifty.
+//
+// The mute is gone: it is the hardware latch, and the latch is one-way
+// from software — the button on the unit sets it and only the button
+// releases it. A switch that cannot be turned back on is not a control.
 //
 // The voice settings are added to the panel's entities rather than
 // replacing them, because they are about the same device and Home
@@ -32,12 +42,6 @@ func voiceEntities(registry *esphome.Registry) {
 		Kind: esphome.KindSwitch, Name: "Music · Allow unpaired servers", ObjectID: "music_unpaired",
 		Icon: "mdi:lan-disconnect", Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
 		State: esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
-	})
-	registry.Add(&esphome.Entity{
-		Kind: esphome.KindNumber, Name: "Audio · Startup volume", ObjectID: "startup_volume",
-		Icon: "mdi:volume-medium", Min: 0, Max: 100, Step: 1,
-		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
-		State:    esphome.EntityValue{Kind: esphome.KindNumber, Number: 50},
 	})
 	// The wake word's threshold.
 	//
@@ -81,14 +85,5 @@ func voiceEntities(registry *esphome.Registry) {
 		Step:     1,
 		Unit:     "dB",
 		State:    esphome.EntityValue{Kind: esphome.KindNumber, Number: -6},
-	})
-
-	// The panel's own mute switch.
-	registry.Add(&esphome.Entity{
-		Kind:     esphome.KindSwitch,
-		Name:     "Mute",
-		ObjectID: "muted",
-		Icon:     "mdi:volume-off",
-		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
 	})
 }

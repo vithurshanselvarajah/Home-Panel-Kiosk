@@ -21,16 +21,33 @@ func TestTheVoiceSettingsAreEntities(t *testing.T) {
 		byID[entity.ObjectID] = entity
 	}
 
-	for _, want := range []string{"startup_volume", "wake_word_threshold", "wake_word_enabled", "music_ducking_db", "music_enabled", "music_unpaired", "muted"} {
+	for _, want := range []string{"wake_word_threshold", "wake_word_enabled", "music_ducking_db", "music_enabled", "music_unpaired"} {
 		if byID[want] == nil {
 			t.Errorf("the %s setting is not an entity", want)
 		}
 	}
-	for _, id := range []string{"startup_volume", "wake_word_threshold", "wake_word_enabled", "music_ducking_db", "music_enabled", "music_unpaired"} {
+	for _, id := range []string{"wake_word_threshold", "wake_word_enabled", "music_ducking_db", "music_enabled", "music_unpaired"} {
 		entity := byID[id]
 		if entity != nil && entity.Category != esphome.EntityCategory_ENTITY_CATEGORY_CONFIG {
 			t.Errorf("entity %q has category %v, want configuration", id, entity.Category)
 		}
+	}
+
+	// The startup volume is not offered.
+	//
+	// The speaker keeps the level it was last at, so there is nothing to
+	// start up with. A panel that has never had a level starts at fifty.
+	if byID["startup_volume"] != nil {
+		t.Error("the startup volume is offered, the speaker keeps the level it was last at")
+	}
+
+	// The mute is not offered.
+	//
+	// It is the hardware latch, and the latch is one-way from software:
+	// the button on the unit sets it and only the button releases it. A
+	// switch that cannot be turned back on is not a control.
+	if byID["muted"] != nil {
+		t.Error("the mute is offered, the latch can only be released by the button on the unit")
 	}
 
 	// The sensitivity is a number between zero and a hundred, because
@@ -58,10 +75,8 @@ func TestTheVoiceSettingsAreEntities(t *testing.T) {
 		}
 	}
 
-	// The wake word and the mute are switches.
-	for _, want := range []string{"wake_word_enabled", "muted"} {
-		if entity := byID[want]; entity != nil && entity.Kind != esphome.KindSwitch {
-			t.Errorf("the %s is a %v, it should be a switch", want, entity.Kind)
-		}
+	// The wake word is a switch.
+	if entity := byID["wake_word_enabled"]; entity != nil && entity.Kind != esphome.KindSwitch {
+		t.Errorf("the wake word is a %v, it should be a switch", entity.Kind)
 	}
 }
