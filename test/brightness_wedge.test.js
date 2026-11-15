@@ -51,7 +51,7 @@ test("the level the screen was at is remembered", () => {
     "the level the screen was at is not remembered",
   );
   assert.ok(
-    main.includes("await writeBacklight(level === null || level <= 0 ? 60 : level);"),
+    main.includes("const wanted = level === null || level <= 0 ? 60 : level;"),
     "the screen does not come back at the level it was at",
   );
 });
@@ -64,8 +64,11 @@ test("a screen with no way to power it down goes dark instead", () => {
     main.includes("setBacklightOff(operation === \"off\")"),
     "the screen does not go dark when it cannot be powered down",
   );
+  // The screen's own off is the only thing that writes zero: it is what
+  // turns the screen off, and the driver treats a level of zero as its
+  // PWM being switched off.
   assert.ok(
-    main.includes("await writeBacklight(0);"),
+    main.includes("await writeBacklightLevel(0);"),
     "the backlight is not taken to zero",
   );
 });
