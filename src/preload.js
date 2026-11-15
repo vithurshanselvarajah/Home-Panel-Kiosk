@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("homePanel", {
   monitorMic: (on) => ipcRenderer.invoke("app:monitor-mic", on),
   activity: (source) => ipcRenderer.send("app:activity", source),
   setOverlayExpanded: (expanded) => ipcRenderer.send("app:overlay-expanded", expanded),
+  setOverlayPopup: (up) => ipcRenderer.send("app:overlay-popup", up),
   setSidePanel: (open) => ipcRenderer.send("app:side-panel", open),
   setKeyboard: (visible) => ipcRenderer.send("app:keyboard", visible),
   setBrightness: (value) => ipcRenderer.invoke("app:set-brightness", value),

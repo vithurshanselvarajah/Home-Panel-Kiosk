@@ -73,6 +73,19 @@ let notificationTimer;
 let urlTimer;
 let overlayAttached = false;
 let overlayExpanded = false;
+// overlayPopup is whether the volume popup or the mute indicator is up.
+//
+// They are drawn on the main screen rather than in the drawer, because
+// the volume is changed with the buttons on the unit and the mute is
+// flipped with the button on top of it — and a person doing either is
+// not looking in a drawer.
+//
+// The overlay view is the only thing that draws them, so it has to be
+// on the screen while they are up, and it has to be the size of the
+// screen: the popup is across the top and the indicator is in the
+// corner, and neither is inside the strip along the top right that the
+// drawer and the tab share.
+let overlayPopup = false;
 // voiceOverlayFull is whether the wake word overlay is covering the
 // screen.
 //
@@ -545,7 +558,7 @@ function resizeOverlay() {
   // The pull tab is the way the drawer is opened, so the overlay has to be
   // on the screen for the tab to be caught, even when nothing else in it
   // is showing.
-  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlayFull;
+  const needsOverlay = overlayExpanded || sidePanelOpen || keyboardVisible || homeButtonVisible || voiceOverlayFull || overlayPopup;
   if (!needsOverlay) {
     if (overlayAttached) {
       win.contentView.removeChildView(overlayView);
@@ -560,9 +573,12 @@ function resizeOverlay() {
     win.contentView.addChildView(overlayView);
     overlayAttached = true;
   }
-  if (overlayExpanded || sidePanelOpen || voiceOverlayFull) {
+  if (overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayPopup) {
     // The wake word overlay covers the whole screen, and so does the
-    // drawer and the settings page.
+    // drawer and the settings page. So does the volume popup and the
+    // mute indicator: the popup is across the top and the indicator is
+    // in the corner, and the strip along the top right is not where
+    // either of them is.
     overlayView.setBounds({ x: 0, y: 0, width, height });
   } else if (keyboardVisible) {
     const keyboardHeight = Math.min(300, height);
@@ -602,7 +618,7 @@ function scheduleOverlayRecycle() {
   if (overlayRecycleTimer) return;
   overlayRecycleTimer = setTimeout(() => {
     overlayRecycleTimer = undefined;
-    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url" || voiceOverlayFull) return;
+    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url" || voiceOverlayFull || overlayPopup) return;
     destroyOverlayView();
   }, OVERLAY_RECYCLE_DELAY_MS);
 }
@@ -751,6 +767,25 @@ function turnDisplayOn() {
   runDisplayCommand("on");
 }
 
+// backlightLevel is the level the backlight is actually at, as a
+// percentage.
+//
+// It is the light's own level and nothing else: it does not know about
+// a screen that has been turned off, and it does not remember anything.
+// The difference matters, because a comparison against the wrong thing
+// is how a brightness that is already set ends up not being set.
+function backlightLevel() {
+  try {
+    for (const device of fsSync.readdirSync("/sys/class/backlight")) {
+      const root = path.join("/sys/class/backlight", device);
+      const maximum = Number(fsSync.readFileSync(path.join(root, "max_brightness"), "utf8"));
+      const value = Number(fsSync.readFileSync(path.join(root, "brightness"), "utf8"));
+      if (maximum && Number.isFinite(value)) return Math.round((value / maximum) * 100);
+    }
+  } catch { /* no backlight to read */ }
+  return null;
+}
+
 // currentBrightness is the brightness the backlight is set to.
 //
 // The backlight is the truth: the panel may have been dimmed by something
@@ -764,19 +799,10 @@ function turnDisplayOn() {
 // So the level the screen was at is published instead, which is the
 // truth about the setting, as opposed to the truth about the light.
 function currentBrightness() {
-  try {
-    for (const device of fsSync.readdirSync("/sys/class/backlight")) {
-      const root = path.join("/sys/class/backlight", device);
-      const maximum = Number(fsSync.readFileSync(path.join(root, "max_brightness"), "utf8"));
-      const value = Number(fsSync.readFileSync(path.join(root, "brightness"), "utf8"));
-      if (maximum && Number.isFinite(value)) {
-        const percent = Math.round((value / maximum) * 100);
-        if (percent === 0 && brightnessBeforeOff !== null) return brightnessBeforeOff;
-        return percent;
-      }
-    }
-  } catch { /* no backlight to read */ }
-  return null;
+  const percent = backlightLevel();
+  if (percent === null) return null;
+  if (percent === 0 && brightnessBeforeOff !== null) return brightnessBeforeOff;
+  return percent;
 }
 
 // systemVolume is the volume of the mixer.
@@ -914,9 +940,15 @@ async function setBrightness(value) {
   // black, which on a screen that is already black looks like the
   // slider is broken.
   //
-  // The backlight is the truth, so the comparison is against it and not
-  // against what was last asked for.
-  if (currentBrightness() === percent) return;
+  // The backlight is the truth, so the comparison is against the light's
+  // own level and not against what is published.
+  //
+  // The published level is not the same thing when the screen is off:
+  // it is the level the screen was at, not the level the light is at.
+  // Comparing against it would mean that asking for the level the
+  // screen was at before it went off is taken for a change that has
+  // already been made — and the screen stays dark.
+  if (backlightLevel() === percent) return;
   try {
     const devices = await fs.readdir("/sys/class/backlight");
     for (const device of devices) {
@@ -1817,6 +1849,14 @@ function registerIpc() {
     return voiceMonitorMic;
   });
   ipcMain.on("app:activity", (event, source) => { assertOverlaySender(event); recordActivity(source === "keydown" ? "overlay-key" : "overlay"); });
+  ipcMain.on("app:overlay-popup", (event, up) => {
+    assertOverlaySender(event);
+    const next = Boolean(up);
+    if (overlayPopup === next) return;
+    overlayPopup = next;
+    ensureOverlayView();
+    resizeOverlay();
+  });
   ipcMain.on("app:overlay-expanded", (event, expanded) => {
     assertOverlaySender(event);
     overlayExpanded = Boolean(expanded);

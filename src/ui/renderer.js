@@ -564,6 +564,10 @@ function paintMute(muted) {
   // or the slide is not seen.
   if (on) requestAnimationFrame(() => muteIndicator.classList.add("is-visible"));
   else muteIndicator.classList.remove("is-visible");
+  // The main process is told, for the same reason the popup tells it:
+  // the indicator is drawn in the overlay view, and the view has to be
+  // on the screen for the indicator to be seen.
+  setOverlayPopup(on);
 }
 
 // The volume popup.
@@ -576,16 +580,29 @@ function paintMute(muted) {
 // The timer is restarted on every change rather than set once, so a run
 // of presses keeps the popup up for as long as the presses go on.
 let volumePopupTimer = null;
+// lastPopupVolume is the level the popup is showing.
+//
+// It is what tells a new level from the one already on the screen: the
+// popup is raised again when the level is not the one it is showing,
+// and left alone when it is. So pressing the button for the same level
+// twice does not make it flicker.
+let lastPopupVolume = null;
 
 function showVolumePopup(value) {
   if (!volumePopup) return;
   const percent = Math.max(0, Math.min(100, Math.round(value)));
   if (volumePopupFill) volumePopupFill.style.width = `${percent}%`;
   if (volumePopupValue) volumePopupValue.textContent = String(percent);
+  lastPopupVolume = percent;
   volumePopup.hidden = false;
   requestAnimationFrame(() => volumePopup.classList.add("is-visible"));
   clearTimeout(volumePopupTimer);
   volumePopupTimer = setTimeout(hideVolumePopup, 2200);
+  // The main process is told, because the popup is drawn in the overlay
+  // view and the view has to be on the screen for it to be seen. The
+  // drawer is where the slider is, and a person using the buttons on
+  // the unit has the drawer shut.
+  setOverlayPopup(true);
 }
 
 function hideVolumePopup() {
@@ -595,8 +612,22 @@ function hideVolumePopup() {
   // The element is hidden after the slide, or the next change would
   // have nothing to animate from.
   volumePopupTimer = setTimeout(() => {
-    if (!volumePopup.classList.contains("is-visible")) volumePopup.hidden = true;
+    if (!volumePopup.classList.contains("is-visible")) {
+      volumePopup.hidden = true;
+      setOverlayPopup(false);
+    }
   }, 220);
+}
+
+// setOverlayPopup tells the main process that the popup or the mute
+// indicator is up.
+//
+// They are drawn in the overlay view, and the overlay view is taken off
+// the screen when nothing in it is showing. So the main process has to
+// know, or the popup is drawn in a view that is not on the screen —
+// which is why it only showed while the drawer was open.
+function setOverlayPopup(up) {
+  if (window.homePanel.setOverlayPopup) window.homePanel.setOverlayPopup(Boolean(up));
 }
 
 // The slider is set on release rather than on every movement, because a
@@ -970,9 +1001,18 @@ window.homePanel.onState((state) => {
   if (typeof state.volume === "number") {
     paintVolume(state.volume);
     // A level that came from the device program — the buttons on the
-    // unit — is raised as a popup. The panel's own slider has already
-    // raised it, and raising it twice is only a second animation.
+    // unit — is raised as a popup.
+    //
+    // It is raised every time the level changes, not only when the
+    // popup is down: a person pressing the button again expects the
+    // number to move, and a popup that showed the first number and
+    // then nothing was not saying what the level was.
+    //
+    // The panel's own slider has already raised it, so the popup is
+    // only raised when the level is one the popup does not already
+    // show.
     if (volumePopup && volumePopup.hidden) showVolumePopup(state.volume);
+    else if (volumePopup && lastPopupVolume !== state.volume) showVolumePopup(state.volume);
   }
   if (typeof state.muted === "boolean") paintMute(state.muted);
   // A control that cannot change anything is hidden rather than shown at
