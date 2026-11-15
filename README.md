@@ -42,7 +42,7 @@ The key also protects Sendspin pairing: the device withholds its Sendspin pairin
 | Entity | Kind | What it does |
 |---|---|---|
 | Screen | switch | Turns the screen off and on |
-| Brightness | number | The screen brightness, 0 to 100 |
+| Brightness | number | The screen brightness, 1 to 100 |
 | Volume | number | The volume of the room, 0 to 100 |
 | View | select | `dashboard` or `slideshow` |
 | Display mode | select (configuration) | `fullscreen` or `window` |
@@ -58,12 +58,13 @@ The key also protects Sendspin pairing: the device withholds its Sendspin pairin
 | Display · Idle to slideshow | number (configuration) | Minutes before the dashboard changes to the slideshow; zero disables it |
 | Display · Slideshow before screen off | number (configuration) | Minutes before the display powers off; zero disables it |
 | Display · Touch keyboard | switch (configuration) | Enables the on-screen keyboard |
-| Audio · Startup volume | number (configuration) | Volume applied when the audio device starts |
 | Voice · Wake word / sensitivity / music ducking | switch / numbers (configuration) | Voice satellite settings |
 | Music · Music Assistant | switch (configuration) | Enables the Sendspin player |
 | Music · Allow unpaired servers | switch (configuration) | Allows local servers to play without pairing |
 
 Configuration entities appear under the device's configuration section in Home Assistant. The dashboard and slideshow URLs and local microphone/speaker selection remain in setup because they are connection details or depend on locally enumerated hardware. The view selector appears only when a slideshow URL is configured. Screen power controls require a supported display command (`wlopm`, `kscreen-doctor`, or `xset`); the installer adds `wlopm` when it is available from the configured apt sources. Brightness requires a writable Linux backlight interface.
+
+The brightness goes down to 1 and not to 0. The panel's driver runs the backlight from a PWM, and a level of zero switches that PWM off rather than running it at no duty; the panel then stops following the levels written to it, and the brightness control does not work again until the machine is rebooted. The screen's own off is a separate control and is allowed to be dark. A screen that comes back from off is brought back at full for a moment before the level it should be at, so the panel follows levels again.
 
 ### The standalone camera stream
 
@@ -194,6 +195,10 @@ The mixer is left alone. A level applied in two places is a level nobody
 can reason about: the same slider position sounds different depending on
 which path the audio took.
 
+**The level is kept.** There is no startup volume to choose: the speaker
+keeps the level it was last at, so a panel that is restarted comes back at
+the level it was at. A panel that has never had a level starts at fifty.
+
 **The speaker runs at 96 kHz.** The amplifier holds a tuning that was made
 for that rate, and at 48 kHz every corner of its equaliser and its limiter
 sits an octave low — the tone is wrong and the protection that should be
@@ -219,12 +224,13 @@ never trained on, in a room whose noise it also hears.
 latch in the board, and while it is flipped the microphones are cut there:
 the converter is held in reset and the room stops reaching the application
 at all. The latch's position is read from the kernel and it is the source
-of truth — the button, Home Assistant's switch and the panel's switch are
-all views of the same latch, and none of them can be out of step with it.
+of truth.
 
-A mute asked for from Home Assistant pulses the line that flips the latch,
-the same way the button does, and then waits for the latch to report where
-it ended up.
+There is no mute switch in Home Assistant. The latch is one-way from
+software: the button sets it and only the button releases it, so a switch
+there could be turned off but never on again. The panel's own mute button
+pulses the line that flips the latch, the same way the button does, and
+then waits for the latch to report where it ended up.
 
 ### The audio devices
 
