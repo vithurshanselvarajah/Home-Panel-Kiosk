@@ -51,7 +51,13 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 			Name:        "Brightness",
 			ObjectID:    "brightness",
 			Icon:        "mdi:brightness-6",
-			Min:         0,
+			// The lowest is 1, not 0: the driver runs the backlight from a
+			// PWM, and a level of zero switches that PWM off rather than
+			// running it at no duty. The panel then stops following the
+			// levels written to it, so the brightness stops working until
+			// the machine is rebooted. The screen's own off is the screen
+			// switch, which is a separate thing.
+			Min:         1,
 			Max:         100,
 			Step:        1,
 			DeviceClass: "brightness",
