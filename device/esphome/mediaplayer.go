@@ -27,8 +27,6 @@ const (
 	mediaPlayerPause uint32 = 1 << 0
 	// mediaPlayerVolumeSet says the volume can be set.
 	mediaPlayerVolumeSet uint32 = 1 << 2
-	// mediaPlayerVolumeMute says the player can be muted.
-	mediaPlayerVolumeMute uint32 = 1 << 3
 	// mediaPlayerPlayMedia says a URL can be played.
 	mediaPlayerPlayMedia uint32 = 1 << 9
 	// mediaPlayerStop says the player can be stopped.
@@ -133,7 +131,11 @@ func (m *MediaPlayer) Message(key uint32) (entityMessage, error) {
 			ObjectId:      "media_player",
 			Icon:          "mdi:account-box",
 			SupportsPause: true,
-			FeatureFlags: mediaPlayerPause | mediaPlayerVolumeSet | mediaPlayerVolumeMute |
+			// The mute is not offered. There is one mute on this
+			// device and it is the microphone's, and it is the
+			// hardware latch's: only the button on top of the unit
+			// moves it. The speaker has a level rather than a mute.
+			FeatureFlags: mediaPlayerPause | mediaPlayerVolumeSet |
 				mediaPlayerPlayMedia | mediaPlayerStop | mediaPlayerPlay |
 				mediaPlayerAnnounce | mediaPlayerBrowseMedia,
 			SupportedFormats: []*MediaPlayerSupportedFormat{
