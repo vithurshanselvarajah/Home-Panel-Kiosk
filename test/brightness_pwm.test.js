@@ -28,39 +28,39 @@ const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
 // It is the part between the levels and the screen's off, so it has
 // everything that writes the backlight.
 function backlightSource() {
+  // The backlight's own code, and the reader for the level it is at:
+  // whether the backlight is lit is asked through that.
   const start = main.indexOf("const BACKLIGHT_FLOOR = 1;");
   const end = main.indexOf("// setBacklightOff turns the screen dark");
   assert.ok(start > 0, "the backlight's levels are not in the script");
   assert.ok(end > start, "the backlight's code is not where it should be");
-  return main.slice(start, end);
+  const reader = main.indexOf("function backlightRawLevel()");
+  assert.ok(reader > 0, "the backlight's level is not read");
+  return main.slice(start, end) + main.slice(reader, reader + 700);
 }
 
 // A backlight to write to.
 //
 // It is the driver's own shape: a directory with a max_brightness and a
-// brightness in it, and a bl_power that says whether the backlight is
-// powered. What is written to the brightness is recorded, so a test can
-// see the levels in the order they were written.
-function harness({ max = 1023, powered = true } = {}) {
+// brightness in it. What is written to the brightness is recorded, so a
+// test can see the levels in the order they were written.
+function harness({ max = 1023, powered = true, brightness = 512 } = {}) {
   const written = [];
   const delays = [];
-  let current = 0;
-  let isPowered = powered;
+  // The level the backlight is at. It is what says whether the light is
+  // on: a backlight at zero is a dark screen.
+  let current = powered ? brightness : 0;
 
   const fakeFs = {
     readdir: async (dir) => (dir === "/sys/class/backlight" ? ["backlight-lcd0"] : []),
     readFile: async (file) => {
       if (file.endsWith("max_brightness")) return String(max);
-      if (file.endsWith("bl_power")) return isPowered ? "0" : "4";
       if (file.endsWith("brightness")) return String(current);
       throw new Error(`no such file: ${file}`);
     },
     writeFile: async (file, content) => {
       if (!file.endsWith("brightness")) throw new Error(`no such file: ${file}`);
       current = Number(content);
-      // Writing a level does not switch the PWM back on by itself: the
-      // driver only powers it when it is asked to.
-      if (current > 0) isPowered = true;
       written.push(current);
     },
   };
@@ -71,10 +71,8 @@ function harness({ max = 1023, powered = true } = {}) {
       readdirSync: () => ["backlight-lcd0"],
       readFileSync: (file) => {
         if (file.endsWith("max_brightness")) return String(max);
-        if (file.endsWith("bl_power")) return isPowered ? "0" : "4";
-        return String(current);
+          return String(current);
       },
-      existsSync: (file) => file.endsWith("bl_power"),
     },
     // The hold before the level is written is recorded rather than
     // waited for, so a test can see how long it was.
@@ -192,8 +190,7 @@ test("a backlight the driver says is off is brought back before the level", asyn
   // The backlight can be switched off from outside the panel: the
   // display driver does it when the panel is blanked. The brightness
   // file does not show it, because it holds the level that was last
-  // asked for. The driver says so in bl_power, and that is what is
-  // asked.
+  // asked for. The level is what says, and that is what is asked.
   const backlight = harness({ powered: false });
 
   await backlight.writeBacklight(50);
