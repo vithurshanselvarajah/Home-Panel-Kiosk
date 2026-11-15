@@ -1013,16 +1013,22 @@ window.homePanel.onState((state) => {
     // A level that came from the device program — the buttons on the
     // unit — is raised as a popup.
     //
-    // It is raised every time the level changes, not only when the
-    // popup is down: a person pressing the button again expects the
-    // number to move, and a popup that showed the first number and
-    // then nothing was not saying what the level was.
-    //
-    // The panel's own slider has already raised it, so the popup is
-    // only raised when the level is one the popup does not already
-    // show.
-    if (volumePopup && volumePopup.hidden) showVolumePopup(state.volume);
-    else if (volumePopup && lastPopupVolume !== state.volume) showVolumePopup(state.volume);
+    // It is raised when the level is one the popup does not already
+    // show, so that a person pressing the button again sees the number
+    // move. A state that arrives with the same level raises nothing:
+    // the mute button changes the state, and the state carries the
+    // level with it, so a mute would otherwise bring the volume popup
+    // up as well.
+    if (volumePopup && state.volume !== lastPopupVolume) {
+      // The level is not the one the popup is showing, so it is raised.
+      // A level that is the one it is showing raises nothing: the state
+      // arrives many times a second, and with the mute among it.
+      showVolumePopup(state.volume);
+    } else if (volumePopup) {
+      // The level is the one the popup is showing, so the popup
+      // remembers it without raising anything.
+      lastPopupVolume = state.volume;
+    }
   }
   if (typeof state.muted === "boolean") paintMute(state.muted);
   // A control that cannot change anything is hidden rather than shown at
