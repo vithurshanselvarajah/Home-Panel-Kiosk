@@ -428,7 +428,15 @@ function sendTransport(command) {
   return controlClient.sendTransport(payload);
 }
 
-function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {  const safeDuration = Math.max(1000, Math.min(Number(duration) || 8000, 120000));
+// showNotice puts a notice on the screen.
+//
+// The screen is turned on first: a notice that arrives while the screen
+// is dark is a notice nobody sees. It comes on the way it comes on
+// otherwise, with the relight the panel needs, so the brightness
+// control still works afterwards.
+function showNotice({ title = "Home Panel", message = "", duration = 8000, priority = "normal" } = {}) {
+  const safeDuration = Math.max(1000, Math.min(Number(duration) || 8000, 120000));
+  turnDisplayOn();
   ensureOverlayView();
   sendToOverlay("app:notification", {
     title: String(title).slice(0, 100),
@@ -823,13 +831,32 @@ async function writeBacklightLevel(level) {
 async function setAutomaticBrightness(level) {
   const wanted = Math.max(0, Math.min(1023, Math.round(Number(level))));
   if (!Number.isFinite(wanted)) return;
-  // The screen being off is not a moment to change the brightness: the
-  // light comes back at the level it was at, and that is the moment the
-  // automatic brightness takes over.
-  if (displayIsOff) return;
-  const current = backlightLevel();
-  const target = current === null ? wanted : current;
-  const next = Math.round(target + (wanted - target) * AUTOMATIC_BRIGHTNESS_SMOOTH);
+  // A screen that is off is not woken by the room's light.
+  //
+  // Writing a level to the backlight turns the PWM on, and a PWM that
+  // is switched on lights the screen. So the automatic brightness would
+  // bring the screen back up every time the room got bright, which is
+  // the opposite of what a screen that was turned off should do.
+  //
+  // The driver's own answer is asked, rather than the panel's belief:
+  // the screen may have been turned off by something other than the
+  // panel, and the panel's answer would be about what it did rather
+  // than about what happened.
+  //
+  // So it waits. The screen comes back on the way it comes back on
+  // otherwise — with the relight the panel needs — and the automatic
+  // brightness takes over again from the level it comes back at.
+  if (!backlightIsPowered()) return;
+  // The light is being brought back: the level it comes back at is the
+  // one that decides, and the automatic brightness takes over from
+  // there rather than from under the relight.
+  if (relighting) return;
+  // The level is read in the driver's own scale, not as a percentage:
+  // the level that is set is the driver's own, and a percentage would
+  // be a different number from the one that is wanted.
+  const current = backlightRawLevel();
+  if (current === null || current === 0) return;
+  const next = Math.round(current + (wanted - current) * AUTOMATIC_BRIGHTNESS_SMOOTH);
   // Close enough is the level itself: smoothing alone would stop half a
   // level short, which rounds a level under it.
   const settled = Math.abs(wanted - next) < 0.5 ? wanted : next;
@@ -883,6 +910,15 @@ async function backlightMaximum() {
   return 0;
 }
 
+// relighting is whether the light is being brought back.
+//
+// It is the light at full for a moment, before the level it should be
+// at. The screen watcher must not read the backlight during it: the
+// light is on for those moments, but the screen is not properly back
+// yet, and the automatic brightness would take the level over from
+// under the relight.
+let relighting = false;
+
 // relight brings the panel back from a light that was off.
 //
 // The PWM is taken to full and held there for a moment, and only then is
@@ -890,9 +926,14 @@ async function backlightMaximum() {
 // full before it follows a level again, and the level written straight
 // after the full one is missed.
 async function relight(level) {
-  await writeBacklightLevel(RELIGHT_LEVEL);
-  await new Promise((resolve) => setTimeout(resolve, RELIGHT_HOLD_MS));
-  await writeBacklightLevel(Math.max(BACKLIGHT_FLOOR, level));
+  relighting = true;
+  try {
+    await writeBacklightLevel(RELIGHT_LEVEL);
+    await new Promise((resolve) => setTimeout(resolve, RELIGHT_HOLD_MS));
+    await writeBacklightLevel(Math.max(BACKLIGHT_FLOOR, level));
+  } finally {
+    relighting = false;
+  }
   backlightIsOff = false;
 }
 
@@ -945,12 +986,64 @@ function turnDisplayOff() {
   runDisplayCommand("off");
 }
 
+// turnDisplayOn turns the screen on.
+//
+// It goes through the backlight on a panel that has no way to power the
+// display down, which is this one: the light is what the screen is.
+//
+// The driver's answer is asked as well as the panel's own: the screen
+// may be off even though the panel believes it is on, because
+// something else turned it off. So the screen is turned on when either
+// says it is off.
 function turnDisplayOn() {
   clearTimeout(offTimer);
   offTimer = undefined;
-  if (!displayIsOff && requestedDisplayStatus !== "off") return;
+  const off = displayIsOff || requestedDisplayStatus === "off" || !backlightIsPowered();
+  if (!off) return;
   requestedDisplayStatus = "on";
   runDisplayCommand("on");
+}
+
+// screenWatchInterval is how often the screen's state is read.
+//
+// It is quick enough that the switch in Home Assistant follows the
+// screen, and slow enough that it is not a busy loop: the screen is
+// read a few times a second and the reading is a file read.
+const screenWatchInterval = 400;
+
+// watchScreen follows the screen's real state.
+//
+// The panel knows what it did to the screen, and that is not the same
+// thing as the screen's state. The display driver switches the backlight
+// off when the panel is blanked, the automatic brightness writes the
+// backlight as the room's light changes, and a person can take the
+// screen dark from a keyboard. None of those go through the panel, so
+// the panel's own answer went on saying the screen was on.
+//
+// The backlight's driver knows: it says in bl_power whether the
+// backlight is powered or off. So the screen's state is read from
+// there, and published.
+//
+// It only follows. The screen is not turned off because the backlight
+// is off: the panel's own off is what turns it off, and this only
+// reports what has happened.
+function watchScreen() {
+  // The light is being brought back: it is on for a moment, but the
+  // screen is not properly back yet, and the state would be published
+  // before the relight had finished.
+  if (relighting) return;
+  const powered = backlightIsPowered();
+  const off = !powered;
+  if (off === displayIsOff) return;
+  displayIsOff = off;
+  if (off) {
+    // The screen is dark, so the level it was at is remembered for the
+    // way back.
+    brightnessBeforeOff = currentBrightness();
+  } else {
+    brightnessBeforeOff = null;
+  }
+  sendState(true);
 }
 
 // backlightLevel is the level the backlight is actually at, as a
@@ -967,6 +1060,23 @@ function backlightLevel() {
       const maximum = Number(fsSync.readFileSync(path.join(root, "max_brightness"), "utf8"));
       const value = Number(fsSync.readFileSync(path.join(root, "brightness"), "utf8"));
       if (maximum && Number.isFinite(value)) return Math.round((value / maximum) * 100);
+    }
+  } catch { /* no backlight to read */ }
+  return null;
+}
+
+// backlightRawLevel is the level the backlight is at, in the driver's
+// own scale.
+//
+// It is the raw level rather than the percentage, because the automatic
+// brightness works in the driver's scale: the level it is given is the
+// level that is written.
+function backlightRawLevel() {
+  try {
+    for (const device of fsSync.readdirSync("/sys/class/backlight")) {
+      const root = path.join("/sys/class/backlight", device);
+      const value = Number(fsSync.readFileSync(path.join(root, "brightness"), "utf8"));
+      if (Number.isFinite(value)) return value;
     }
   } catch { /* no backlight to read */ }
   return null;
@@ -1066,6 +1176,28 @@ function watchVolume() {
   volumeWatcher = setInterval(watchTick, volumeWatchInterval);
   // The watcher is not what should keep the app alive.
   if (typeof volumeWatcher.unref === "function") volumeWatcher.unref();
+}
+
+// screenWatcher follows the screen's real state.
+//
+// It runs for as long as the panel does, because the screen's state is
+// what Home Assistant shows, and it has to be right whether the screen
+// was turned off by the panel or by something else.
+let screenWatcher = null;
+
+function watchScreenState() {
+  stopWatchingScreen();
+  screenWatcher = setInterval(watchScreen, screenWatchInterval);
+  // The watcher is not what should keep the app alive.
+  if (typeof screenWatcher.unref === "function") screenWatcher.unref();
+}
+
+// stopWatchingScreen stops following the screen.
+function stopWatchingScreen() {
+  if (screenWatcher !== null) {
+    clearInterval(screenWatcher);
+    screenWatcher = null;
+  }
 }
 
 // watchTick follows the device program's mute.
@@ -1272,6 +1404,28 @@ function hideVolumePopup() {
 async function sendDeviceVolume(percent) {
   if (!controlClient?.connected) return false;
   return controlClient.sendVolume(percent);
+}
+
+// followDeviceTurn turns the screen on when a turn starts.
+//
+// A panel that is turned off and is spoken to should answer. The wake
+// word fires, the device program says a turn has started, and the
+// screen comes on for the answer.
+//
+// The screen comes on the way it comes on otherwise: with the relight
+// the panel needs, or it would be at a fixed brightness with the
+// brightness control dead.
+function followDeviceTurn() {
+  const state = deviceClient?.state;
+  if (!state) return;
+  // A turn is running when the device program says the assistant is
+  // listening, thinking or speaking.
+  const busy = Boolean(state.listening || state.thinking || state.speaking);
+  if (!busy) return;
+  if (!displayIsOff && backlightIsPowered()) return;
+  // The screen was off. It comes back at the level it was at, and the
+  // automatic brightness takes over again from there.
+  turnDisplayOn();
 }
 
 // followDeviceMute makes the system microphone follow the device's.
@@ -1753,6 +1907,8 @@ async function startDeviceProgram() {
       // tells the other what it has just been told. So a change in
       // either settles rather than going round.
       followDeviceMute();
+      // A turn has started, so the screen is turned on if it was off.
+      followDeviceTurn();
     },
     onLog: (message) => { if (message) console.info("device:", message); },
   });
@@ -2279,6 +2435,10 @@ app.whenReady().then(async () => {
   // for, and a quarter of a second of mixer work does not hold it up.
   refreshVolume();
   watchVolume();
+  // The screen's own state is followed, so the switch in Home Assistant
+  // says what the screen is doing and not what the panel last asked
+  // for.
+  watchScreenState();
   // The device program is started before the control socket is opened.
   //
   // The socket is made by the device program, and it makes a new one
@@ -2304,6 +2464,7 @@ app.on("before-quit", (event) => {
   if (quitting) return;
   healthChecker.stop();
   stopWatchingVolume();
+  stopWatchingScreen();
   cancelIdleTimers(); clearTimeout(urlTimer); clearTimeout(viewRetryTimer); clearTimeout(notificationTimer);
   // The sidecar holds the microphone and the speaker, so it is stopped
   // before the process that owns it goes away. Otherwise the system waits
