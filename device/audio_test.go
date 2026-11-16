@@ -108,17 +108,20 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
-// TestTheMonitorGivesUpTheMicrophone checks that the level meter lets go of
-// the microphone when the controller asks for it.
+// TestTheMonitorGivesUpTheMicrophone checks that the level meter and the
+// controller's capture share the microphone.
 //
-// The sound card cannot be opened twice. The level meter opens it on its
-// own so a person can see what the microphone hears while they are
-// setting the device up, and the controller's capture opens it again when
-// it wants to listen.
+// Both read the same ported microphone: it is the one that knows which
+// capture device holds the microphones and which holds the playback
+// reference, and the one that measures the level against the room's own
+// floor.
 //
-// The handover has to be a handover and not a race: a capture that starts
-// while the meter still holds the card is told the card is busy, and the
-// panel goes deaf until the turn asks again.
+// So the meter does not hold the card away from the turn. It did once: the
+// meter opened the card itself, and it opened the card's first capture,
+// which on this board is the playback reference — a device that reads
+// nothing unless the speaker is playing. The meter showed a silent room
+// however loud the room was, and a turn that wanted the microphone was told
+// the card was busy.
 func TestTheMonitorGivesUpTheMicrophone(t *testing.T) {
 	backend := &fakeBackend{}
 	a := &deviceAudio{backend: backend, log: testLogger()}
@@ -132,19 +135,12 @@ func TestTheMonitorGivesUpTheMicrophone(t *testing.T) {
 	defer a.stopCapture()
 
 	// The capture opens the microphone on its own goroutine, so the wait
-	// is for it to have the card.
-	waitFor(t, func() bool { return backend.opensCount() >= 2 }, "the capture did not take the microphone")
+	// is for it to be listening.
+	waitFor(t, func() bool { return a.capturing }, "the capture did not start")
 
-	if !a.capturing {
-		t.Fatal("the capture did not start")
-	}
-	if a.monitoringMic() {
-		t.Error("the meter still holds the microphone after the capture took it")
-	}
-	// The microphone was opened twice: once for the meter and once for
-	// the capture. The meter gave it up and the capture took it.
-	if opens := backend.opensCount(); opens != 2 {
-		t.Errorf("the microphone was opened %d times, want 2", opens)
+	// The microphone was opened once: the meter and the capture share it.
+	if opens := backend.opensCount(); opens != 1 {
+		t.Errorf("the microphone was opened %d times, want 1", opens)
 	}
 }
 
