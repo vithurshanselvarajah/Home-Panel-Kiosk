@@ -63,13 +63,24 @@ type micBridge struct {
 }
 
 // start opens the microphone and runs its reader.
+//
+// The reader is started AFTER the capture is open, never before. The reader
+// needs the card to be held, and it gives up for good if it is not: it
+// returns "the capture device is not held" and never comes back, so the
+// level meter stays at nothing and the wake word never hears anything.
+//
+// This is the ordering the service group gives the microphone upstream: the
+// device is taken first, and only then does the reader start.
 func (m *micBridge) start(ctx context.Context) error {
+	if err := m.src.Start(ctx); err != nil {
+		return err
+	}
 	go func() {
 		if err := m.src.Run(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("capture: %v", err)
 		}
 	}()
-	return m.src.Start(ctx)
+	return nil
 }
 
 // close releases the microphone.

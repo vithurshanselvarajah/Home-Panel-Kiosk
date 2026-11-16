@@ -670,7 +670,15 @@ func (a *deviceAudio) startMonitor() {
 	a.monitorDone = finished
 	a.mu.Unlock()
 
-	reader, err := a.backend.Capture(ctx, captureRate)
+	// The meter reads the ported microphone, not the card directly.
+	//
+	// The card holds two captures: the microphones, and the playback
+	// reference that records what the speaker sent. The reference reads
+	// nothing unless something is playing, so a meter pointed at it shows
+	// a silent room however loud the room is. The ported microphone knows
+	// which is which, and it also measures the level against the room's
+	// own floor, so a quiet room still moves the meter.
+	bridge, err := a.micBridgeFor(ctx)
 	if err != nil {
 		a.log.Warn("the microphone could not be opened for the level meter", "error", err)
 		a.mu.Lock()
@@ -681,6 +689,7 @@ func (a *deviceAudio) startMonitor() {
 		close(finished)
 		return
 	}
+	level := bridge.src
 
 	go func() {
 		defer func() {
@@ -688,7 +697,6 @@ func (a *deviceAudio) startMonitor() {
 			// let go. The other way round the caller would ask for the
 			// microphone while the meter still had it, and be told the
 			// card was busy.
-			_ = reader.Close()
 			a.mu.Lock()
 			a.monitorCancel = nil
 			a.monitorDone = nil
@@ -700,37 +708,34 @@ func (a *deviceAudio) startMonitor() {
 			close(finished)
 		}()
 
-		// The microphone is closed as soon as the monitor is cancelled,
-		// rather than when the next read returns. A read blocks in the
-		// sound card until the next frame arrives, and whoever asked for
-		// the microphone is waiting for the card to be free.
-		go func() {
-			<-ctx.Done()
-			_ = reader.Close()
-		}()
-
-		buf := make([]byte, captureRate/10*2)
+		// The level is read from the ported microphone's own meter,
+		// which is measured against the room's noise floor: a quiet room
+		// still moves it, and a loud one does not peg it.
 		for {
-			n, err := reader.Read(buf)
-			if n > 0 {
-				a.setLevel(peakLevel(buf[:n]))
-			}
-			if err != nil {
-				if ctx.Err() == nil {
-					a.log.Warn("the level meter stopped", "error", err)
-				}
+			select {
+			case <-ctx.Done():
 				return
+			case <-time.After(100 * time.Millisecond):
 			}
-			// The controller's capture takes the microphone back when it
-			// needs it, and the level meter gives it up.
-			a.mu.Lock()
-			taken := a.capturing
-			a.mu.Unlock()
-			if taken {
-				return
-			}
+			a.setLevel(roomLevel(level.Level()))
 		}
 	}()
+}
+
+// roomLevel is the microphone's own level as a percentage.
+//
+// The meter runs from 0 for a silent room to 1 for a loud one, measured
+// against the room's own floor, so it is turned into the percentage the
+// panel shows by spreading it over the range: the bottom is a quiet room,
+// and the top is speech at close range.
+func roomLevel(level float64) int {
+	if level <= 0 {
+		return 0
+	}
+	if level >= 1 {
+		return 100
+	}
+	return int(level * 100)
 }
 
 // setTestSound plays a tone when the counter changes.

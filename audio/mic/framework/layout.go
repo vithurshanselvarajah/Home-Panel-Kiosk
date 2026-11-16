@@ -160,8 +160,20 @@ func kernelRelease() string {
 // Show is the Echo Show 5 2nd generation.
 func Show() bool { return false }
 
-// Show8 is the Echo Show 8 1st generation.
-func Show8() bool { return false }
+// Show8 is the Echo Show 8, of either generation.
+//
+// The Show 8 1st generation is the Crown and the 2nd is athena, and both
+// are the Show 8: they have the same array of microphones and the same
+// reference beside them, so they are read the same way.
+//
+// This matters more than it looks. The array's shape decides how the
+// capture is laid out: how many channels the frame has, how many of them
+// are microphones, and where the playback reference starts. On the Show 8
+// that is six channels, four microphones and the reference last. Taken as
+// the Show 5's four channels and two microphones, the reference is written
+// over the third and fourth microphones, and the two microphones that
+// survive are the only ones heard.
+func Show8() bool { return Crown() || Athena() }
 
 // Checkers is the Echo Show 5 1st generation.
 func Checkers() bool { return false }
