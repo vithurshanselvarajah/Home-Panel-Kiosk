@@ -1,169 +1,155 @@
 package denoise
 
 import (
+	"encoding/binary"
 	"math"
-	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
-// The denoiser takes the steady noise out of a microphone stream.
-//
-// What it has to be right about is that it takes the noise out and
-// leaves the speech alone. A denoiser that leaves noise in is no use, and
-// one that takes the speech with it is worse than none.
+// wav reads a mono 16-bit PCM file, returning the samples and the rate. Only what testdata holds:
+// the header is walked for the two chunks that matter rather than assumed to be 44 bytes.
+func wav(t testing.TB, name string) ([]int16, int) {
+	t.Helper()
 
-// frame is how many samples a frame is here.
-const frame = 160
-
-// rms is the level of a frame.
-func rms(f []int16) float64 {
-	var sum float64
-	for _, v := range f {
-		s := float64(v)
-		sum += s * s
+	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
 	}
-	return math.Sqrt(sum / float64(len(f)))
-}
-
-// noise is a frame of steady noise at a level.
-func noise(level float64, seed uint64) []int16 {
-	r := rand.New(rand.NewPCG(seed, 2))
-	out := make([]int16, frame)
-	for i := range out {
-		out[i] = int16((r.Float64()*2 - 1) * level * math.MaxInt16)
+	if len(raw) < 12 || string(raw[0:4]) != "RIFF" || string(raw[8:12]) != "WAVE" {
+		t.Fatalf("%s is not a WAVE file", name)
 	}
-	return out
-}
 
-// speech is a frame of a voice at a level.
-func speech(level float64, seed uint64) []int16 {
-	r := rand.New(rand.NewPCG(seed, 1))
-	amp := level * math.MaxInt16
-	out := make([]int16, frame)
-	for i := range out {
-		v := amp * math.Sin(2*math.Pi*300*float64(i)/16000)
-		v += amp * 0.3 * (r.Float64()*2 - 1)
-		out[i] = int16(v)
-	}
-	return out
-}
+	var rate, channels, bits int
+	for at := 12; at+8 <= len(raw); {
+		id := string(raw[at : at+4])
+		size := int(binary.LittleEndian.Uint32(raw[at+4 : at+8]))
+		body := raw[at+8 : min(at+8+size, len(raw))]
 
-// TestTheNoiseIsTakenOut checks that steady noise is quieter after the
-// filter than it was before.
-//
-// This is the whole point of the filter: the room's hum and hiss are
-// what the wake word model hears when nobody is talking, and a model
-// that hears the room all day hears the room as speech.
-func TestTheNoiseIsTakenOut(t *testing.T) {
-	s := NewStream(16000)
-
-	// The opening frames measure the room and are not filtered, so the
-	// filter is given some noise first and the measurement is taken after.
-	var before float64
-	for i := 0; i < 40; i++ {
-		f := noise(0.02, uint64(i))
-		s.Apply(f)
-		if i == 20 {
-			before = rms(f)
+		switch id {
+		case "fmt ":
+			channels = int(binary.LittleEndian.Uint16(body[2:4]))
+			rate = int(binary.LittleEndian.Uint32(body[4:8]))
+			bits = int(binary.LittleEndian.Uint16(body[14:16]))
+		case "data":
+			if channels != 1 || bits != 16 {
+				t.Fatalf("%s is %d channels at %d bits, want mono 16", name, channels, bits)
+			}
+			out := make([]int16, len(body)/2)
+			for i := range out {
+				out[i] = int16(binary.LittleEndian.Uint16(body[2*i : 2*i+2]))
+			}
+			return out, rate
 		}
+		at += 8 + size + size%2
 	}
-
-	var after float64
-	for i := 40; i < 60; i++ {
-		f := noise(0.02, uint64(i))
-		s.Apply(f)
-		if i == 59 {
-			after = rms(f)
-		}
-	}
-
-	if after >= before {
-		t.Errorf("the noise was not taken out: %v became %v", before, after)
-	}
+	t.Fatalf("%s has no data chunk", name)
+	return nil, 0
 }
 
-// TestTheSpeechSurvives checks that speech is not taken out with the
-// noise.
-//
-// A denoiser that smooths the speech away is worse than one that leaves
-// the noise in, because the noise is what the model was trained to
-// ignore and the speech is what it was trained to hear.
-func TestTheSpeechSurvives(t *testing.T) {
-	s := NewStream(16000)
+// process runs a whole file through the filter the way the reference does: a 20 ms window advancing
+// by half of it, for as many whole hops as the input holds.
+func process(f *Filter, in []int16) []int16 {
+	frames := len(in)/f.Hop() - 1
+	out := make([]int16, 0, frames*f.Hop())
 
-	// The room is measured first.
-	for i := 0; i < 20; i++ {
-		s.Apply(noise(0.005, uint64(i)))
-	}
+	window := make([]float64, f.Frame())
+	hop := make([]float64, f.Hop())
 
-	var before, after float64
-	for i := 20; i < 40; i++ {
-		f := speech(0.05, uint64(i))
-		s.Apply(f)
-		if i == 20 {
-			before = rms(f)
-		}
-		if i == 39 {
-			after = rms(f)
-		}
-	}
-
-	// The speech is still there. It may be quieter — the filter takes
-	// some of it with the noise — but it has not gone.
-	if after < before/8 {
-		t.Errorf("the speech was taken out with the noise: %v became %v", before, after)
-	}
-	if after <= 0 {
-		t.Error("the speech was silenced")
-	}
-}
-
-// TestTheFilterStaysFinite checks that nothing in the filter turns into
-// a non-finite value.
-//
-// The noise estimate is a running sum that is updated whenever a frame
-// looks like noise, and a hardware mute produces digital silence for as
-// long as it lasts. A filter that let the estimate decay to zero would
-// then read the returning room as speech, and an estimate that
-// underflowed would turn every bin non-finite for good.
-func TestTheFilterStaysFinite(t *testing.T) {
-	s := NewStream(16000)
-
-	// Silence, which is what a muted microphone gives.
-	silent := make([]int16, frame)
-	for i := 0; i < 200; i++ {
-		s.Apply(silent)
-	}
-
-	// Then the room comes back.
-	for i := 0; i < 40; i++ {
-		f := noise(0.01, uint64(i))
-		s.Apply(f)
-		for _, v := range f {
-			if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
-				t.Fatal("the filter produced a non-finite sample")
+	for n := range frames {
+		at := n * f.Hop()
+		for i := range window {
+			if at+i < len(in) {
+				window[i] = float64(in[at+i])
+			} else {
+				window[i] = 0
 			}
 		}
+
+		f.Push(window, hop)
+		for _, v := range hop {
+			out = append(out, clamp(v))
+		}
+	}
+	return out
+}
+
+func clamp(v float64) int16 {
+	switch {
+	case v > math.MaxInt16:
+		return math.MaxInt16
+	case v < math.MinInt16:
+		return math.MinInt16
+	}
+	return int16(math.Round(v))
+}
+
+func rmsDB(x []int16) float64 {
+	var sum float64
+	for _, s := range x {
+		sum += float64(s) * float64(s)
+	}
+	if sum == 0 {
+		return -200
+	}
+	return 20 * math.Log10(math.Sqrt(sum/float64(len(x)))/32768)
+}
+
+// The port has to agree with the implementation it came from, on the files that came with it. This is
+// the test that says the algorithm was transcribed rather than approximated.
+func TestMatchesTheReference(t *testing.T) {
+	for _, snr := range []string{"5", "15"} {
+		noisy, rate := wav(t, "in_SNR"+snr+".wav")
+		want, _ := wav(t, "out_SNR"+snr+".wav")
+
+		got := process(New(rate), noisy)
+		if len(got) != len(want) {
+			t.Fatalf("SNR %s: produced %d samples, the reference has %d", snr, len(got), len(want))
+		}
+
+		// Correlation rather than sample equality: the reference integrates E1 numerically and sums in
+		// a different order, so the two agree in shape and level rather than bit for bit.
+		var num, ours, theirs float64
+		var worst float64
+		for i := range want {
+			a, b := float64(got[i]), float64(want[i])
+			num += a * b
+			ours += a * a
+			theirs += b * b
+			worst = math.Max(worst, math.Abs(a-b))
+		}
+		corr := num / math.Sqrt(ours*theirs)
+		level := 20 * math.Log10(math.Sqrt(ours)/math.Sqrt(theirs))
+
+		t.Logf("SNR %s: correlation %.5f, level %+.2f dB, largest sample difference %.0f", snr, corr, level, worst)
+
+		if corr < 0.99 {
+			t.Errorf("SNR %s: correlation with the reference is %.5f", snr, corr)
+		}
+		if math.Abs(level) > 0.5 {
+			t.Errorf("SNR %s: level differs from the reference by %+.2f dB", snr, level)
+		}
 	}
 }
 
-// TestForgetDropsTheRoom checks that the filter can be taught the room
-// again.
-//
-// A room that changes — a window opens, the heating comes on — leaves
-// the filter holding an estimate of a room that is not there, and
-// forgetting is the way out of it.
-func TestForgetDropsTheRoom(t *testing.T) {
-	f := New(16000)
-	in := make([]float64, f.Frame())
-	out := make([]float64, f.Hop())
-	for i := 0; i < 40; i++ {
-		n := noise(0.05, uint64(i))
-		for j, v := range n {
-			in[j] = float64(v)
+func TestNoiseIsReduced(t *testing.T) {
+	for _, snr := range []string{"5", "15"} {
+		noisy, rate := wav(t, "in_SNR"+snr+".wav")
+		got := process(New(rate), noisy)
+
+		before, after := rmsDB(noisy), rmsDB(got)
+		t.Logf("SNR %s: %.1f dBFS in, %.1f dBFS out", snr, before, after)
+		if after >= before {
+			t.Errorf("SNR %s: the output is no quieter than the input", snr)
 		}
-		f.Push(in, out)
 	}
+}
+
+func TestForgetClearsTheEstimate(t *testing.T) {
+	noisy, rate := wav(t, "in_SNR5.wav")
+	f := New(rate)
+	process(f, noisy)
 
 	var held float64
 	for _, n := range f.noise {
@@ -174,7 +160,6 @@ func TestForgetDropsTheRoom(t *testing.T) {
 	}
 
 	f.Forget()
-
 	for k, n := range f.noise {
 		if n != 0 {
 			t.Fatalf("bin %d still holds %v", k, n)
@@ -182,22 +167,5 @@ func TestForgetDropsTheRoom(t *testing.T) {
 	}
 	if f.opening != 0 || f.started {
 		t.Errorf("opening = %d, started = %v; want 0, false", f.opening, f.started)
-	}
-}
-
-// TestTheStreamKeepsTheFrameLength checks that the stream is a delay and
-// not a change of shape.
-//
-// The microphone's frames are a fixed size, and whatever goes in has to
-// come out the same size: a frame that came back a different length
-// would move everything after it in the stream.
-func TestTheStreamKeepsTheFrameLength(t *testing.T) {
-	s := NewStream(16000)
-	for _, n := range []int{320, 160, 1, 7, 640, 1000} {
-		buf := make([]int16, n)
-		s.Apply(buf)
-		if len(buf) != n {
-			t.Errorf("a frame of %d came back as %d", n, len(buf))
-		}
 	}
 }

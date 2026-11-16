@@ -1,0 +1,280 @@
+package speaker
+
+import (
+	"encoding/binary"
+	"math"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/asp"
+)
+
+// The curves in front of the tuning start at mute, never pass the vendor's own full volume, and the
+// ratio that turns the usual gain into one of them lands exactly on it. Whether each step is louder
+// than the last depends on the tuning's filters as well, so TestVolumeInFrontKeepsTheLoudness checks
+// that against the real one.
+func TestFirstCurves(t *testing.T) {
+	for name, curve := range firstCurves {
+		if curve[0] > mute {
+			t.Errorf("%s: step 0 is %v dB, not muted", name, curve[0])
+		}
+		for s := 1; s <= VolumeSteps; s++ {
+			if curve[s] > 0 {
+				t.Errorf("%s: step %d is %v dB, past the vendor's own full volume", name, s, curve[s])
+			}
+			got := float64(gainForStep(OutputSpeaker, s) * firstRatio(&curve, OutputSpeaker, s))
+			if want := math.Pow(10, curve[s]/20); math.Abs(got-want) > want*1e-4 {
+				t.Errorf("%s step %d: %v, want %v", name, s, got, want)
+			}
+		}
+		if r := firstRatio(&curve, OutputSpeaker, 0); r != 0 {
+			t.Errorf("%s: step 0 lets %v through", name, r)
+		}
+	}
+}
+
+// musicLike is a few seconds of something like mastered pop: a kick on every beat peaking near full
+// scale, a bass line, and pink noise for the rest.
+func musicLike(seconds int) []float32 {
+	r := rand.New(rand.NewSource(1))
+	x := make([]float32, asp.Rate*seconds)
+	var b0, b1, b2 float64
+	for i := range x {
+		tm := float64(i) / asp.Rate
+		beat := math.Mod(tm, 0.5)
+		kick := 0.0
+		if beat < 0.2 {
+			kick = 0.6 * math.Exp(-beat*18) * math.Sin(2*math.Pi*(50+100*math.Exp(-beat*35))*beat)
+		}
+		bass := 0.18 * math.Sin(2*math.Pi*[]float64{55, 65.4, 49, 73.4}[int(tm/2)%4]*tm)
+		w := r.NormFloat64()
+		b0 = 0.99765*b0 + w*0.0990460
+		b1 = 0.96300*b1 + w*0.2965164
+		b2 = 0.57000*b2 + w*1.0526913
+		x[i] = float32(kick + bass + (b0+b1+b2+w*0.1848)*0.045)
+	}
+	return x
+}
+
+// levels plays src through a fresh chain at step with pre in front and post behind, and gives the
+// second half's RMS and peak, in dB.
+func levels(t *testing.T, tun *asp.Tuning, src []float32, step int, pre, post float32) (rms, peak float64) {
+	c, err := tun.Chain(period)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Volume(float64(step) / VolumeSteps)
+	x := make([]float32, len(src)/period*period)
+	for i := range x {
+		x[i] = src[i] * pre
+	}
+	for i := 0; i < len(x); i += period {
+		c.Process(x[i : i+period])
+	}
+	var sum, most float64
+	tail := x[len(x)/2:]
+	for _, v := range tail {
+		v := float64(v * post)
+		sum += v * v
+		most = math.Max(most, math.Abs(v))
+	}
+	return 10 * math.Log10(sum/float64(len(tail))), 20 * math.Log10(most)
+}
+
+// vendorTuning is the unit's own tuning, which is not ours to ship, or a skip without one.
+func vendorTuning(t *testing.T) (*asp.Tuning, [VolumeSteps + 1]float64) {
+	dir := os.Getenv("ECHOLOCAL_VENDOR_DIR")
+	if dir == "" {
+		t.Skip("set ECHOLOCAL_VENDOR_DIR to a copy of /vendor/etc/audio-algorithms")
+	}
+	tun, err := asp.VendorSet(dir, os.Getenv("ECHOLOCAL_VENDOR_SET"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	curve, ok := firstCurves[tun.Name()]
+	if !ok {
+		t.Skipf("no curve in front for the %s tuning on this build", tun.Name())
+	}
+	return tun, curve
+}
+
+// leveledMusic is two 30 s clips, from 20 s and 90 s in, of each 48 kHz mono float WAV in
+// ECHOLOCAL_MUSIC_DIR, each leveled to -14 dBFS RMS and held to full scale: what the curves were
+// worked out on.
+func leveledMusic(t *testing.T) [][]float32 {
+	dir := os.Getenv("ECHOLOCAL_MUSIC_DIR")
+	if dir == "" {
+		t.Skip("set ECHOLOCAL_MUSIC_DIR to a folder of 48 kHz mono float WAV music")
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "*.wav"))
+	var out [][]float32
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := 12; i+8 <= len(b); {
+			id, size := string(b[i:i+4]), int(binary.LittleEndian.Uint32(b[i+4:]))
+			if id == "data" {
+				b = b[i+8 : min(i+8+size, len(b))]
+				break
+			}
+			i += 8 + size + size%2
+		}
+		x := make([]float32, len(b)/4)
+		for i := range x {
+			x[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4:]))
+		}
+		for _, from := range []int{20, 90} {
+			if (from+30)*asp.Rate > len(x) {
+				continue
+			}
+			clip := slices.Clone(x[from*asp.Rate : (from+30)*asp.Rate])
+			var sum float64
+			for _, v := range clip {
+				sum += float64(v) * float64(v)
+			}
+			k := float32(math.Pow(10, (-14-10*math.Log10(sum/float64(len(clip))))/20))
+			for i := range clip {
+				clip[i] = max(-1, min(1, clip[i]*k))
+			}
+			out = append(out, clip)
+		}
+	}
+	if len(out) == 0 {
+		t.Skip("no music in ECHOLOCAL_MUSIC_DIR")
+	}
+	return out
+}
+
+// evenTop is whether a set's steps above 16 rise evenly to the top rather than follow its vendor curve,
+// whose repeated values there leave steps no louder than the one below: the Dot's and the Spot's.
+func evenTop(name string) bool { return name == "dot" || name == "spot" || name == "radar" }
+
+// untunedLevel is what src plays at, the second half's RMS in dB, through no tuning at all at db: the
+// loudness a board that played untuned (untunedCurves) is held to.
+func untunedLevel(src []float32, db float64) float64 {
+	g := math.Pow(10, db/20)
+	var sum float64
+	tail := src[len(src)/2:]
+	for _, v := range tail {
+		v := math.Max(-1, math.Min(1, float64(v)*g))
+		sum += v * v
+	}
+	return 10 * math.Log10(sum/float64(len(tail)))
+}
+
+// With the real tuning and real music, every step in front of it is about as loud as the same step was
+// behind it, so nobody's dial changes, and every step is louder than the one below. The Dot's and the
+// Spot's steps above 16 rise evenly to the same top instead (paths_dot.go), so they are held to that.
+// The Echo 2nd gen played untuned before its tuning was read, so its steps are held to that instead.
+//
+// Louder top volume (louder_top.go) is held both ways. Off, the steps are as above. On, the steps up to
+// 16 are exactly as they are off, and each step above 16 is louder than off by no more than its lift
+// (up to the full lift at the top), still each louder than the one below. How much of the lift is heard
+// is for the tuning's compressor and limiter to say, so it is logged rather than held to. Needs a copy
+// of the unit's tuning and some music:
+//
+//	ECHOLOCAL_VENDOR_DIR=/tmp/coefs ECHOLOCAL_MUSIC_DIR=/tmp/music go test ./internal/hardware/speaker/ -run VolumeInFront -v
+func TestVolumeInFrontKeepsTheLoudness(t *testing.T) {
+	tun, curve := vendorTuning(t)
+	songs := leveledMusic(t)
+
+	// level is each step's level with c in front of the tuning.
+	level := func(t *testing.T, c *[VolumeSteps + 1]float64) (out [VolumeSteps + 1]float64) {
+		for step := 1; step <= VolumeSteps; step++ {
+			for _, s := range songs {
+				n, _ := levels(t, tun, s, step, gainForStep(OutputSpeaker, step)*firstRatio(c, OutputSpeaker, step), 1)
+				out[step] += n / float64(len(songs))
+			}
+		}
+		return out
+	}
+	rising := func(t *testing.T, l [VolumeSteps + 1]float64) {
+		for step := 2; step <= VolumeSteps; step++ {
+			if l[step] <= l[step-1] {
+				t.Errorf("step %d: %.1f dB, no louder than the step below (%.1f dB)", step, l[step], l[step-1])
+			}
+		}
+	}
+
+	var off [VolumeSteps + 1]float64
+	t.Run("off", func(t *testing.T) {
+		behind := func(step int) float64 {
+			var sum float64
+			for _, s := range songs {
+				r, _ := levels(t, tun, s, step, 1, gainForStep(OutputSpeaker, step)*untunedTrim)
+				if c, ok := untunedCurves[tun.Name()]; ok {
+					r = untunedLevel(s, c[step])
+				}
+				sum += r
+			}
+			return sum / float64(len(songs))
+		}
+		var from, top float64
+		if evenTop(tun.Name()) {
+			from, top = behind(16), behind(VolumeSteps)
+		}
+		off = level(t, &curve)
+		for step := 1; step <= VolumeSteps; step++ {
+			was := behind(step)
+			if evenTop(tun.Name()) && step > 16 {
+				was = from + (top-from)*float64(step-16)/float64(VolumeSteps-16)
+			}
+			if math.Abs(off[step]-was) > 1.5 {
+				t.Errorf("step %d: %.1f dB, was %.1f dB", step, off[step], was)
+			}
+			t.Logf("step %2d: %.1f dB (was %.1f)", step, off[step], was)
+		}
+		rising(t, off)
+	})
+
+	t.Run("on", func(t *testing.T) {
+		lift, ok := topLifts[tun.Name()]
+		if !ok {
+			t.Skipf("Louder top volume has no lift for the %s tuning", tun.Name())
+		}
+		if off[VolumeSteps] == 0 {
+			off = level(t, &curve)
+		}
+		lifted := liftTop(curve, lift)
+		on := level(t, &lifted)
+		for step := 1; step <= VolumeSteps; step++ {
+			most := lifted[step] - curve[step]
+			switch d := on[step] - off[step]; {
+			case step <= liftedFrom && math.Abs(d) > 0.01:
+				t.Errorf("step %d: %.1f dB, %.1f dB with the switch off", step, on[step], off[step])
+			case step > liftedFrom && (d <= 0 || d > most+0.05):
+				t.Errorf("step %d: %.1f dB, %+.1f dB on %.1f dB with the switch off, want louder by at most %.1f dB",
+					step, on[step], d, off[step], most)
+			}
+			t.Logf("step %2d: %.1f dB (%.1f off, %+.1f of at most %+.1f)", step, on[step], off[step], on[step]-off[step], most)
+		}
+		rising(t, on)
+	})
+}
+
+// punchyCrest is peaks over the average, in dB, that still sound like music rather than a flattened
+// version of it: about what the Dot keeps at step 20. The Spot reaches it from step 15, where its
+// compressor starts holding, and its old order already kept 14.8 dB.
+const punchyCrest = 15
+
+// And the music keeps its punch: the peaks stand further above the average than they did when the
+// compressor was flattening every kick, or, on the sets whose top was raised to the vendor's own
+// (evenTop) and from step 15 up, where the compressor starts holding, at least punchyCrest above it.
+func TestVolumeInFrontKeepsThePunch(t *testing.T) {
+	tun, curve := vendorTuning(t)
+	src := musicLike(6)
+	for _, step := range []int{1, 5, 10, 15, 20} {
+		g := gainForStep(OutputSpeaker, step)
+		oldRMS, oldPeak := levels(t, tun, src, step, 1, g*untunedTrim)
+		newRMS, newPeak := levels(t, tun, src, step, g*firstRatio(&curve, OutputSpeaker, step), 1)
+		if oldCrest, newCrest := oldPeak-oldRMS, newPeak-newRMS; newCrest < oldCrest+1 && (!evenTop(tun.Name()) || step < 15 || newCrest < punchyCrest) {
+			t.Errorf("step %d: peaks %.1f dB over the average, %.1f dB before", step, newCrest, oldCrest)
+		}
+		t.Logf("step %2d: peaks %.1f dB over the average (was %.1f)", step, newPeak-newRMS, oldPeak-oldRMS)
+	}
+}

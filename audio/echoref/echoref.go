@@ -1,16 +1,16 @@
-// Package echoref is the echo canceller's playback reference, made in software from what the speaker
-// sent.
-//
-// The Echo Show 8's card has no loopback of what it plays on the capture stream that the microphone
-// can be aligned against, so the reference is made here: the speaker hands over every period it sends
-// the card, stamped with when its last frame will be heard; the microphones take out what was heard
-// over the stretch of time each of their reads covers.
+// Package echoref is the echo canceller's playback reference made in software, for a board whose card
+// has no loopback of what it plays: athena on a mainline kernel without the AFE's DL1 write-back
+// (DL1_AWB_Record, mic/athena.go), which is the fallback there when that device does not open. The
+// speaker hands over every
+// period it sends the card, stamped with when its last frame will be heard; the microphones take out
+// what was heard over the stretch of time each of their reads covers.
 //
 // Both stamps come from the cards' own delay readings, and both cards run off the same AFE clocks, so
 // the two never drift; what is left is the jitter of reading a delay and the clock together, a few
-// hundred microseconds, which Clock smooths away. The canceller has no delay search of its own: its
-// taps reach 64 ms back from the reference sample it is given, so a reference a little early only
-// spends a few taps, while one late misses the start of every echo. Lead makes it early on purpose.
+// hundred microseconds, which Clock smooths away. The canceller (mic/cancel.go) has no delay search of
+// its own: its taps reach 64 ms back from the reference sample it is given, so a reference a little
+// early only spends a few taps, while one late misses the start of every echo. Lead makes it early on
+// purpose.
 //
 // Ported from TECHO5 (github.com/HuskerMinion/techo5), MIT licensed. Copyright (c) 2026 Yuri
 // Gelfand.
@@ -23,22 +23,23 @@ import (
 	"sync/atomic"
 	"time"
 
-	ratelib "github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/rate"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/audio"
 )
+
 // Rate is the reference's rate, the microphones' frame rate.
 const Rate = 16000
 
 // Lead is how far ahead of the microphones' own time the reference is read: the error budget for the
 // two delay readings and the path after each card (converter and amplifier latency) that neither
-// reading sees.
+// reading sees. A first value, to be set from `techo5 echo` on a unit.
 const Lead = 5 * time.Millisecond
 
 const (
 	size = 1 << 15 // about 2 s at Rate
 
-	// decTaps is the decimator's length at the speaker's rate, in the same ratio as the microphones'
-	// (192 at 96 kHz), so each delays by the same 1 ms.
-	decTaps = 192
+	// decTaps is the decimator's length at the speaker's 48 kHz, in the same ratio as the
+	// microphones' (192 at 96 kHz), so each delays by the same 1 ms.
+	decTaps = 96
 
 	// stale is how long after the last period the reference still counts: past it the speaker has
 	// stopped, and the stamps no longer say where its audio is.
@@ -58,7 +59,6 @@ func InUse() bool { return inUse.Load() }
 // base is the origin of every stamp, so times are plain seconds on the monotonic clock.
 var base = time.Now()
 
-// seconds is t as Fill and Clock count it.
 func seconds(t time.Time) float64 { return t.Sub(base).Seconds() }
 
 // Clock maps a stream's sample count to when that sample was heard (or recorded), smoothing the
@@ -102,7 +102,7 @@ type ring struct {
 	end   uint64 // samples written
 	clock Clock
 	last  time.Time
-	dec   [2]*ratelib.Decimator
+	dec   [2]*audio.Decimator
 	taps  int
 	rate  int
 }
@@ -119,13 +119,12 @@ func Push(pcm []byte, rate int, heardEnd time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.rate != rate {
-		p.rate, p.taps = rate, decTaps*rate/96000
+		p.rate, p.taps = rate, decTaps*rate/48000
 		for i := range p.dec {
-			p.dec[i] = ratelib.NewDecimator(rate/Rate, p.taps)
+			p.dec[i] = audio.NewDecimator(rate/Rate, p.taps)
 		}
 		p.restart()
 	}
-
 	if p.clock.ok && heardEnd.Sub(p.last) > stale {
 		// The speaker stopped and started over; nothing before now lines up with it.
 		p.restart()
