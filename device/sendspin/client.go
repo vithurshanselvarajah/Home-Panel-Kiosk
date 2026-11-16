@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -50,10 +49,11 @@ type Config struct {
 // recommended direction, and the one Music Assistant uses): it advertises
 // itself over mDNS and listens.
 type Client struct {
-	cfg    Config
-	store  *store
-	player *player
-	oc     atomic.Pointer[OutputClock] // made and fed by the speaker goroutine (Fill); read for diagnostics
+	cfg   Config
+	store *store
+	// place is where the server's audio goes: the frames it asks for, held
+	// until the speaker pulls them.
+	place *placement
 
 	mu               sync.Mutex
 	admitted         *session
@@ -111,10 +111,10 @@ func New(cfg Config) (*Client, error) {
 		minBufferFloorMs: int(cfg.MinBuffer.Milliseconds()),
 		requiredLeadMs:   int(cfg.RequiredLeadTime.Milliseconds()),
 	}
-	c.player = newPlayer(newTimeFilter())
+	c.place = newPlacement(newTimeFilter())
 	set := st.settings()
-	c.player.setGain(set.Volume, set.Muted) // until OnVolume hands it to the device
-	c.player.setDelay(set.StaticDelayMs)
+	c.place.setGain(c.gainVolume(set.Volume), set.Muted)
+	c.place.setDelay(set.StaticDelayMs)
 	return c, nil
 }
 
@@ -253,7 +253,7 @@ func (c *Client) Stop(reason string) {
 		c.srv.Shutdown(ctx)
 		cancel()
 	}
-	c.player.clear()
+	c.place.flush()
 }
 
 // SetUnpaired changes whether servers may play without pairing. A change
@@ -298,7 +298,7 @@ func (c *Client) SetExternal(busy bool) {
 	s := c.admitted
 	c.mu.Unlock()
 	if busy {
-		c.player.clear()
+		c.place.flush()
 	}
 	if s != nil {
 		s.sendState()
@@ -351,7 +351,7 @@ func (c *Client) OnVolume(f func(v int)) {
 	c.onVolume = f
 	c.mu.Unlock()
 	set := c.store.settings()
-	c.player.setGain(c.gainVolume(set.Volume), set.Muted)
+	c.place.setGain(c.gainVolume(set.Volume), set.Muted)
 }
 
 // OnServerVolume is told the volume the server asked for.
@@ -378,7 +378,7 @@ func (c *Client) OnServerVolume(f func(v int)) {
 	set := c.store.settings()
 	// The player applies no gain of its own: the device's level is the
 	// level, and it is applied to the music with everything else.
-	c.player.setGain(100, set.Muted)
+	c.place.setGain(100, set.Muted)
 }
 
 // SetVolume reports the device's volume (0-100) when it changes by any
@@ -490,8 +490,8 @@ func (c *Client) applySettings(p playerSettings) {
 	if vf != nil && p.Volume != prev.Volume {
 		vf(p.Volume)
 	}
-	c.player.setGain(c.gainVolume(p.Volume), p.Muted)
-	c.player.setDelay(p.StaticDelayMs)
+	c.place.setGain(c.gainVolume(p.Volume), p.Muted)
+	c.place.setDelay(p.StaticDelayMs)
 	c.mu.Lock()
 	f := c.onSettings
 	c.mu.Unlock()
@@ -501,40 +501,34 @@ func (c *Client) applySettings(p playerSettings) {
 	c.changed()
 }
 
-// Fill is the speaker's pull: one stereo period whose first frame reaches the
-// DAC at playAt, as MEASURED — it is smoothed here (OutputClock), so the
-// caller passes its raw reading, and how uncertain that reading is. A reading
-// the scheduler interrupted is not learned from: the tracker coasts on its
-// prediction for that period. False when there is nothing to play then.
-// Called from one goroutine only.
-func (c *Client) Fill(out []byte, playAt time.Time, uncertain time.Duration) bool {
-	oc := c.oc.Load()
-	if oc == nil {
-		oc = NewOutputClock(time.Duration(len(out)/4) * time.Second / outRate)
-		c.oc.Store(oc)
-	}
-	var at time.Time
-	if uncertain > outClockTrust {
-		at = oc.Coast(playAt)
-	} else {
-		at = oc.Observe(playAt)
-	}
-	return c.player.Fill(out, at)
+// Render is the speaker's pull: the frames it is about to send to the card,
+// starting at the frame index from.
+//
+// The placement is what answers, and it answers with the audio for those
+// frames. Nothing is compared against a clock here: the frame index is the
+// timeline, and the audio was placed on it when it arrived.
+func (c *Client) Render(from uint64, out []int16) {
+	c.place.Render(from, out)
 }
 
 // Active reports whether Sendspin has audio queued: the speaker's cue that
 // the music plane is taken.
-func (c *Client) Active() bool { return c.player.active() }
+func (c *Client) Active() bool { return c.place.queuedMs() > 0 }
 
 // Buffered is how much audio is queued and not yet played.
-func (c *Client) Buffered() time.Duration { return c.player.buffered() }
+func (c *Client) Buffered() time.Duration {
+	return time.Duration(c.place.queuedMs()) * time.Millisecond
+}
 
-// OutDiag takes the DAC position tracker's summary since the last call.
-func (c *Client) OutDiag() OutDiag {
-	if oc := c.oc.Load(); oc != nil {
-		return oc.TakeDiag()
-	}
-	return OutDiag{}
+// SetPlacement tells the placement where the speaker is and how long it
+// takes to be heard.
+//
+// The frame counter and the latency come from one reading of the card, so
+// they always belong together: the frame that is going to the card and the
+// moment it will be heard.
+func (c *Client) SetPlacement(position func() (uint64, time.Duration), latency func() time.Duration) {
+	c.place.position = position
+	c.place.latency = latency
 }
 
 // SyncDiag takes the connected server's time-exchange summary since the last
@@ -575,8 +569,8 @@ func (c *Client) hello() clientHello {
 // spec counts each chunk's encoded size, so a server may hold
 // bufferCapacity bytes of compressed audio outstanding at once.
 //
-// FLAC compresses roughly 2:1, so 288000 bytes of FLAC is about 6 seconds
-// of mono 48 kHz audio, and the server will queue that much. Sizing the cap
+// FLAC compresses roughly 2:1, so 288000 bytes of FLAC is about 3 seconds
+// of stereo 48 kHz audio, and the server will queue that much. Sizing the cap
 // as if the bytes were PCM (which is what "six seconds of PCM" means)
 // doubles the queue, and the queue then overruns the player's own limit and
 // is thrown away — which is silence.
@@ -585,13 +579,13 @@ func (c *Client) hello() clientHello {
 // the player's own limit is kept above what the server can queue.
 const bufferCapacity = 6 * outRate * outChannels * outBits / 8 / 2
 
-// maxBufferedSamples is how much decoded audio the player keeps queued.
+// maxBufferedFrames is how much decoded audio the player keeps queued.
 //
 // It is above the 30 seconds a server may hold outstanding (the spec's own
 // ceiling on a player's outstanding duration), so the server's cap always
 // binds first. A queue that never overruns is never thrown away, and a
 // thrown-away queue is a gap in the music.
-const maxBufferedSamples = outRate * 32
+const maxBufferedFrames = outRate * 32
 
 // ── admission ──────────────────────────────────────────────────────────────
 //
@@ -621,12 +615,12 @@ func (c *Client) admit(s *session, r int) bool {
 	}
 	c.mu.Unlock()
 	if ok {
-		c.player.setFilter(s.filter)
+		c.place.use(s.filter)
 	}
 	if ok && cur != nil && cur != s {
 		cur.goodbye("another_server")
 		cur.ws.Close()
-		c.player.clear()
+		c.place.flush()
 	}
 	return ok
 }
@@ -666,7 +660,7 @@ func (c *Client) release(s *session) {
 	}
 	c.mu.Unlock()
 	if was {
-		c.player.clear()
+		c.place.flush()
 		log.Printf("[sendspin] %q disconnected", s.name())
 		c.changed()
 	}
@@ -700,6 +694,55 @@ type Status struct {
 	// It is empty when there is no server, and the panel shows no
 	// buttons rather than buttons that do nothing.
 	Transport []string `json:"transport,omitempty"`
+}
+
+// playerStats are the counts since the stream started, for the status
+// report.
+//
+// The names are the ones the panel already reads, so the panel does not
+// have to know that the placement replaced the player.
+type playerStats struct {
+	// Chunks is how many chunks have arrived and Samples how many frames
+	// they carried.
+	Chunks  int   `json:"chunks"`
+	Samples int64 `json:"samples"`
+	// MaxChunk is the largest chunk that has arrived, in frames.
+	MaxChunk int `json:"maxChunk"`
+	// LateDrops is how many chunks arrived after their frames had
+	// played, and Backwards how many times the server's timestamps went
+	// backwards.
+	LateDrops int `json:"lateDrops"`
+	Backwards int `json:"backwards"`
+	// NotDue is how many periods the player found the queue was not due
+	// to play yet, and TooLate how many found it already overdue.
+	NotDue  int `json:"notDue"`
+	TooLate int `json:"tooLate"`
+	// Empty is how many periods found nothing queued at all.
+	Empty int `json:"empty"`
+	// Played is how many periods were filled and Frames how many frames
+	// of audio they carried.
+	Played int   `json:"played"`
+	Frames int64 `json:"frames"`
+	// LeadUs is how far ahead of the play position the head of the queue
+	// is.
+	LeadUs int64 `json:"leadUs"`
+	// SpanUs is the time the queued audio covers, from head to tail.
+	SpanUs int64 `json:"spanUs"`
+	// HeadAgeUs is the server's now minus the head chunk's timestamp.
+	HeadAgeUs int64 `json:"headAgeUs"`
+	// TailAgeUs is the same for the newest chunk.
+	TailAgeUs int64 `json:"tailAgeUs"`
+	// OffsetUs is the time filter's offset and DriftPpm its drift.
+	OffsetUs int64   `json:"offsetUs"`
+	DriftPpm float64 `json:"driftPpm"`
+	// Underruns, LateDrops, Snaps, Corrections, Overruns and LastErrorUs
+	// are kept so the panel's own fields still read something.
+	Underruns   int   `json:"underruns"`
+	Snaps       int   `json:"snaps"`
+	Corrections int   `json:"corrections"`
+	Overruns    int   `json:"overruns"`
+	LastErrorUs int   `json:"lastErrUs"`
+	BufferOverruns int `json:"bufferOverruns"`
 }
 
 // Metadata is what the server says is playing.
@@ -763,8 +806,8 @@ func (c *Client) Status() Status {
 		Muted:      set.Muted,
 		DelayMs:    set.StaticDelayMs,
 		Unpaired:   c.unpairedAccess(),
-		BufferedMs: c.player.buffered().Milliseconds(),
-		Player:     c.player.stats(),
+		BufferedMs: int64(c.place.queuedMs()),
+		Player:     c.place.stats(),
 	}
 	c.mu.Lock()
 	s, busy := c.admitted, c.extBusy
