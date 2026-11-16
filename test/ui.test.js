@@ -228,6 +228,27 @@ test("the wake word settings are Home Assistant's to set", () => {
   );
 });
 
+test("the audio stack's own settings are on the settings page", () => {
+  // They are the panel's own settings, not Home Assistant's: the panel's
+  // settings page changes them, and the device program is told.
+  for (const name of ["speakerTuning", "speakerGainDb", "speakerStereo",
+    "speakerBassDb", "speakerTrebleDb", "clearerSpeech", "louderTop",
+    "micCancel", "micLeveling", "micDenoise", "micSensitivityDb"]) {
+    assert.match(html, new RegExp(`name="${name}"`), `the settings page has no ${name}`);
+    assert.match(main, new RegExp(`${name}:`), `the configuration does not carry ${name}`);
+  }
+});
+
+test("the audio stack's settings reach the device program", () => {
+  // The device program owns them once they are sent, so the names in the
+  // configuration and the names it reads have to be the same.
+  for (const name of ["speakerTuning", "speakerGainDb", "speakerStereo",
+    "speakerBassDb", "speakerTrebleDb", "clearerSpeech", "louderTop",
+    "micCancel", "micLeveling", "micDenoise", "micSensitivityDb"]) {
+    assert.match(main, new RegExp(`${name}:`), `the configuration does not carry ${name}`);
+  }
+});
+
 test("Music Assistant settings are Home Assistant's to set", () => {
   assert.doesNotMatch(html, /name="musicEnabled"|name="musicUnpaired"/);
   assert.match(main, /music_enabled: "musicEnabled"/);

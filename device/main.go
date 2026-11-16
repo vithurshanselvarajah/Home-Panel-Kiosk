@@ -948,82 +948,53 @@ func main() {
 	//
 	// Each is kept, so that a panel that is restarted comes back with the
 	// sound it was set to rather than the default.
+	// The audio stack's own settings are the panel's settings page's, and
+	// they come to the device program in its configuration file. They are
+	// not kept here: the two files would fight, and this one is read
+	// after the configuration, so the kept copy would win.
 	control.OnSpeakerTuning(func(on bool) {
 		speaker_.setSpeakerTuning(on)
 		log.Info("the vendor's tuning was switched", "on", on)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.SpeakerTuning = &on
-		})
 	})
 	control.OnSpeakerGain(func(db int) {
 		speaker_.setSpeakerGain(db)
 		log.Info("the amplifier's gain was set", "decibels", db)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.SpeakerGainDb = &db
-		})
 	})
 	control.OnSpeakerStereo(func(on bool) {
 		speaker_.setSpeakerStereo(on)
 		log.Info("stereo was switched", "on", on)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.SpeakerStereo = &on
-		})
 	})
 	control.OnSpeakerBass(func(db float64) {
 		speaker_.setSpeakerBass(db)
 		log.Info("the bass shelf was set", "decibels", db)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.SpeakerBass = &db
-		})
 	})
 	control.OnSpeakerTreble(func(db float64) {
 		speaker_.setSpeakerTreble(db)
 		log.Info("the treble shelf was set", "decibels", db)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.SpeakerTreble = &db
-		})
 	})
 	control.OnClearerSpeech(func(on bool) {
 		speaker_.setClearerSpeech(on)
 		log.Info("clearer speech was switched", "on", on)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.ClearerSpeech = &on
-		})
 	})
 	control.OnLouderTop(func(on bool) {
 		speaker_.setLouderTop(on)
 		log.Info("louder top volume was switched", "on", on)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.LouderTop = &on
-		})
 	})
 	control.OnMicCancel(func(on bool) {
 		speaker_.setMicCancel(on)
 		log.Info("echo cancellation was switched", "on", on)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.MicCancel = &on
-		})
 	})
 	control.OnMicLeveling(func(on bool) {
 		speaker_.setMicLeveling(on)
 		log.Info("the microphone's automatic gain was switched", "on", on)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.MicLeveling = &on
-		})
 	})
 	control.OnMicDenoise(func(on bool) {
 		speaker_.setMicDenoise(on)
 		log.Info("noise reduction was switched", "on", on)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.MicDenoise = &on
-		})
 	})
 	control.OnMicSensitivity(func(db int) {
 		speaker_.setMicSensitivity(db)
 		log.Info("the microphone's sensitivity was set", "decibels", db)
-		keepSetting(*settingsFile, log, func(c *Config) {
-			c.MicSensitivity = &db
-		})
 	})
 	// The automatic brightness is kept, so a panel that is restarted
 	// comes back with the screen following the room or not, as it was.
