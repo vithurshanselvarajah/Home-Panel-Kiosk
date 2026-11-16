@@ -184,7 +184,7 @@
             <span id="voice-status-reason">Not connected to Home Assistant.</span>
           </div>
         </div>
-        <p class="panel-intro">Choose the local audio hardware here. Wake word, sensitivity, music ducking, and startup volume are configured on the Home Panel device in Home Assistant.</p>
+        <p class="panel-intro">Choose the local audio hardware here. The wake word, its sensitivity and the music ducking are configured on the Home Panel device in Home Assistant.</p>
         <form id="voice-form">
           <div class="section-label"><span>MICROPHONE</span><span class="line"></span></div>
           <label>Microphone<select name="voiceAudioInput" id="voice-audio-input"><option value="">System default</option></select></label>
@@ -200,6 +200,20 @@
             <div class="audio-meter" role="meter" aria-label="Speaker level" aria-valuemin="0" aria-valuemax="100" id="speaker-meter"><i id="speaker-meter-fill"></i></div>
             <span class="audio-test__value" id="speaker-level-value">—</span>
           </div>
+          <div class="section-label"><span>THE SPEAKER'S OWN SOUND</span><span class="line"></span></div>
+          <p class="panel-intro">The amplifier's own filter and limiter, read off this device. With them on, the speaker plays the sound the vendor's firmware gives it.</p>
+          <label class="setting-toggle"><input type="checkbox" name="speakerTuning" id="speaker-tuning" /><span>Vendor tuning</span></label>
+          <label>Amplifier gain<input type="number" name="speakerGainDb" id="speaker-gain-db" min="0" max="6" step="1" /><span class="field-unit">dB</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="speakerStereo" id="speaker-stereo" /><span>Stereo</span></label>
+          <label>Bass<input type="number" name="speakerBassDb" id="speaker-bass-db" min="-6" max="6" step="0.5" /><span class="field-unit">dB</span></label>
+          <label>Treble<input type="number" name="speakerTrebleDb" id="speaker-treble-db" min="-6" max="6" step="0.5" /><span class="field-unit">dB</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="clearerSpeech" id="clearer-speech" /><span>Clearer speech</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="louderTop" id="louder-top" /><span>Louder top volume</span></label>
+          <div class="section-label"><span>THE MICROPHONE'S OWN SETTINGS</span><span class="line"></span></div>
+          <label class="setting-toggle"><input type="checkbox" name="micCancel" id="mic-cancel" /><span>Echo cancellation</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="micLeveling" id="mic-leveling" /><span>Automatic gain</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="micDenoise" id="mic-denoise" /><span>Noise reduction</span></label>
+          <label>Sensitivity<input type="number" name="micSensitivityDb" id="mic-sensitivity-db" min="0" max="30" step="1" /><span class="field-unit">dB over the room</span></label>
           <div class="section-label"><span>MUSIC</span><span class="line"></span></div>
           <div id="voice-error" class="form-error" role="alert"></div>
           <div class="form-footer"><span>Voice settings are stored on this device.</span><button class="save-button" type="submit">Save voice <span>→</span></button></div>

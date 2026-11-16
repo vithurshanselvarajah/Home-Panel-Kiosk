@@ -74,8 +74,8 @@ type Config struct {
 	SpeakerStereo *bool `json:"speakerStereo,omitempty"`
 	// SpeakerBass and SpeakerTreble are the listener's own shelves, in
 	// decibels, at most six either way.
-	SpeakerBass   *float64 `json:"speakerBass,omitempty"`
-	SpeakerTreble *float64 `json:"speakerTreble,omitempty"`
+	SpeakerBass   *float64 `json:"speakerBassDb,omitempty"`
+	SpeakerTreble *float64 `json:"speakerTrebleDb,omitempty"`
 	// ClearerSpeech brings the tuning's low band down while a reply is
 	// playing, so that words are heard over the music.
 	ClearerSpeech *bool `json:"clearerSpeech,omitempty"`
@@ -89,7 +89,7 @@ type Config struct {
 	// ── The microphone's own settings ───────────────────────────────────
 	// MicSensitivity is how far over the room's own noise counts as
 	// something happening, in decibels.
-	MicSensitivity *int `json:"micSensitivity,omitempty"`
+	MicSensitivity *int `json:"micSensitivityDb,omitempty"`
 	// MicLeveling turns the automatic gain control on and off.
 	MicLeveling *bool `json:"micLeveling,omitempty"`
 	// MicDenoise takes the steady noise out of the room.
