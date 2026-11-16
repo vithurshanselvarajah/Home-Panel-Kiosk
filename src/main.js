@@ -40,6 +40,22 @@ const DEFAULTS = {
   esphomeDeviceName: "",
   // The microphone and speaker are local hardware choices.
   voiceAudioInput: "",
+  // The speaker's own tuning, and the microphone's own settings.
+  //
+  // These are the audio stack's settings. They are kept here so that the
+  // settings page can change them, and they are sent to the device
+  // program, which owns them.
+  speakerTuning: true,
+  speakerGainDb: 0,
+  speakerStereo: false,
+  speakerBassDb: 0,
+  speakerTrebleDb: 0,
+  clearerSpeech: false,
+  louderTop: false,
+  micCancel: true,
+  micLeveling: true,
+  micDenoise: false,
+  micSensitivityDb: 8,
   voiceAudioOutput: "",
   // The volume is not a setting here: the device program owns the level
   // and keeps it, so a panel that has had a level keeps it across a
@@ -1424,6 +1440,18 @@ function deviceConfig() {
     audioOutput: settings.voiceAudioOutput || "",
     monitorMic: voiceMonitorMic,
     testSound: voiceTestSound,
+    // The audio stack's own settings.
+    speakerTuning: settingBoolean(settings.speakerTuning),
+    speakerGainDb: Number(settings.speakerGainDb) || 0,
+    speakerStereo: settingBoolean(settings.speakerStereo),
+    speakerBassDb: Number(settings.speakerBassDb) || 0,
+    speakerTrebleDb: Number(settings.speakerTrebleDb) || 0,
+    clearerSpeech: settingBoolean(settings.clearerSpeech),
+    louderTop: settingBoolean(settings.louderTop),
+    micCancel: settingBoolean(settings.micCancel),
+    micLeveling: settingBoolean(settings.micLeveling),
+    micDenoise: settingBoolean(settings.micDenoise),
+    micSensitivityDb: Number(settings.micSensitivityDb) || 8,
   };
 }
 
@@ -1696,6 +1724,14 @@ async function loadSettings() {
   } catch { settings = { ...DEFAULTS }; }
 }
 
+// clampNumber keeps a number within a range, and falls back to a default
+// when it is not a number at all.
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 async function saveSettings(next) {
   const clean = { ...settings, ...next };
   clean.deviceName = HOSTNAME;
@@ -1717,6 +1753,19 @@ async function saveSettings(next) {
   // they are. An empty name is the system default.
   clean.voiceAudioInput = String(clean.voiceAudioInput || "").trim();
   clean.voiceAudioOutput = String(clean.voiceAudioOutput || "").trim();
+  // The audio stack's own settings: the speaker's tuning and the
+  // microphone's.
+  clean.speakerTuning = Boolean(clean.speakerTuning);
+  clean.speakerStereo = Boolean(clean.speakerStereo);
+  clean.clearerSpeech = Boolean(clean.clearerSpeech);
+  clean.louderTop = Boolean(clean.louderTop);
+  clean.micCancel = Boolean(clean.micCancel);
+  clean.micLeveling = Boolean(clean.micLeveling);
+  clean.micDenoise = Boolean(clean.micDenoise);
+  clean.speakerGainDb = clampNumber(clean.speakerGainDb, 0, 6, 0);
+  clean.speakerBassDb = clampNumber(clean.speakerBassDb, -6, 6, 0);
+  clean.speakerTrebleDb = clampNumber(clean.speakerTrebleDb, -6, 6, 0);
+  clean.micSensitivityDb = clampNumber(clean.micSensitivityDb, 0, 30, 8);
   // The encryption key is what the Home Assistant connection is made
   // with. It is a secret, so it is kept out of the file and put back
   // when the settings are read.
@@ -1782,7 +1831,10 @@ async function saveSettings(next) {
   }
   const restartDevice = ["voiceAudioInput", "voiceAudioOutput", "esphomeEncryptionEnabled", "esphomeEncryptionKey"]
     .some((key) => previous[key] !== settings[key]);
-  const deviceConfigChanged = ["musicEnabled", "musicUnpaired", "cameraEnabled"]
+  const deviceConfigChanged = ["musicEnabled", "musicUnpaired", "cameraEnabled",
+    "speakerTuning", "speakerGainDb", "speakerStereo", "speakerBassDb",
+    "speakerTrebleDb", "clearerSpeech", "louderTop", "micCancel", "micLeveling",
+    "micDenoise", "micSensitivityDb"]
     .some((key) => previous[key] !== settings[key]);
   if (restartDevice) await startDeviceProgram();
   else if (deviceConfigChanged) sendDeviceConfig();
