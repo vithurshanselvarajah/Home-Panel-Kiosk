@@ -313,11 +313,7 @@ func watchLight(ctx context.Context, light *ambient.Sensor, control *ControlPlan
 		if control.AutoBrightness() {
 			ceiling := control.BrightnessCeiling()
 			level := autobrightness.Level(ceiling, true, lux)
-			// The ceiling goes with it, so the panel can show the
-			// setting rather than the level the room's light happens
-			// to allow: the slider is the setting, and the setting
-			// does not move with the room.
-			control.SendCommand(ControlCommand{Action: "auto_brightness_level", Value: level, Ceiling: ceiling})
+			control.SendCommand(ControlCommand{Action: "auto_brightness_level", Value: level})
 		}
 	}
 }

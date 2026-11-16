@@ -841,17 +841,9 @@ async function writeBacklightLevel(level) {
 // couple of seconds, and a level that jumps to each reading flickers
 // the panel. So the backlight moves a quarter of the way to the level
 // each time, which is what a passing shadow needs.
-async function setAutomaticBrightness(level, ceiling) {
+async function setAutomaticBrightness(level) {
   const wanted = Math.max(0, Math.min(1023, Math.round(Number(level))));
   if (!Number.isFinite(wanted)) return;
-  // The ceiling is the brightness the person set: the slider is the
-  // setting, and the setting does not move with the room's light.
-  //
-  // So the slider shows the ceiling while the automatic brightness is on,
-  // and the level the room allows is what the screen is actually at.
-  if (Number.isFinite(Number(ceiling))) {
-    automaticCeiling = Math.max(0, Math.min(100, Math.round(Number(ceiling))));
-  }
   // A screen that is off is not woken by the room's light.
   //
   // Writing a level to the backlight turns the PWM on, and a PWM that
@@ -883,11 +875,6 @@ async function setAutomaticBrightness(level, ceiling) {
   const settled = Math.abs(wanted - next) < 0.5 ? wanted : next;
   if (settled === current) return;
   await writeBacklightLevel(settled);
-  // The level has changed, so the brightness the panel shows and the one
-  // Home Assistant shows have to follow it. Otherwise the slider says
-  // one thing and the screen is another, and the automatic brightness
-  // looks like it is not working.
-  sendState(true);
 }
 
 // AUTOMATIC_BRIGHTNESS_SMOOTH is how much of the way to the level the
@@ -895,13 +882,6 @@ async function setAutomaticBrightness(level, ceiling) {
 //
 // A quarter, so a shadow that passes does not flicker the panel.
 const AUTOMATIC_BRIGHTNESS_SMOOTH = 0.25;
-
-// automaticCeiling is the brightness the person set, while the
-// automatic brightness is on.
-//
-// It is the setting, so it is what the slider shows. The level the
-// room's light allows is a different thing, and it moves.
-let automaticCeiling = null;
 
 // writeBacklight sets the backlight to a percentage.
 //
@@ -1169,13 +1149,6 @@ function backlightRawLevel() {
 // So the level the screen was at is published instead, which is the
 // truth about the setting, as opposed to the truth about the light.
 function currentBrightness() {
-  // The automatic brightness is on, so the brightness is the setting.
-  //
-  // The slider is the setting, and the setting does not move with the
-  // room's light: the level the room allows is what the screen is at,
-  // and that is a different thing. So the setting is what is shown, and
-  // the slider does not chase the sun.
-  if (automaticCeiling !== null) return automaticCeiling;
   const percent = backlightLevel();
   if (percent === null) return null;
   if (percent === 0 && brightnessBeforeOff !== null) return brightnessBeforeOff;
@@ -1360,23 +1333,6 @@ async function setBrightness(value) {
   // Comparing against it would mean that asking for the level the
   // screen was at before it went off is taken for a change that has
   // already been made — and the screen stays dark.
-  // The automatic brightness is on, so the slider is the ceiling.
-  //
-  // The level the screen is at is the room's light's business, and
-  // writing the slider's value to the backlight would fight it: the
-  // automatic brightness would move the level back on its next
-  // reading, and the slider would say one thing while the screen was
-  // another.
-  //
-  // So the slider sets the ceiling, and the ceiling is what the device
-  // program works the level out from. The level is asked for straight
-  // away, so the screen follows the new ceiling at once.
-  if (automaticCeiling !== null) {
-    if (automaticCeiling === percent) return;
-    automaticCeiling = percent;
-    sendState(true);
-    return;
-  }
   if (backlightLevel() === percent) return;
   if (displayIsOff) {
     // The screen is off, so the light is left alone: a brightness asked
@@ -1633,7 +1589,7 @@ async function handleCommand(command) {
     // The automatic brightness: the level the room's light allows, in the
     // driver's own scale. The device program sends it when the light
     // sensor has been read.
-    case "auto_brightness_level": setAutomaticBrightness(command.value, command.ceiling); break;
+    case "auto_brightness_level": setAutomaticBrightness(command.value); break;
     // A remote volume change (Music Assistant or Home Assistant) is
     // applied to the system mixer, then read back into the panel state.
     case "volume":
