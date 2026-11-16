@@ -62,6 +62,40 @@ type playerStats struct {
 	LateDrops      int `json:"lateDrops"`
 	BufferOverruns int `json:"bufferOverruns"`
 	LastErrorUs    int `json:"lastErrorUs"`
+	// Chunks is how many chunks have arrived and Samples how many samples
+	// they carried.
+	Chunks  int   `json:"chunks"`
+	Samples int64 `json:"samples"`
+	// MaxChunk is the largest chunk that has arrived, in samples.
+	MaxChunk int `json:"maxChunk"`
+	// Backwards is how many times the server's timestamps went backwards.
+	Backwards int `json:"backwards"`
+	// NotDue is how many periods the player found the queue was not due
+	// to play yet, and TooLate how many found it already overdue. A rising
+	// NotDue with no audio played is a server sending far ahead.
+	NotDue  int `json:"notDue"`
+	TooLate int `json:"tooLate"`
+	// Empty is how many periods found nothing queued at all.
+	Empty int `json:"empty"`
+	// Played is how many periods were filled and Frames how many frames
+	// of audio they carried.
+	Played int   `json:"played"`
+	Frames int64 `json:"frames"`
+	// LeadUs is how far ahead of the play position the head of the queue
+	// is. A large lead means the server is sending far ahead of where the
+	// audio is being played.
+	LeadUs int64 `json:"leadUs"`
+	// SpanUs is the time the queued audio covers, from head to tail.
+	SpanUs int64 `json:"spanUs"`
+	// HeadAgeUs is the server's now minus the head chunk's timestamp:
+	// positive means the head is in the past, negative means the server
+	// is stamping it in the future.
+	HeadAgeUs int64 `json:"headAgeUs"`
+	// TailAgeUs is the same for the newest chunk.
+	TailAgeUs int64 `json:"tailAgeUs"`
+	// OffsetUs is the time filter's offset and DriftPpm its drift.
+	OffsetUs int64   `json:"offsetUs"`
+	DriftPpm float64 `json:"driftPpm"`
 }
 
 func newPlayer(f *timeFilter) *player {
@@ -72,7 +106,10 @@ const unity int32 = 1 << 15
 
 // maxBufferedSamples bounds memory and latency if the speaker stalls while
 // the network keeps delivering audio.
-const maxBufferedSamples = outRate * 10
+//
+// It is in client.go, beside the buffer capacity the server is told about:
+// the two have to agree, because the server's cap must always bind before
+// the player's, or the queue is thrown away and the music stops.
 
 // volumeGain is the spec's perceptual curve: amplitude = (v/100)^1.5.
 func volumeGain(volume int, muted bool) int32 {
@@ -108,29 +145,45 @@ func (p *player) setDelay(ms int) {
 func (p *player) push(ts int64, pcm []int16) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	oversized := false
 	if len(pcm) > maxBufferedSamples {
 		drop := len(pcm) - maxBufferedSamples
 		pcm = pcm[drop:]
 		ts += int64(drop) * 1e6 / outRate
-		oversized = true
 	}
 	if n := len(p.q); n > 0 && ts < p.q[n-1].ts {
+		p.st.Backwards++
 		p.clearLocked()
 	}
-	if oversized {
-		p.clearLocked()
-		p.st.BufferOverruns++
+	p.st.Chunks++
+	p.st.Samples += int64(len(pcm))
+	if len(pcm) > p.st.MaxChunk {
+		p.st.MaxChunk = len(pcm)
 	}
 	buffered := -p.off
 	for _, queued := range p.q {
 		buffered += len(queued.pcm)
 	}
-	if !oversized && buffered+len(pcm) > maxBufferedSamples {
-		p.clearLocked()
+	if buffered+len(pcm) > maxBufferedSamples {
+		// The queue is over its limit.
+		//
+		// The OLDEST audio is dropped, not everything: throwing the
+		// whole queue away leaves the head of it far in the future, and
+		// the player then sits in silence until the queue refills. What
+		// is dropped here is already late, so dropping it costs nothing
+		// that has not been lost already.
+		p.trimLocked(buffered + len(pcm) - maxBufferedSamples)
 		p.st.BufferOverruns++
 	}
 	p.q = append(p.q, chunk{ts: ts, pcm: pcm})
+}
+
+// trimLocked drops n samples from the head of the queue.
+func (p *player) trimLocked(n int) {
+	for n > 0 && len(p.q) > 0 {
+		k := min(len(p.q[0].pcm)-p.off, n)
+		p.advanceLocked(k)
+		n -= k
+	}
 }
 
 // clear drops everything buffered: stream/clear, stream/end, or HA taking
@@ -186,12 +239,30 @@ func (p *player) Fill(out []byte, playAt time.Time) bool {
 			p.st.Underruns++
 			p.playing = false
 		}
+		p.st.Empty++
 		return false
 	}
 
 	errUs := toUs(playAt) - p.localTimeLocked()
 	errFrames := int(math.Round(float64(errUs) * outRate / 1e6))
 	p.st.LastErrorUs = int(errUs)
+
+	// How far the queue's head is from the play position, and how much
+	// server time the queue covers.
+	//
+	// A queue that is far ahead of the play position is a server sending
+	// faster than we play; one whose span is much longer than it holds
+	// means the timestamps disagree with the samples.
+	p.st.LeadUs = -errUs
+	if n := len(p.q); n > 0 {
+		tail := p.q[n-1]
+		p.st.SpanUs = tail.ts + int64(len(tail.pcm))*1e6/outRate - p.q[0].ts
+		// How the head and the tail of the queue sit against the
+		// server's own clock, as our filter sees it.
+		serverNow := p.filter.serverTime(nowUs())
+		p.st.HeadAgeUs = serverNow - p.q[0].ts
+		p.st.TailAgeUs = serverNow - tail.ts
+	}
 
 	lead := 0 // frames of silence before the first sample
 	repeat := 0
@@ -201,11 +272,13 @@ func (p *player) Fill(out []byte, playAt time.Time) bool {
 			// Late: the first samples should already have played.
 			if !p.dropLocked(errFrames) {
 				p.playing = false
+				p.st.TooLate++
 				return false
 			}
 		} else if errFrames < 0 {
 			if -errFrames >= frames {
 				p.playing = false
+				p.st.NotDue++
 				return false // not due yet
 			}
 			lead = -errFrames
@@ -262,6 +335,8 @@ func (p *player) Fill(out []byte, playAt time.Time) bool {
 		i += n
 		p.advanceLocked(n)
 	}
+	p.st.Played++
+	p.st.Frames += int64(frames)
 	return true
 }
 
