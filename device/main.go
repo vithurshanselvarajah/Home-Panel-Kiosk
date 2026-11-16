@@ -723,7 +723,37 @@ func main() {
 		control.ReplyPlayedOut()
 	}
 
+	// The counters of the last log line, so that the status is only
+	// written down when it has moved on.
+	var lastChunks int
+	var lastSamples int64
+	var lastLog time.Time
+
 	speaker_.onSendspinStatus = func(status sendspin.Status) {
+		// The player's counters, for the log.
+		//
+		// The status is read many times a second, so it is only written
+		// down when something has moved on or once a minute: a line
+		// every time would bury the journal.
+		if status.Player.Chunks != lastChunks || status.Player.Samples != lastSamples {
+			lastChunks, lastSamples = status.Player.Chunks, status.Player.Samples
+			lastLog = time.Now()
+		} else if time.Since(lastLog) < time.Minute {
+			return
+		}
+		log.Info("[sendspin] status", "state", status.State, "buffered", status.BufferedMs,
+			"snaps", status.Player.Snaps, "corrections", status.Player.Corrections,
+			"underruns", status.Player.Underruns, "lateDrops", status.Player.LateDrops,
+			"overruns", status.Player.BufferOverruns, "lastErrUs", status.Player.LastErrorUs,
+			"chunks", status.Player.Chunks, "samples", status.Player.Samples,
+			"maxChunk", status.Player.MaxChunk, "backwards", status.Player.Backwards,
+			"notDue", status.Player.NotDue, "tooLate", status.Player.TooLate,
+			"empty", status.Player.Empty, "played", status.Player.Played,
+			"frames", status.Player.Frames, "leadUs", status.Player.LeadUs,
+			"spanUs", status.Player.SpanUs, "headAgeUs", status.Player.HeadAgeUs,
+			"tailAgeUs", status.Player.TailAgeUs, "offsetUs", status.Player.OffsetUs,
+			"driftPpm", status.Player.DriftPpm,
+			"speed", status.Metadata.Speed, "title", status.Metadata.Title)
 		// A music server that starts playing takes the turn from Home
 		// Assistant's music.
 		//
