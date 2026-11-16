@@ -180,14 +180,19 @@ var (
 	mu     sync.RWMutex
 	micCfg = MicSettings{
 		Gain:        DefaultMicGain,
-		Sensitivity: DefaultThreshold,
-		Mixing:      MixDelaySum,
-		Cancel:      true,
-		Leveling:    true,
-		Denoise:     true,
+		Sensitivity: DefaultSensitivity,
+		Mixing:      DefaultMixing,
+		Cancel:      DefaultCancel,
+		Leveling:    DefaultLeveling,
+		Denoise:     DefaultDenoise,
 	}
-	speakerCfg = SpeakerSettings{Stereo: false, Resampling: ResampleSinc, Tone: ToneHA}
-	mediaCfg   = MediaSettings{DuckDB: -12, OnTurn: OnTurnDuck}
+	speakerCfg = SpeakerSettings{
+		Volume:     DefaultVolume,
+		Resampling: DefaultResampling,
+		ASP:        DefaultASP,
+		Tone:       DefaultTone,
+	}
+	mediaCfg = MediaSettings{DuckDB: DefaultDuckDB, OnTurn: DefaultOnTurn}
 )
 
 // DefaultMicGain is the analog gain the microphones are set at, in dB.
@@ -195,6 +200,21 @@ var (
 // It is the vendor's own value for this board: twenty decibels, which is what the leveler's floors
 // are worked out against.
 const DefaultMicGain = 20
+
+// DefaultSensitivity is how far over the room's own floor counts as something happening, in dB.
+const DefaultSensitivity = 8
+
+// DefaultLeveling says whether the leveler is on.
+const DefaultLeveling = true
+
+// DefaultCancel says whether the echo canceller is on.
+const DefaultCancel = true
+
+// DefaultDenoise says whether the noise estimator is on.
+const DefaultDenoise = false
+
+// DefaultMuted says whether the software mute is on.
+const DefaultMuted = false
 
 // Mixing is how the microphones are combined into the one the echo canceller reads.
 type Mixing int
@@ -210,8 +230,8 @@ const (
 // DefaultMixing is the combination used when nothing says otherwise.
 const DefaultMixing = MixAll
 
-// DefaultThreshold is how far over the room's own floor counts as something happening, in dB.
-const DefaultThreshold = 8
+// DefaultThreshold is the wake word's threshold.
+const DefaultThreshold = 0.85
 
 // ASPMode says which signal processing runs.
 type ASPMode string
@@ -243,6 +263,9 @@ type SpeakerSettings struct {
 	Stereo        bool
 	ClassicSounds bool
 	Tone          Tone
+	// Bass and Treble are the listener's own shelves, in decibels.
+	Bass   float64
+	Treble float64
 }
 
 // MediaSettings is what happens to a track that is playing when the device is spoken to.
@@ -276,7 +299,7 @@ func Use(path string) {
 	statePath = path
 	micCfg = MicSettings{
 		Gain:        DefaultMicGain,
-		Sensitivity: DefaultThreshold,
+		Sensitivity: DefaultSensitivity,
 		Mixing:      DefaultMixing,
 		Cancel:      true,
 		Leveling:    true,
@@ -390,6 +413,9 @@ func (MicrophoneWriter) Threshold(v float64) error {
 	return nil
 }
 
+// DefaultWakeThreshold is the wake word's threshold when nothing says otherwise.
+const DefaultWakeThreshold = 0.85
+
 // SpeakerWriter writes the speaker's settings.
 type SpeakerWriter struct{}
 
@@ -445,6 +471,22 @@ func (SpeakerWriter) ClassicSounds(on bool) error {
 func (SpeakerWriter) Tone(t Tone) error {
 	mu.Lock()
 	speakerCfg.Tone = t
+	mu.Unlock()
+	return nil
+}
+
+// Bass sets the bass shelf, in decibels.
+func (SpeakerWriter) Bass(db float64) error {
+	mu.Lock()
+	speakerCfg.Bass = db
+	mu.Unlock()
+	return nil
+}
+
+// Treble sets the treble shelf, in decibels.
+func (SpeakerWriter) Treble(db float64) error {
+	mu.Lock()
+	speakerCfg.Treble = db
 	mu.Unlock()
 	return nil
 }
@@ -539,6 +581,27 @@ func SetSpeakerResampling(r Resampling) {
 func SetSpeakerTone(t Tone) {
 	mu.Lock()
 	speakerCfg.Tone = t
+	mu.Unlock()
+}
+
+// SetSpeakerGain sets the speaker's gain over the vendor's, in dB.
+func SetSpeakerGain(db int) {
+	mu.Lock()
+	speakerCfg.GainDB = db
+	mu.Unlock()
+}
+
+// SetSpeakerASP turns the vendor's tuning on or off.
+func SetSpeakerASP(on bool) {
+	mu.Lock()
+	speakerCfg.ASP = on
+	mu.Unlock()
+}
+
+// SetSpeakerVolume sets the level, in the speaker's own steps.
+func SetSpeakerVolume(step int) {
+	mu.Lock()
+	speakerCfg.Volume = step
 	mu.Unlock()
 }
 

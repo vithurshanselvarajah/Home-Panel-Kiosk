@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/asp"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/mic"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/mic/framework"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/speaker"
@@ -157,6 +158,56 @@ func applyMicSettings(gain, sensitivity int, mixing framework.Mixing, cancel, le
 	framework.SetMicCancel(cancel)
 	framework.SetMicLeveling(leveling)
 	framework.SetMicDenoise(denoise)
+}
+
+// applySpeakerSettings tells the ported stack what the speaker's settings are.
+//
+// The gain, the stereo, the tone and the resampling are the speaker's own
+// settings, and they are applied to the player as well as kept in the shim:
+// the player reads some of them when it starts, and the rest as it plays.
+func applySpeakerSettings(gainDB int, stereo bool, resampling framework.Resampling, tone framework.Tone) {
+	framework.SetSpeakerGain(gainDB)
+	framework.SetSpeakerStereo(stereo)
+	framework.SetSpeakerResampling(resampling)
+	framework.SetSpeakerTone(tone)
+
+	spk := speaker.Get()
+	if spk == nil {
+		return
+	}
+	if err := spk.SetSpeakerGain(gainDB); err != nil {
+		log.Printf("the speaker gain could not be set: %v", err)
+	}
+	// The tuning is on unless it is turned off: it is the vendor's own
+	// sound, and it is what makes a small speaker sound like itself.
+	spk.SetASP(framework.Get().Speaker.ASP)
+	spk.SetStereo(stereo)
+	spk.SetTone(aspTone(tone))
+	spk.SetResampling(resampling)
+}
+
+// aspTone is the speaker's tone, in the tuning's own terms.
+func aspTone(t framework.Tone) asp.Tone {
+	switch t {
+	case framework.ToneNone:
+		return asp.Tone{}
+	default:
+		return asp.Tone{Bass: 0, Treble: 0}
+	}
+}
+
+// setClearerSpeech turns the tuning's low band down while words are played.
+func setClearerSpeech(on bool) {
+	if spk := speaker.Get(); spk != nil {
+		spk.SetClearerSpeech(on)
+	}
+}
+
+// setLouderTop makes the top of the volume dial go hotter into the tuning.
+func setLouderTop(on bool) {
+	if spk := speaker.Get(); spk != nil {
+		spk.SetLouderTop(on)
+	}
 }
 
 // unused keeps the speaker import honest.
@@ -396,4 +447,189 @@ func (a *deviceAudio) useExternalCapture(ctx context.Context) error {
 	}
 	mic.SetExternalCapture(&externalCapture{reader: r})
 	return nil
+}
+
+// applyAudioSettings applies the audio stack's own settings.
+//
+// The speaker's tuning, its gain, its stereo, its shelves and the
+// microphone's gain, its levelling, its denoiser and its canceller are the
+// audio stack's own settings, and they are applied here so that they take
+// effect whether they arrive at the start or in the middle.
+func (a *deviceAudio) applyAudioSettings(c Config) {
+	// The microphone's settings.
+	micGain := framework.DefaultMicGain
+	if c.MicGainDb != nil {
+		micGain = *c.MicGainDb
+	}
+	micSensitivity := framework.DefaultSensitivity
+	if c.MicSensitivity != nil {
+		micSensitivity = *c.MicSensitivity
+	}
+	micCancel := framework.DefaultCancel
+	if c.MicCancel != nil {
+		micCancel = *c.MicCancel
+	}
+	micLeveling := framework.DefaultLeveling
+	if c.MicLeveling != nil {
+		micLeveling = *c.MicLeveling
+	}
+	micDenoise := framework.DefaultDenoise
+	if c.MicDenoise != nil {
+		micDenoise = *c.MicDenoise
+	}
+	applyMicSettings(micGain, micSensitivity, framework.DefaultMixing, micCancel, micLeveling, micDenoise)
+
+	// The speaker's settings.
+	speakerGain := 0
+	if c.SpeakerGainDb != nil {
+		speakerGain = *c.SpeakerGainDb
+	}
+	speakerStereo := false
+	if c.SpeakerStereo != nil {
+		speakerStereo = *c.SpeakerStereo
+	}
+	resampling := framework.DefaultResampling
+	if c.SpeakerResampling != nil {
+		switch *c.SpeakerResampling {
+		case "linear":
+			resampling = framework.ResampleLinear
+		case "hold":
+			resampling = framework.ResampleHold
+		default:
+			resampling = framework.ResampleSinc
+		}
+	}
+	applySpeakerSettings(speakerGain, speakerStereo, resampling, framework.DefaultTone)
+
+	// The tuning is on unless it is turned off.
+	tuning := framework.DefaultASP
+	if c.SpeakerTuning != nil {
+		tuning = *c.SpeakerTuning
+	}
+	framework.SetSpeakerASP(tuning)
+	if spk := speaker.Get(); spk != nil {
+		spk.SetASP(tuning)
+	}
+
+	// The listener's own shelves, and the two settings that change what
+	// the tuning does while words are playing.
+	bass, treble := 0.0, 0.0
+	if c.SpeakerBass != nil {
+		bass = *c.SpeakerBass
+	}
+	if c.SpeakerTreble != nil {
+		treble = *c.SpeakerTreble
+	}
+	if spk := speaker.Get(); spk != nil {
+		spk.SetTone(asp.Tone{Bass: bass, Treble: treble})
+	}
+	clearer := false
+	if c.ClearerSpeech != nil {
+		clearer = *c.ClearerSpeech
+	}
+	setClearerSpeech(clearer)
+	louderTop := false
+	if c.LouderTop != nil {
+		louderTop = *c.LouderTop
+	}
+	setLouderTop(louderTop)
+}
+
+// The speaker's own settings, and the microphone's.
+//
+// Each of them changes the audio stack's own setting and is applied to the
+// player as well, because the player holds the state the change is about.
+
+// setSpeakerTuning turns the vendor's tuning on or off.
+//
+// The tuning is the amplifier's own filter and limiter, read off the
+// device at run time. With it off, the speaker plays what it is given.
+func (a *deviceAudio) setSpeakerTuning(on bool) {
+	framework.SetSpeakerASP(on)
+	if spk := speaker.Get(); spk != nil {
+		spk.SetASP(on)
+	}
+}
+
+// setSpeakerGain raises the amplifier's gain over the vendor's, in dB.
+func (a *deviceAudio) setSpeakerGain(db int) {
+	db = max(0, min(db, framework.SpeakerGainMax))
+	framework.SetSpeakerGain(db)
+	if spk := speaker.Get(); spk != nil {
+		if err := spk.SetSpeakerGain(db); err != nil {
+			log.Printf("the amplifier's gain could not be set: %v", err)
+		}
+	}
+}
+
+// setSpeakerStereo plays the two drivers separately.
+func (a *deviceAudio) setSpeakerStereo(on bool) {
+	framework.SetSpeakerStereo(on)
+	if spk := speaker.Get(); spk != nil {
+		spk.SetStereo(on)
+	}
+}
+
+// setSpeakerBass changes the bass shelf, in dB.
+func (a *deviceAudio) setSpeakerBass(db float64) {
+	a.setSpeakerShelves(db, framework.Get().Speaker.Treble)
+}
+
+// setSpeakerTreble changes the treble shelf, in dB.
+func (a *deviceAudio) setSpeakerTreble(db float64) {
+	a.setSpeakerShelves(framework.Get().Speaker.Bass, db)
+}
+
+// setSpeakerShelves changes both shelves at once, which is what the player
+// takes.
+func (a *deviceAudio) setSpeakerShelves(bass, treble float64) {
+	bass = max(-asp.ToneRange, min(bass, asp.ToneRange))
+	treble = max(-asp.ToneRange, min(treble, asp.ToneRange))
+	if spk := speaker.Get(); spk != nil {
+		spk.SetTone(asp.Tone{Bass: bass, Treble: treble})
+	}
+}
+
+// setClearerSpeech brings the tuning's low band down while words play.
+func (a *deviceAudio) setClearerSpeech(on bool) {
+	setClearerSpeech(on)
+}
+
+// setLouderTop makes the top of the volume dial go hotter into the tuning.
+func (a *deviceAudio) setLouderTop(on bool) {
+	setLouderTop(on)
+}
+
+// setMicCancel turns echo cancellation on or off.
+//
+// With it off, the speaker's own voice comes back through the microphones
+// and the wake word hears the panel talking to itself.
+func (a *deviceAudio) setMicCancel(on bool) {
+	framework.SetMicCancel(on)
+	a.applyMicSettings()
+}
+
+// setMicLeveling turns the microphone's automatic gain on or off.
+func (a *deviceAudio) setMicLeveling(on bool) {
+	framework.SetMicLeveling(on)
+	a.applyMicSettings()
+}
+
+// setMicDenoise turns noise reduction on or off.
+func (a *deviceAudio) setMicDenoise(on bool) {
+	framework.SetMicDenoise(on)
+	a.applyMicSettings()
+}
+
+// setMicSensitivity changes how far over the room counts as speech.
+func (a *deviceAudio) setMicSensitivity(db int) {
+	framework.SetMicSensitivity(db)
+	a.applyMicSettings()
+}
+
+// applyMicSettings tells the ported stack the microphone's settings, from
+// what the shim holds.
+func (a *deviceAudio) applyMicSettings() {
+	mic := framework.Get().Microphone
+	applyMicSettings(mic.Gain, mic.Sensitivity, mic.Mixing, mic.Cancel, mic.Leveling, mic.Denoise)
 }

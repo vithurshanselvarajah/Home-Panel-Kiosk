@@ -86,4 +86,117 @@ func voiceEntities(registry *esphome.Registry) {
 		Unit:     "dB",
 		State:    esphome.EntityValue{Kind: esphome.KindNumber, Number: -6},
 	})
+
+	// The speaker's own tuning.
+	//
+	// These are the settings the audio stack has, and they are what make
+	// the speaker sound the way the vendor's own firmware makes it sound.
+	// The tuning is the amplifier's own filter and limiter, read off the
+	// device at run time.
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindSwitch,
+		Name:     "Sound · Vendor tuning",
+		ObjectID: "speaker_tuning",
+		Icon:     "mdi:tune",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: true},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindNumber,
+		Name:     "Sound · Amplifier gain",
+		ObjectID: "speaker_gain_db",
+		Icon:     "mdi:volume-high",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		Min:      0,
+		Max:      6,
+		Step:     1,
+		Unit:     "dB",
+		State:    esphome.EntityValue{Kind: esphome.KindNumber, Number: 0},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindSwitch,
+		Name:     "Sound · Stereo",
+		ObjectID: "speaker_stereo",
+		Icon:     "mdi:speaker",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindNumber,
+		Name:     "Sound · Bass",
+		ObjectID: "speaker_bass_db",
+		Icon:     "mdi:music-note",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		Min:      -6,
+		Max:      6,
+		Step:     0.5,
+		Unit:     "dB",
+		State:    esphome.EntityValue{Kind: esphome.KindNumber, Number: 0},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindNumber,
+		Name:     "Sound · Treble",
+		ObjectID: "speaker_treble_db",
+		Icon:     "mdi:music-note",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		Min:      -6,
+		Max:      6,
+		Step:     0.5,
+		Unit:     "dB",
+		State:    esphome.EntityValue{Kind: esphome.KindNumber, Number: 0},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindSwitch,
+		Name:     "Sound · Clearer speech",
+		ObjectID: "speaker_clearer_speech",
+		Icon:     "mdi:message-voice",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindSwitch,
+		Name:     "Sound · Louder top",
+		ObjectID: "speaker_louder_top",
+		Icon:     "mdi:volume-up",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
+	})
+
+	// The microphone's own settings.
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindSwitch,
+		Name:     "Microphone · Echo cancellation",
+		ObjectID: "mic_cancel",
+		Icon:     "mdi:echo-off",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: true},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindSwitch,
+		Name:     "Microphone · Automatic gain",
+		ObjectID: "mic_leveling",
+		Icon:     "mdi:autorenew",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: true},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindSwitch,
+		Name:     "Microphone · Noise reduction",
+		ObjectID: "mic_denoise",
+		Icon:     "mdi:waveform",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
+	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindNumber,
+		Name:     "Microphone · Sensitivity",
+		ObjectID: "mic_sensitivity_db",
+		Icon:     "mdi:ear-hearing",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		Min:      0,
+		Max:      30,
+		Step:     1,
+		Unit:     "dB",
+		State:    esphome.EntityValue{Kind: esphome.KindNumber, Number: 8},
+	})
 }
