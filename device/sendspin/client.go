@@ -570,9 +570,28 @@ func (c *Client) hello() clientHello {
 }
 
 // bufferCapacity caps the compressed bytes a server may have outstanding.
-// Sized as 6s of the same audio as PCM, so FLAC's ~2:1 buys more time rather
-// than more memory: roughly 12s of mono decoded, ~1.1MB.
-const bufferCapacity = 6 * outRate * outChannels * outBits / 8
+//
+// The cap is on the BYTES ON THE WIRE, not on the audio they decode to: the
+// spec counts each chunk's encoded size, so a server may hold
+// bufferCapacity bytes of compressed audio outstanding at once.
+//
+// FLAC compresses roughly 2:1, so 288000 bytes of FLAC is about 6 seconds
+// of mono 48 kHz audio, and the server will queue that much. Sizing the cap
+// as if the bytes were PCM (which is what "six seconds of PCM" means)
+// doubles the queue, and the queue then overruns the player's own limit and
+// is thrown away — which is silence.
+//
+// So the cap is set in wire bytes for the codec that is actually sent, and
+// the player's own limit is kept above what the server can queue.
+const bufferCapacity = 6 * outRate * outChannels * outBits / 8 / 2
+
+// maxBufferedSamples is how much decoded audio the player keeps queued.
+//
+// It is above the 30 seconds a server may hold outstanding (the spec's own
+// ceiling on a player's outstanding duration), so the server's cap always
+// binds first. A queue that never overruns is never thrown away, and a
+// thrown-away queue is a gap in the music.
+const maxBufferedSamples = outRate * 32
 
 // ── admission ──────────────────────────────────────────────────────────────
 //
@@ -756,6 +775,11 @@ func (c *Client) Status() Status {
 		if st.Synced {
 			st.SyncErrUs = s.filter.errorUs()
 		}
+		// The filter's offset and drift, for the log: how the server's
+		// clock compares with ours.
+		d := s.filter.takeDiag()
+		st.Player.OffsetUs = d.OffsetUs
+		st.Player.DriftPpm = d.DriftPpm
 		s.mu.Lock()
 		st.Server = s.serverName
 		st.Paired = s.psk.cat == catLongTerm
