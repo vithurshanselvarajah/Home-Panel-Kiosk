@@ -26,17 +26,19 @@ var Board = readBoard()
 // readBoard is the board the device tree says this is.
 //
 // The compatible string names the board, the way the kernel's own device
-// tree names it.
+// tree names it: "amzn,athena" and its private variant "amzn,athena-pvt".
+// The model string is not used: on this board it says only the chip.
+//
+// The compatible property is a list of strings, the first of which is the
+// most specific.
 func readBoard() string {
-	b, err := os.ReadFile("/proc/device-tree/model")
+	b, err := os.ReadFile("/proc/device-tree/compatible")
 	if err != nil {
 		return ""
 	}
-	name := strings.TrimSpace(string(b))
-	// The model string is like "Amazon Technologies, Inc. - Athena
-	// Project"; the board is the word that names it.
-	for _, word := range strings.Fields(name) {
-		if strings.EqualFold(word, "athena") {
+	for _, name := range strings.Split(strings.TrimRight(string(b), "\x00"), "\x00") {
+		name = strings.TrimSpace(name)
+		if name == "amzn,athena" || strings.HasPrefix(name, "amzn,athena-") {
 			return "athena"
 		}
 	}

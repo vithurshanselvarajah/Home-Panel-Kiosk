@@ -201,7 +201,7 @@ func (s *session) dispatch(env envelope) error {
 		var r streamRoles
 		json.Unmarshal(env.Payload, &r)
 		if r.covers("player") && s.isAdmitted() {
-			s.c.player.clear()
+			s.c.place.flush()
 		}
 	case "stream/end":
 		var r streamRoles
@@ -525,8 +525,13 @@ func (s *session) onStreamStart(f streamFormat) {
 		return
 	}
 	if !s.streaming && s.isAdmitted() {
-		s.c.player.clear()
-		s.c.player.resetStats()
+		s.c.place.flush()
+		s.c.place.resetStats()
+	}
+	// The placement is opened for the stream: it is what the speaker pulls
+	// from, and what the server's audio is placed into.
+	if s.isAdmitted() {
+		s.c.place.open()
 	}
 	s.dec, s.streaming = d, true
 	log.Printf("[sendspin] stream: %s %dHz %dch", f.Codec, f.SampleRate, f.Channels)
@@ -535,7 +540,8 @@ func (s *session) onStreamStart(f streamFormat) {
 
 func (s *session) endStream() {
 	if s.streaming && s.isAdmitted() {
-		s.c.player.clear()
+		s.c.place.flush()
+		s.c.place.close()
 	}
 	s.dec, s.streaming = nil, false
 	s.c.changed()
@@ -556,7 +562,11 @@ func (s *session) onAudio(msg []byte) {
 		log.Printf("[sendspin] decode: %v", err)
 		return
 	}
-	s.c.player.push(ts, pcm)
+	// The audio is placed, not queued: the frame its timestamp asks for is
+	// where it goes, and the speaker takes it from there. A queue would
+	// have to be emptied by asking what is due, and that asks the clock
+	// rather than the frame counter, and the clock is what jitters.
+	s.c.place.write(ts, pcm)
 	s.mu.Lock()
 	s.lastAudio = time.Now()
 	s.mu.Unlock()
