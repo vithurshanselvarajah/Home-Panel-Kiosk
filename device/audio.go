@@ -17,7 +17,7 @@ import (
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/mic"
-	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/rate"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/speaker"
 	vol "github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/volume"
 )
 
@@ -330,11 +330,20 @@ type deviceAudio struct {
 	inputs  []audio.Endpoint
 	outputs []audio.Endpoint
 
-	// micPipeline is the microphone's chain, when the board's card is
-	// opened in its own format: the channels averaged, the rate brought
-	// down, the panel's own voice cancelled, and the speech levelled and
-	// cleaned.
-	micPipeline *mic.Pipeline
+	// speakerCancel stops the ported speaker's loop.
+	speakerCancel context.CancelFunc
+
+	// micBridge is the microphone, as the ported audio stack holds it: it
+	// opens the card itself, cancels the panel's own voice out of what the
+	// microphones hear, levels and cleans the speech, and pushes frames to
+	// whoever is listening.
+	micBridge *micBridge
+
+	// speakerPlayer is the speaker, as the ported audio stack holds it: it
+	// is the mixer, and it writes to the card.
+	speakerPlayer *speaker.Player
+	// musicSource is the music, as a source the speaker pulls from.
+	musicSource *musicSource
 
 	// mute is the microphone's mute, when the board has a hardware latch
 	// for it.
@@ -787,6 +796,17 @@ func (a *deviceAudio) setVolume(level int) {
 		player.SetVolume(level)
 	}
 
+	// The speaker applies its own volume, on the vendor's curve, so the
+	// level is given to it in its own steps.
+	//
+	// The panel's level is a percentage and the speaker's is a step on a
+	// curve of thirty, so the percentage is scaled onto the steps. The
+	// curve is what makes the top of the dial room-loud rather than
+	// painful, and it is applied after the vendor's tuning.
+	if spk := a.portedSpeaker(); spk != nil {
+		spk.SetVolume(speakerStep(level))
+	}
+
 	// The speaker's own state is told, so Home Assistant's slider shows
 	// the level the panel is actually using.
 	if a.onVolume != nil {
@@ -1094,20 +1114,14 @@ func (a *deviceAudio) startCapture() {
 // frame reaches the speaker, and the guess is only used when there is
 // none.
 func (a *deviceAudio) pushEchoReference(stereo []byte, clocked audio.ClockedOutput) {
-	a.mu.Lock()
-	pipeline := a.micPipeline
-	a.mu.Unlock()
-	if pipeline == nil {
-		return
-	}
-
-	heardEnd := time.Now().Add(80 * time.Millisecond)
-	if clocked != nil {
-		if at, _, err := clocked.NextPlaybackTime(); err == nil {
-			heardEnd = at
-		}
-	}
-	pipeline.Push(stereo, playbackRate, heardEnd)
+	// The ported speaker feeds its own echo reference: it knows what it
+	// sent the card and when that will be heard, and the microphone's
+	// canceller takes it out of what the microphones hear.
+	//
+	// On a board whose card has a write back of what it plays, the
+	// reference is the card's own copy, which is locked to the microphones
+	// by the card's clock. Where there is none, the speaker's software
+	// reference is used, which is what this used to do by hand.
 }
 
 // openMicrophone opens the microphone and returns it as the wake word wants to hear it.
@@ -1122,40 +1136,49 @@ func (a *deviceAudio) pushEchoReference(stereo []byte, clocked audio.ClockedOutp
 // On any other board the microphone is opened as it always was: at the
 // rate the controller asks for, in the format the card offers.
 func (a *deviceAudio) openMicrophone(ctx context.Context) (io.ReadCloser, error) {
-	raw, ok := a.backend.(interface {
-		CaptureRaw(context.Context, audio.CaptureFormat) (audio.RawCapture, error)
-	})
-	if !ok {
-		return a.backend.Capture(ctx, captureRate)
-	}
-
-	format := audio.CaptureFormat{
-		Rate:     mic.CardRate,
-		Channels: mic.CardChannels,
-		Format:   audio.FormatS32LE,
-	}
-	capture, err := raw.CaptureRaw(ctx, format)
+	bridge, err := a.micBridgeFor(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	pipeline := mic.New(format.Channels, true)
-	a.mu.Lock()
-	a.micPipeline = pipeline
-	a.mu.Unlock()
-
-	// 100 milliseconds of the card's own audio.
-	buf := make([]byte, format.Rate/10*format.Channels*4)
-	return &micReader{capture: capture, pipeline: pipeline, buf: buf}, nil
+	frames, stop := bridge.frames("device")
+	return &micReader{bridge: bridge, frames: frames, stop: stop}, nil
 }
 
-// micReader is a microphone in the card's own format, handed on as the
-// wake word wants to hear it.
+// micBridgeFor opens the microphone through the ported stack.
+func (a *deviceAudio) micBridgeFor(ctx context.Context) (*micBridge, error) {
+	a.mu.Lock()
+	bridge := a.micBridge
+	a.mu.Unlock()
+	if bridge != nil {
+		return bridge, nil
+	}
+
+	// The device program's own backend holds the card, so that a
+	// recording can stand in for it; the microphone is given that to
+	// read.
+	if err := a.useExternalCapture(ctx); err != nil {
+		return nil, err
+	}
+
+	bridge = &micBridge{src: mic.Get()}
+	if err := bridge.start(ctx); err != nil {
+		return nil, err
+	}
+	a.mu.Lock()
+	a.micBridge = bridge
+	a.mu.Unlock()
+	return bridge, nil
+}
+
+// micReader is the microphone, handing on the frames the wake word hears.
+//
+// The frames come from the ported stack already mixed, cancelled, levelled
+// and cleaned, at the rate the wake word wants them.
 type micReader struct {
-	capture  audio.RawCapture
-	pipeline *mic.Pipeline
-	buf      []byte
-	closed   bool
+	bridge *micBridge
+	frames <-chan []int16
+	stop   func()
+	closed bool
 }
 
 // Read reads one block of the wake word's audio.
@@ -1164,27 +1187,24 @@ func (m *micReader) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 	for {
-		n, err := m.capture.ReadRaw(m.buf)
-		if n > 0 {
-			format := m.capture.Format()
-			out := m.pipeline.Process(m.buf[:n], format.Channels)
-			if len(out) > 0 {
-				copied := 0
-				for _, v := range out {
-					if copied+2 > len(p) {
-						break
-					}
-					p[copied] = byte(v)
-					p[copied+1] = byte(uint16(v) >> 8)
-					copied += 2
-				}
-				if copied > 0 {
-					return copied, nil
-				}
-			}
+		frame, ok := <-m.frames
+		if !ok {
+			return 0, io.EOF
 		}
-		if err != nil {
-			return 0, err
+		if len(frame) == 0 {
+			continue
+		}
+		copied := 0
+		for _, v := range frame {
+			if copied+2 > len(p) {
+				break
+			}
+			p[copied] = byte(v)
+			p[copied+1] = byte(uint16(v) >> 8)
+			copied += 2
+		}
+		if copied > 0 {
+			return copied, nil
 		}
 	}
 }
@@ -1192,7 +1212,10 @@ func (m *micReader) Read(p []byte) (int, error) {
 // Close releases the microphone.
 func (m *micReader) Close() error {
 	m.closed = true
-	return m.capture.Close()
+	if m.stop != nil {
+		m.stop()
+	}
+	return nil
 }
 
 // restartCapture opens the microphone again after it has stopped.
@@ -1931,21 +1954,31 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	// The clocked output is opened first, when there is one. It is the
 	// music's output and the reply's, because one card cannot be opened
 	// twice.
-	clocked, channels := a.openClocked(ctx)
-
-	var writer io.WriteCloser
-	if clocked == nil {
-		// Without a clock the music goes through the shared speaker, and
-		// the time handed to the player is a guess.
-		w, err := a.backend.Playback(ctx, cardRate)
-		if err != nil {
+	// The ported speaker owns the card: it opens it, writes to it, and
+	// knows when each frame will be heard. So this loop does not open the
+	// card at all; it feeds the speaker's queues and the music source.
+	//
+	// The device program's own backend holds the card, so that a
+	// recording can stand in for it; the speaker is given that to write
+	// to.
+	if err := a.useExternalPlayback(ctx); err != nil {
+		a.log.Warn("the speaker's playback could not be prepared", "error", err)
+	}
+	spk := a.portedSpeaker()
+	if spk == nil {
+		if err := a.startPortedSpeaker(ctx); err != nil {
 			a.log.Error("the speaker could not be opened", "error", err)
 			a.releaseOutput(generation)
 			return
 		}
-		writer = w
-		channels = 1
+		spk = a.portedSpeaker()
 	}
+	if spk == nil {
+		a.releaseOutput(generation)
+		return
+	}
+	clocked, channels := a.openClocked(ctx)
+	var writer io.WriteCloser
 
 	a.mu.Lock()
 	// The loop may have been replaced while the speaker was opening, in
@@ -1976,37 +2009,15 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	defer func() {
 		if clocked != nil {
 			_ = clocked.Close()
-		} else {
+		} else if writer != nil {
 			_ = writer.Close()
 		}
 		a.releaseOutput(generation)
+		// The speaker is stopped with the loop, so that the next thing
+		// that wants to make a sound finds the card closed and the
+		// speaker's queues empty.
+		a.stopPortedSpeaker()
 	}()
-
-	// A period is 10 milliseconds, which is the player's own period. The
-	// music is stereo and the reply is mono, so the stereo buffer is
-	// twice the size of the mono one.
-	stereo := make([]byte, playbackRate/100*4)
-	// The mono buffer is made once, because a period comes a hundred
-	// times a second and a buffer made every time is a hundred
-	// allocations a second for nothing.
-	mono := make([]byte, playbackRate/100*2)
-
-	// The card runs faster than the mix is made, so the period is taken
-	// up to the card's rate on the way out. The buffer for it is made
-	// once, for the same reason the mono one is.
-	//
-	// The upsampler is only made when the card is actually faster. On a
-	// board whose card runs at the mix's own rate it would be a copy.
-	//
-	// It takes as many channels as the card has, because the filter is
-	// per channel: upsampling a stereo mix and writing it to a mono card
-	// would put the two halves of the mix in the wrong places.
-	var upsampler *rate.Upsampler
-	hwBuf := make([]byte, 0, cardRate/100*channels*2)
-	if cardRate != playbackRate {
-		upsampler = rate.NewUpsampler(cardRate/playbackRate, upsampleTaps, channels, 1)
-		a.log.Info("playback at the card's own rate", "rate", cardRate, "channels", channels)
-	}
 
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
@@ -2049,101 +2060,52 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		}
 		a.mu.Unlock()
 
-		// The music is mixed in first, and the reply is mixed over it.
-		// The other way round would let the reply duck the music, which
-		// is what the controller's duck request is for.
+		// The ported speaker is the mixer. It holds the queues, applies
+		// the gain and the ducking, runs the vendor's tuning, and writes
+		// to the card.
+		//
+		// The reply, the test sound and the media are handed to it, and
+		// the music is attached as a source it pulls from: the music is
+		// placed by the server's clock, so it has to be asked for at the
+		// moment it is due rather than queued.
+		spk := a.portedSpeaker()
+		if spk != nil {
+			// The reply is mono at the controller's rate; the speaker
+			// takes it and converts it.
+			if len(voice) > 0 {
+				spk.PlayVoice(monoSamples(voice))
+			}
+			if len(test) > 0 {
+				spk.Play(monoSamples(test))
+			}
+			if len(media) > 0 {
+				spk.Play(monoSamples(media))
+			}
+		}
+
 		musicReady := player != nil && player.Active()
-
-		clear(stereo)
 		if musicReady {
-			// The clocked output says when the period reaches the card.
-			// The shared speaker has no such answer, so a guess is used
-			// and the player smooths it.
-			playAt := time.Now().Add(80 * time.Millisecond)
-			uncertainty := 2 * time.Millisecond
-			if clocked != nil {
-				if at, unc, err := clocked.NextPlaybackTime(); err == nil {
-					playAt, uncertainty = at, unc
-				}
-			}
-			player.Fill(stereo, playAt, uncertainty)
-			applySendspinGain(stereo, volume, muted, ducked, duckDB)
+			// The music is attached to the speaker as a source it pulls
+			// from: the frames are placed by the server's clock, so
+			// they have to be asked for at the moment they are due.
+			source := a.musicSourceFor(player)
+			spk.Attach(source)
+			source.renderDue()
+		} else if spk != nil {
+			spk.Detach(a.musicSource)
 		}
 
-		// The music Home Assistant is playing is laid into the stereo
-		// after the music server's music, because the server's music is
-		// written into the whole buffer and would wipe anything that was
-		// already there.
+		// The ported speaker does the rest: it holds the queues, applies
+		// the gain and the ducking, runs the vendor's tuning, converts
+		// the rate to the card's own and writes to it.
 		//
-		// It is scaled by the volume first, so it is played at the level
-		// the speaker says, and ducked like the other music so a reply
-		// can be heard over it.
-		if len(media) > 0 {
-			applyGain(media, volume)
-			applyDuck(media, ducked, duckDB)
-			a.mixVoiceIntoStereo(stereo, media)
-		}
-
-		// The reply is mono and the music is stereo, so the reply is
-		// laid into both channels of the music.
-		//
-		// The reply is scaled by the volume first, so it is played at
-		// the level the speaker says. The music is scaled when it is
-		// mixed in, above.
-		if len(test) > 0 {
-			applyGain(test, volume)
-			a.mixVoiceIntoStereo(stereo, test)
-		}
-		if len(voice) > 0 {
-			applyGain(voice, volume)
-			a.mixVoiceIntoStereo(stereo, voice)
-		}
-		if muted {
-			clear(stereo)
-		}
-
-		// The stereo is written to a mono card by averaging the two
-		// channels, or to a stereo card whole. The card says how many it
-		// has.
-		out := stereo
-		if channels == 1 {
-			out = mono
-			audio.StereoToMono(stereo, out)
-		}
-
-		// The card runs at 96 kHz, and the mix is made at 48 kHz, so the
-		// period is taken up to the card's rate on the way out.
-		//
-		// It is done here rather than by making the whole chain run at
-		// 96 kHz because the amplifier's tuning is the only thing that
-		// needs the higher rate: the music arrives at 48 kHz, the reply
-		// at 16 kHz, and everything between here and the card is a
-		// conversion that costs CPU for nothing.
-		if upsampler != nil {
-			// The echo reference is what the speaker is about to play,
-			// so the microphones can be told what they are about to
-			// hear again and can have it taken out of them.
-			//
-			// It is fed before the upsampling, because the reference is
-			// decimated down to the microphones' rate on its own, and
-			// the card's rate would only make that a harder filter for
-			// no gain.
-			a.pushEchoReference(stereo, clocked)
-			out = upsampler.S16LE(out, hwBuf[:0])
-		}
-
-		var err error
-		if clocked != nil {
-			_, err = clocked.Write(out)
-		} else {
-			_, err = writer.Write(out)
-		}
-		if err != nil {
-			if ctx.Err() == nil {
-				a.log.Warn("the speaker missed a period", "error", err)
-			}
-			return
-		}
+		// So there is nothing to mix here and nothing to write. The
+		// loop's work is to keep the queues fed and to know when the
+		// card can be let go.
+		_ = muted
+		_ = ducked
+		_ = duckDB
+		_ = volume
 
 		// The speaker is released when there is nothing left to play.
 		//

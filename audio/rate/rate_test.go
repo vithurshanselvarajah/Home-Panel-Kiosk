@@ -55,7 +55,7 @@ func TestTheUpsamplerKeepsTheLevel(t *testing.T) {
 	// where the level is measured.
 	var sum float64
 	count := 0
-	for i := len(out)/2; i+1 < len(out); i += 2 {
+	for i := len(out) / 2; i+1 < len(out); i += 2 {
 		v := float64(int16(binary.LittleEndian.Uint16(out[i:])))
 		sum += v
 		count++

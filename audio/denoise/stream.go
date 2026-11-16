@@ -6,8 +6,6 @@ package denoise
 // The estimator reads overlapping windows and returns half a window at a time, so this holds the
 // samples in between. The output lags the input by one window, which everything downstream sees as
 // the same audio arriving a moment later rather than as a different shape.
-//
-// Ported from TECHO5 (github.com/HuskerMinion/techo5), MIT licensed.
 type Stream struct {
 	f      *Filter
 	window []float64
@@ -17,7 +15,6 @@ type Stream struct {
 	ready   []float64
 }
 
-// NewStream makes a stream for audio at rate.
 func NewStream(rate int) *Stream {
 	f := New(rate)
 	s := &Stream{
@@ -29,7 +26,6 @@ func NewStream(rate int) *Stream {
 	return s
 }
 
-// prime clears the buffers between the frames.
 func (s *Stream) prime() {
 	s.pending = s.pending[:0]
 	s.ready = append(s.ready[:0], make([]float64, s.f.Frame())...)
@@ -66,7 +62,6 @@ func (s *Stream) Apply(frame []int16) {
 	}
 }
 
-// clampSample holds a sample inside int16.
 func clampSample(v float64) int16 {
 	switch {
 	case v > 32767:

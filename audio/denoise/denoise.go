@@ -75,7 +75,7 @@ type Filter struct {
 	started bool
 }
 
-// openingFrames is how many frames the noise estimate is measured over before filtering starts. The
+// opening is how many frames the noise estimate is measured over before filtering starts. The
 // reference uses five, on the assumption that a stream opens on the room rather than on a word.
 const openingFrames = 5
 
@@ -118,9 +118,7 @@ func New(rate int) *Filter {
 
 // Frame is the window this filter reads at a time, and Hop how far it advances.
 func (f *Filter) Frame() int { return f.frame }
-
-// Hop is how far the filter advances each time.
-func (f *Filter) Hop() int { return f.hop }
+func (f *Filter) Hop() int   { return f.hop }
 
 // Forget drops what the filter learned about the room, so the next frames measure it again.
 func (f *Filter) Forget() {
@@ -172,7 +170,7 @@ func (f *Filter) apply() {
 	// Digital silence says nothing about the room, so the estimates are left as they stood and the frame
 	// goes out silent. Followed instead, the noise estimate decays toward zero for as long as the silence
 	// lasts: after minutes the returning room reads as speech and is never learned again, and after an
-	// hour the estimate underflows and every bin turns non-finite for good.
+	// hour the estimate underflows and every bin turns non-finite for good (the mute on a Show, 2026-09).
 	if signal < silentPower*float64(f.size) {
 		for k := range f.size {
 			f.spectrum[k] = 0
