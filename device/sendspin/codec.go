@@ -12,9 +12,15 @@ import (
 )
 
 // The one format the device asks for. A single rate and channel count, so the
-// server resamples and downmixes for us: MA does it per client anyway, and a
-// player that lists one format never has to switch output mid-stream. Mono
-// because the speaker is mono and the wire then carries half the bytes.
+// server resamples for us: MA does it per client anyway, and a player that
+// lists one format never has to switch output mid-stream.
+//
+// Stereo, because the speaker takes interleaved stereo frames and the ported
+// speaker mixes the lanes itself. Advertising mono was a mistake: the player
+// then writes each mono sample into BOTH halves of a frame, and a reader that
+// takes the frame as interleaved stereo hears the same sample twice and plays
+// it at double speed. One format, one channel count, and the decoder and the
+// speaker agree on it.
 //
 // FLAC only. The spec requires a player to list flac or pcm; FLAC is ~40% of
 // PCM's bitrate for 3.28% of a core (PR #271), on links measured at 4.6-7.1%
@@ -22,7 +28,7 @@ import (
 // sync code, which PCM does not have.
 const (
 	outRate     = 48000
-	outChannels = 1
+	outChannels = 2
 	outBits     = 16
 )
 
@@ -35,7 +41,8 @@ type streamFormat struct {
 	Header     string `json:"codec_header,omitempty"`
 }
 
-// decoder turns one chunk of the current format into mono S16 at outRate.
+// decoder turns one chunk of the current format into interleaved stereo S16
+// at outRate.
 type decoder struct {
 	f streamFormat
 }
@@ -61,19 +68,23 @@ func newDecoder(f streamFormat) (*decoder, error) {
 	return &decoder{f: f}, nil
 }
 
-// decode appends the chunk's samples to dst as mono. A stereo stream (which
-// the device never asks for, but a server may send) is averaged.
+// decode appends the chunk's samples to dst as interleaved stereo.
+//
+// A server that sends mono (which the device does not ask for, but a server
+// may) is laid into both channels: one sample, one frame, the same in each
+// ear, which is what a single enclosure wants.
 func (d *decoder) decode(dst []int16, payload []byte) ([]int16, error) {
 	if d.f.Codec == "pcm" {
 		n := len(payload) / 2 / d.f.Channels
 		for i := 0; i < n; i++ {
 			if d.f.Channels == 1 {
-				dst = append(dst, int16(binary.LittleEndian.Uint16(payload[i*2:])))
+				v := int16(binary.LittleEndian.Uint16(payload[i*2:]))
+				dst = append(dst, v, v)
 				continue
 			}
-			l := int32(int16(binary.LittleEndian.Uint16(payload[i*4:])))
-			r := int32(int16(binary.LittleEndian.Uint16(payload[i*4+2:])))
-			dst = append(dst, int16((l+r)/2))
+			dst = append(dst,
+				int16(binary.LittleEndian.Uint16(payload[i*4:])),
+				int16(binary.LittleEndian.Uint16(payload[i*4+2:])))
 		}
 		return dst, nil
 	}
@@ -94,13 +105,14 @@ func (d *decoder) decode(dst []int16, payload []byte) ([]int16, error) {
 		n := len(fr.Subframes[0].Samples)
 		if len(fr.Subframes) == 1 {
 			for _, s := range fr.Subframes[0].Samples[:n] {
-				dst = append(dst, int16(s))
+				v := int16(s)
+				dst = append(dst, v, v)
 			}
 			continue
 		}
 		l, rr := fr.Subframes[0].Samples, fr.Subframes[1].Samples
 		for i := 0; i < n; i++ {
-			dst = append(dst, int16((l[i]+rr[i])/2))
+			dst = append(dst, int16(l[i]), int16(rr[i]))
 		}
 	}
 	return dst, nil

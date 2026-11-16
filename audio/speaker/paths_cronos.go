@@ -137,6 +137,8 @@ var athenaMainlineInit = append(athenaMainlineRoutes, kctl{name: athenaMaster, l
 // alike. Its table (tas5805m_volume) makes 110 0 dB and each step 1 dB, the same scale as the Show 5's
 // TAS5805M control (gain.go), under another name and with two channels.
 const (
+	// athenaMaster is the amplifier's digital volume. The scale is the
+	// same as the Show 5's: 110 is unity and each step is a decibel.
 	athenaMaster      = "Master Playback Volume"
 	athenaMasterUnity = 110
 )

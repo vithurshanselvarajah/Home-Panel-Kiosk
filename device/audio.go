@@ -1977,8 +1977,15 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		a.releaseOutput(generation)
 		return
 	}
-	clocked, channels := a.openClocked(ctx)
+	// The ported speaker is the clocked output: it reads the card's own
+	// delay and knows when each frame will be heard. Opening the card a
+	// second time for a clocked output of our own would fail, because the
+	// card is already held.
+	var clocked audio.ClockedOutput
+	channels := 2
+	// The writer is the card, which the ported speaker writes to.
 	var writer io.WriteCloser
+	writer = a.externalWriter()
 
 	a.mu.Lock()
 	// The loop may have been replaced while the speaker was opening, in
@@ -2079,7 +2086,11 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 				spk.Play(monoSamples(test))
 			}
 			if len(media) > 0 {
-				spk.Play(monoSamples(media))
+				// The music Home Assistant is playing has its own
+				// queue, so a reply sounds over it and the two do not
+				// take each other out of the speaker's hands. The
+				// reply's queue is the one a barge-in clears.
+				spk.Bed().Play(monoSamples(media))
 			}
 		}
 
@@ -2090,7 +2101,6 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 			// they have to be asked for at the moment they are due.
 			source := a.musicSourceFor(player)
 			spk.Attach(source)
-			source.renderDue()
 		} else if spk != nil {
 			spk.Detach(a.musicSource)
 		}
@@ -2465,6 +2475,29 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 			a.setSendspinError(err)
 			return
 		}
+		// The placement needs to know where the speaker is and how long
+		// its frames take to be heard, so it can put the server's audio
+		// on the frame the speaker is about to play.
+		//
+		// The two come from one reading of the card, so they always
+		// belong together: the frame that is going to the card next, and
+		// the moment it will be heard.
+		player.SetPlacement(
+			func() (uint64, time.Duration) {
+				spk := speaker.Get()
+				if spk == nil {
+					return 0, speaker.DefaultLatency
+				}
+				return spk.Position()
+			},
+			func() time.Duration {
+				spk := speaker.Get()
+				if spk == nil {
+					return speaker.DefaultLatency
+				}
+				return spk.Latency()
+			},
+		)
 		player.OnVolume(func(level int) {
 			a.setVolume(level)
 		})

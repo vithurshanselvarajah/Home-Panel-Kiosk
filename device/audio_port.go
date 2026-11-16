@@ -30,96 +30,31 @@ import (
 // musicSource is the Sendspin player, seen as something the speaker pulls
 // from.
 //
-// The speaker asks for the frames starting at an absolute output frame index.
-// The player works in its own time: it knows when each frame should reach
-// the card, and it fills a buffer with the frames that are due then.
+// The speaker asks for the frames starting at an absolute output frame
+// index, and the placement answers with the audio for those frames. The
+// frame index IS the timeline: the audio was placed on it when it arrived,
+// against the server's timestamp, and the speaker takes it from there.
+//
+// Nothing is compared against a clock here, and nothing is guessed about
+// when the audio is due. A clock comparison would be between two readings
+// taken by two different loops at two different moments, and the error
+// between them is never small enough to leave alone — so every period
+// corrects it, which is heard as a crackle.
 type musicSource struct {
 	client *sendspin.Client
-
-	mu sync.Mutex
-	// at is the output frame index the speaker last asked for.
-	at uint64
-	// played is how many frames have been given to the speaker.
-	played uint64
-	// rate is the output's rate, so the index and the time can be related.
-	rate int
-	// buf is the buffer the player fills, reused between calls.
-	buf []byte
-	// pending is what the player gave but the speaker has not taken yet.
-	pending []int16
 }
 
 // newMusicSource makes the source for a Sendspin client.
 func newMusicSource(client *sendspin.Client, rate int) *musicSource {
-	return &musicSource{client: client, rate: rate}
+	return &musicSource{client: client}
 }
 
 // Render fills out with the frames starting at output frame index at.
-//
-// The speaker asks for the frames the card is about to play, and the player
-// is asked for the audio that is due then, which is what it knows best: it
-// has the server's clock and the card's delay, and it places each frame at
-// the right microsecond.
-//
-// What the player gives is kept until the speaker asks for it again, so a
-// frame is never dropped between the two.
 func (m *musicSource) Render(at uint64, out []int16) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.at = at
-	want := len(out)
-	if want == 0 {
+	if m.client == nil || len(out) == 0 {
 		return
 	}
-
-	// What is left over from last time is played first: the speaker is
-	// asking for the frames that come next, and they were given already.
-	if len(m.pending) > 0 {
-		n := copy(out, m.pending)
-		m.played += uint64(n / speaker.Channels)
-		m.pending = m.pending[n:]
-		if len(m.pending) > 0 {
-			return
-		}
-	}
-
-	// The player is asked for the audio that is due now.
-	playAt := time.Now().Add(m.lead())
-	m.buf = resize(m.buf, want*2)
-	if !m.client.Fill(m.buf, playAt, 0) {
-		// Nothing is due: silence, which is what a stream that is not
-		// playing sounds like.
-		clear(out)
-		return
-	}
-
-	// The player's bytes are interleaved stereo; the speaker wants samples.
-	samples := make([]int16, 0, len(m.buf)/4)
-	for i := 0; i+3 < len(m.buf); i += 4 {
-		samples = append(samples, int16(uint16(m.buf[i])|uint16(m.buf[i+1])<<8))
-	}
-	n := copy(out, samples)
-	m.played += uint64(n / speaker.Channels)
-	if n < len(samples) {
-		m.pending = append(m.pending[:0], samples[n:]...)
-	}
-}
-
-// lead is how far ahead the player is asked to fill.
-//
-// The speaker's write happens before the card takes it, so the audio has to
-// be ready a little ahead of the moment it is played.
-func (m *musicSource) lead() time.Duration {
-	return 80 * time.Millisecond
-}
-
-// resize makes a buffer at least n bytes long.
-func resize(b []byte, n int) []byte {
-	if cap(b) >= n {
-		return b[:n]
-	}
-	return make([]byte, n)
+	m.client.Render(at, out)
 }
 
 // micBridge is the microphone, seen through the ported stack.
@@ -234,28 +169,6 @@ func (a *deviceAudio) musicSourceFor(client *sendspin.Client) *musicSource {
 	return a.musicSource
 }
 
-// renderDue asks the player for the audio that is due now and holds it for
-// the speaker.
-//
-// The speaker pulls from the source, so the frames are made here when they
-// are due and the speaker takes them when it reaches them.
-func (m *musicSource) renderDue() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.buf == nil {
-		m.buf = make([]byte, speaker.Rate/10*4)
-	}
-	playAt := time.Now().Add(m.lead())
-	if !m.client.Fill(m.buf, playAt, 0) {
-		return
-	}
-	samples := make([]int16, 0, len(m.buf)/4)
-	for i := 0; i+3 < len(m.buf); i += 4 {
-		samples = append(samples, int16(uint16(m.buf[i])|uint16(m.buf[i+1])<<8))
-	}
-	m.pending = append(m.pending[:0], samples...)
-}
-
 // monoSamples turns mono little-endian bytes into interleaved stereo samples.
 //
 // The speaker takes interleaved stereo, and the reply, the test sound and
@@ -350,10 +263,22 @@ func (a *deviceAudio) stopPortedSpeaker() {
 type externalPlayback struct {
 	writer io.WriteCloser
 	rate   int
+	// channels is how many samples a frame holds, so the frames written
+	// can be counted from the bytes.
+	channels int
+	// blocking says the writer waits for the hardware itself, so the
+	// write is already paced and must not be paced again here.
+	blocking bool
+	// delay asks the writer how much is still to be played. The card
+	// knows exactly; a writer that does not is counted here instead.
+	delay func() (int, error)
 
 	mu sync.Mutex
 	// frames is how many frames have been written and not yet played.
 	frames int
+	// writtenAt is when the last frame was written, which is when the
+	// count of played frames starts from.
+	writtenAt time.Time
 	// played is when the last frame written will be heard.
 	played time.Time
 }
@@ -361,16 +286,25 @@ type externalPlayback struct {
 func (e *externalPlayback) Write(p []byte) (int, error) {
 	n, err := e.writer.Write(p)
 	if n > 0 {
-		// The card's own writes block at the pace the output plays them,
-		// which is what keeps the loop from running ahead of the sound.
-		// A writer that does not block is paced here instead, so that
-		// the queue is taken at the rate it is played.
-		frames := n / 4
+		// The card's own write blocks until the hardware has room, so it
+		// already keeps the loop at the pace the output plays. Sleeping
+		// here as well would double that pace and the queue would run
+		// dry between periods — which is a gap, and a gap is heard as a
+		// pop.
+		//
+		// A writer that does not block (a recording standing in for the
+		// card) is paced here instead, so the queue is still taken at the
+		// rate it is played.
+		frames := n / (2 * e.channels)
 		d := time.Duration(frames) * time.Second / time.Duration(e.rate)
 		e.mu.Lock()
-		e.played = time.Now().Add(d)
+		e.frames += frames
+		e.writtenAt = time.Now()
+		e.played = e.writtenAt.Add(d)
 		e.mu.Unlock()
-		time.Sleep(d)
+		if !e.blocking {
+			time.Sleep(d)
+		}
 	}
 	return n, err
 }
@@ -379,13 +313,25 @@ func (e *externalPlayback) Close() error { return e.writer.Close() }
 
 // Delay is how many frames written are still to be played.
 //
-// The backend's writer does not say, so the frames are counted: a period
-// is ten milliseconds, and the writer is written at the rate it was opened
-// at.
+// The card knows how much of its ring is still to be heard, and it is asked:
+// a count made here cannot tell how much the hardware has already taken, and
+// a count that only grows becomes a latency of minutes, which the speaker
+// then believes and the player then places the audio against.
 func (e *externalPlayback) Delay() (int, error) {
+	if e.delay != nil {
+		return e.delay()
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.frames, nil
+	// A writer that cannot say: the frames written, less what the clock
+	// says has been heard since they were written.
+	elapsed := time.Since(e.writtenAt)
+	played := int(elapsed.Seconds() * float64(e.rate))
+	left := e.frames - played
+	if left < 0 {
+		left = 0
+	}
+	return left, nil
 }
 
 // useExternalPlayback gives the speaker the backend's writer.
@@ -399,11 +345,32 @@ func (a *deviceAudio) useExternalPlayback(ctx context.Context) error {
 	if backend == nil {
 		return nil
 	}
-	w, err := backend.Playback(ctx, playbackRate)
+	// The card is opened at the rate the amplifier's tuning was made for,
+	// which is the speaker's own business: the speaker converts what it is
+	// given on the way out.
+	w, err := backend.Playback(ctx, speaker.CardRate())
 	if err != nil {
 		return err
 	}
-	speaker.SetExternalPlayback(&externalPlayback{writer: w, rate: playbackRate})
+	// A card's own write blocks until the hardware has room, so it is
+	// already paced. A recording standing in for the card does not block,
+	// so the pacing is done here.
+	//
+	// The card also knows how much of its ring is still to be heard, and
+	// that is what the speaker asks for: it is the output latency the
+	// music is placed against.
+	_, blocking := w.(interface{ Blocks() bool })
+	var delay func() (int, error)
+	if d, ok := w.(interface{ Delay() (int, error) }); ok {
+		delay = d.Delay
+	}
+	speaker.SetExternalPlayback(&externalPlayback{
+		writer:   w,
+		rate:     speaker.CardRate(),
+		channels: speaker.Channels,
+		blocking: blocking,
+		delay:    delay,
+	})
 	return nil
 }
 
@@ -432,13 +399,22 @@ func (e *externalCapture) Close() error { return e.reader.Close() }
 
 // useExternalCapture gives the microphone the backend's capture.
 //
-// It is called before the microphone is started, because the microphone
-// holds the capture for as long as it runs.
+// It is only used when the sound card has been replaced by a recording: the
+// ported microphone opens the card itself, and it opens it correctly, with
+// the card's own device number, its channel count and its sample format.
+//
+// So the capture is only taken over when the backend is not the card.
 func (a *deviceAudio) useExternalCapture(ctx context.Context) error {
 	a.mu.Lock()
 	backend := a.backend
 	a.mu.Unlock()
 	if backend == nil {
+		return nil
+	}
+	if card, isCard := backend.(interface{ IsCard() bool }); isCard && card.IsCard() {
+		// The card is the card: the microphone opens it as it knows how,
+		// with the device number and the format the board wants.
+		mic.SetExternalCapture(nil)
 		return nil
 	}
 	r, err := backend.Capture(ctx, captureRate)
@@ -632,4 +608,14 @@ func (a *deviceAudio) setMicSensitivity(db int) {
 func (a *deviceAudio) applyMicSettings() {
 	mic := framework.Get().Microphone
 	applyMicSettings(mic.Gain, mic.Sensitivity, mic.Mixing, mic.Cancel, mic.Leveling, mic.Denoise)
+}
+
+// externalWriter is the card the speaker writes to, when the card has been
+// taken over by this program's own backend.
+//
+// The speaker holds it, so it is asked for rather than opened again.
+func (a *deviceAudio) externalWriter() io.WriteCloser {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.output
 }

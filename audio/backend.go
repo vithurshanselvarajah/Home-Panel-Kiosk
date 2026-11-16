@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/alsa"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/speaker"
 )
 
 // The backend, on the ported ALSA client.
@@ -40,6 +41,78 @@ const (
 	PlaybackRate = 48000
 )
 
+// The format the card is played at.
+//
+// The card runs at the amplifier's own rate, because the tuning inside the
+// amplifier was made for it: at 48 kHz every corner of its equaliser and its
+// limiter sits an octave low, so the tone is wrong and the protection that
+// should be catching the peaks is not catching them.
+//
+// A card that wants 24 bits in a 32-bit container is given them that way.
+var (
+	playbackRate = speaker.CardRate()
+	playbackBits = speaker.CardBits()
+)
+
+// playbackFormat is the ALSA format that goes with the width.
+var playbackFormat = func() int {
+	if playbackBits == 32 {
+		return alsa.FormatS24_LE
+	}
+	return alsa.FormatS16_LE
+}()
+
+// The format the microphones come over in.
+//
+// The card hands them over at the amplifier's own rate, as four channels of
+// 32-bit samples: the converter's 24 bits in a 32-bit container, left
+// aligned. The ported microphone's own decimator brings that down to the
+// rate the wake word wants.
+var (
+	captureRate     = 96000
+	captureChannels = 4
+	captureBits     = 32
+)
+
+// captureFormat is the ALSA format the microphones come over in.
+//
+// The card hands them over as 32-bit words: the converter's 24 bits in a
+// 32-bit container, left aligned. The ported microphone's own decimator
+// brings that down to what the wake word wants, and reads the words as
+// they are, so the format here is the card's and not the wake word's.
+var captureFormat = alsa.FormatS32_LE
+
+// firstCapture is the card's first capture device.
+//
+// The numbers are not the same for capture and playback: a card's playback
+// is usually device 0 and its captures follow it, so the first capture is
+// found by asking the kernel which device is which rather than by counting.
+func firstCapture(card int) (int, bool) {
+	return firstCaptureIn("/proc/asound", card)
+}
+
+// firstCaptureIn is firstCapture against a given directory, so that it can
+// be tried without a card.
+func firstCaptureIn(root string, card int) (int, bool) {
+	for i := 0; i < 32; i++ {
+		b, err := os.ReadFile(fmt.Sprintf("%s/card%d/pcm%dc/info", root, card, i))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			name, value, found := strings.Cut(line, ":")
+			if !found {
+				continue
+			}
+			// The kernel writes the stream's direction in capitals.
+			if strings.TrimSpace(name) == "stream" && strings.Contains(strings.ToUpper(value), "CAPTURE") {
+				return i, true
+			}
+		}
+	}
+	return 0, false
+}
+
 // Backend is the device's audio.
 //
 // It satisfies the audio interfaces in this package, so a device program
@@ -67,6 +140,15 @@ func New(input, output string) *Backend {
 
 // Describe says what the backend is, in a word or two.
 func (b *Backend) Describe() string { return "ALSA" }
+
+// IsCard says the backend is the sound card itself, rather than a recording
+// standing in for it.
+//
+// The ported audio stack opens the card as it knows how, with the card's own
+// device number, channel count and sample format. A backend that is only
+// standing in for the card has to be used through the backend's own methods,
+// because it does not know how to open the card itself.
+func (b *Backend) IsCard() bool { return true }
 
 // SelectedAudioDevices reports the devices in use.
 func (b *Backend) SelectedAudioDevices() (string, string) {
@@ -117,6 +199,12 @@ func (b *Backend) AudioDevices() (inputs, outputs []Endpoint, err error) {
 //
 // The listing reports names as `card:device`. The client opens a card and
 // a device number.
+//
+// The default is the card's own first capture and playback devices, found
+// by asking the kernel which is which. The numbers are not the same for the
+// two: a card's playback device is usually 0 and its captures follow it, so
+// asking for the first capture by number would open the playback device
+// instead, and the open fails with a device that does not exist.
 func (b *Backend) target(name string) (card, device int, err error) {
 	name = strings.TrimSpace(name)
 	if name == "" || name == DeviceDefault {
@@ -139,18 +227,29 @@ func (b *Backend) target(name string) (card, device int, err error) {
 }
 
 // Capture opens the microphone at the given rate.
+//
+// The microphones come over at the card's own rate and width: the card
+// hands over four channels of 32-bit samples at 96 kHz, and the ported
+// microphone's own decimator brings that down to what the wake word wants.
 func (b *Backend) Capture(ctx context.Context, rate int) (io.ReadCloser, error) {
 	card, device, err := b.target(b.input)
 	if err != nil {
 		b.setError(err)
 		return nil, err
 	}
+	if device == 0 {
+		// The default was asked for and the card's first capture is not
+		// device 0, which is its playback.
+		if found, ok := firstCapture(card); ok {
+			device = found
+		}
+	}
 	c, err := alsa.OpenPrepared(card, device, alsa.Config{
-		Channels:   2,
-		Rate:       rate,
-		Format:     alsa.FormatS16_LE,
-		Bits:       16,
-		PeriodSize: rate / 100,
+		Channels:   captureChannels,
+		Rate:       captureRate,
+		Format:     captureFormat,
+		Bits:       captureBits,
+		PeriodSize: captureRate / 100,
 		Periods:    8,
 	})
 	if err != nil {
@@ -181,12 +280,17 @@ func (b *Backend) Playback(ctx context.Context, rate int) (io.WriteCloser, error
 		b.setError(err)
 		return nil, err
 	}
+	if device == 0 {
+		// The default was asked for and the card's first playback is
+		// device 0, which is right.
+		_ = device
+	}
 	p, err := alsa.OpenPlayback(card, device, alsa.Config{
 		Channels:   2,
-		Rate:       rate,
-		Format:     alsa.FormatS16_LE,
-		Bits:       16,
-		PeriodSize: rate / 100,
+		Rate:       playbackRate,
+		Format:     playbackFormat,
+		Bits:       playbackBits,
+		PeriodSize: playbackRate / 100,
 		Periods:    8,
 	})
 	if err != nil {
@@ -202,6 +306,21 @@ type playbackWriter struct {
 }
 
 func (w *playbackWriter) Write(p []byte) (int, error) { return w.playback.Write(p) }
+
+// Blocks says the write waits for the hardware, which is what paces it.
+//
+// The card's own write blocks until the DMA ring has room, so the caller
+// must not pace the write again: doing so would run the audio at half the
+// rate the card plays it, and the queue would run dry between periods.
+func (w *playbackWriter) Blocks() bool { return true }
+
+// Delay is how many frames the card has yet to play.
+//
+// The card knows exactly how much of its ring is still to be heard, and
+// asking it is far better than counting here: a count cannot tell how much
+// the hardware has already taken, and a count that only grows turns into a
+// latency of minutes, which the speaker then believes.
+func (w *playbackWriter) Delay() (int, error) { return w.playback.Delay() }
 
 // Drain waits until the audio that has been written has played.
 func (w *playbackWriter) Drain() error { return w.playback.Drain() }

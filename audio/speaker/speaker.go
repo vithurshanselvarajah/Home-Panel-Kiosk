@@ -322,6 +322,13 @@ func (p *Player) Latency() time.Duration {
 	return l
 }
 
+// PeriodFrames is how many frames the speaker asks its Source for at a time.
+//
+// A Source must fill exactly this many frames: the speaker takes what it
+// asked for and discards the rest, so a Source that fills more has its
+// audio thrown away, and one that fills less leaves a gap.
+func PeriodFrames() int { return period }
+
 // Position is the index of the next frame to go to the card and how long, from now, until it is
 // heard: both from the same reading, so the frame and its latency always belong together.
 func (p *Player) Position() (written uint64, latency time.Duration) {
