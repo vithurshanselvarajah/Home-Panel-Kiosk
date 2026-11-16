@@ -39,13 +39,6 @@ type ControlCommand struct {
 	Value any `json:"value,omitempty"`
 	// Setting is the panel setting a Home Assistant configuration entity changes.
 	Setting string `json:"setting,omitempty"`
-	// Ceiling is the brightness the person set, for the command that
-	// carries the level the room's light allows.
-	//
-	// The two are different things: the ceiling is the setting and the
-	// level is what the setting allows in the room's light. The slider
-	// shows the setting.
-	Ceiling int `json:"ceiling,omitempty"`
 	// Mode is the mode, for the commands that take one.
 	Mode string `json:"mode,omitempty"`
 	// URL is the address, for the command that takes one.
