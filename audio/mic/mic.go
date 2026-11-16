@@ -320,9 +320,13 @@ func decode(raw []byte, first, n int) [][]int16 {
 // Run reads until ctx is canceled. It reads whether or not anyone is listening, because a stream
 // left unread overruns and the hardware ring is only 160 ms deep.
 func (s *Source) Run(ctx context.Context) error {
-	pcm := s.device()
+	// The reader needs the card, and it waits for it rather than giving
+	// up: a reader that starts before the device is taken returns at once
+	// and never comes back, so the level meter stays at nothing and the
+	// wake word hears nothing for the rest of the run.
+	pcm := s.waitForDevice(ctx)
 	if pcm == nil {
-		return errors.New("mic: the capture device is not held")
+		return ctx.Err()
 	}
 	raw := make([]byte, FrameSamples*Channels*Bits/8)
 
@@ -358,6 +362,24 @@ func (s *Source) Run(ctx context.Context) error {
 			return err
 		}
 		s.broadcastSelected(raw[:n], cut)
+	}
+}
+
+// waitForDevice is the capture once the device is held.
+//
+// It waits for it, because the reader and the opener are two different
+// goroutines and either may win: the reader that gives up instead of
+// waiting is a reader that never runs.
+func (s *Source) waitForDevice(ctx context.Context) capture {
+	for {
+		if pcm := s.device(); pcm != nil {
+			return pcm
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 }
 
