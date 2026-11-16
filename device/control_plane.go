@@ -87,6 +87,18 @@ type ControlPlane struct {
 	onAutoBrightness func(on bool)
 	// onDucking is called when the ducking is changed.
 	onDucking func(db float64)
+	// The speaker's own settings, and the microphone's.
+	onSpeakerTuning  func(on bool)
+	onSpeakerGain    func(db int)
+	onSpeakerStereo  func(on bool)
+	onSpeakerBass    func(db float64)
+	onSpeakerTreble  func(db float64)
+	onClearerSpeech  func(on bool)
+	onLouderTop      func(on bool)
+	onMicCancel      func(on bool)
+	onMicLeveling    func(on bool)
+	onMicDenoise     func(on bool)
+	onMicSensitivity func(db int)
 	// onLink is called when the link to Home Assistant comes up or goes
 	// down.
 	//
@@ -355,6 +367,28 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, plane *Cont
 				plane.setWakeEnabled(value.Bool)
 			case "music_ducking_db":
 				plane.setDucking(value.Number)
+			case "speaker_tuning":
+				plane.setSpeakerTuning(value.Bool)
+			case "speaker_gain_db":
+				plane.setSpeakerGain(int(value.Number))
+			case "speaker_stereo":
+				plane.setSpeakerStereo(value.Bool)
+			case "speaker_bass_db":
+				plane.setSpeakerBass(value.Number)
+			case "speaker_treble_db":
+				plane.setSpeakerTreble(value.Number)
+			case "speaker_clearer_speech":
+				plane.setClearerSpeech(value.Bool)
+			case "speaker_louder_top":
+				plane.setLouderTop(value.Bool)
+			case "mic_cancel":
+				plane.setMicCancel(value.Bool)
+			case "mic_leveling":
+				plane.setMicLeveling(value.Bool)
+			case "mic_denoise":
+				plane.setMicDenoise(value.Bool)
+			case "mic_sensitivity_db":
+				plane.setMicSensitivity(int(value.Number))
 			case "auto_brightness":
 				plane.setAutoBrightness(value.Bool)
 			case "camera_stream":
@@ -1020,6 +1054,116 @@ func (p *ControlPlane) OnWakeEnabled(fn func(enabled bool)) {
 // OnDucking sets what happens when the ducking is changed.
 func (p *ControlPlane) OnDucking(fn func(db float64)) {
 	p.onDucking = fn
+}
+
+// OnSpeakerTuning sets what happens when the vendor's tuning is switched.
+func (p *ControlPlane) OnSpeakerTuning(fn func(on bool)) { p.onSpeakerTuning = fn }
+
+// OnSpeakerGain sets what happens when the amplifier's gain is changed.
+func (p *ControlPlane) OnSpeakerGain(fn func(db int)) { p.onSpeakerGain = fn }
+
+// OnSpeakerStereo sets what happens when stereo is switched.
+func (p *ControlPlane) OnSpeakerStereo(fn func(on bool)) { p.onSpeakerStereo = fn }
+
+// OnSpeakerBass sets what happens when the bass shelf is changed.
+func (p *ControlPlane) OnSpeakerBass(fn func(db float64)) { p.onSpeakerBass = fn }
+
+// OnSpeakerTreble sets what happens when the treble shelf is changed.
+func (p *ControlPlane) OnSpeakerTreble(fn func(db float64)) { p.onSpeakerTreble = fn }
+
+// OnClearerSpeech sets what happens when clearer speech is switched.
+func (p *ControlPlane) OnClearerSpeech(fn func(on bool)) { p.onClearerSpeech = fn }
+
+// OnLouderTop sets what happens when louder top volume is switched.
+func (p *ControlPlane) OnLouderTop(fn func(on bool)) { p.onLouderTop = fn }
+
+// OnMicCancel sets what happens when echo cancellation is switched.
+func (p *ControlPlane) OnMicCancel(fn func(on bool)) { p.onMicCancel = fn }
+
+// OnMicLeveling sets what happens when the automatic gain is switched.
+func (p *ControlPlane) OnMicLeveling(fn func(on bool)) { p.onMicLeveling = fn }
+
+// OnMicDenoise sets what happens when noise reduction is switched.
+func (p *ControlPlane) OnMicDenoise(fn func(on bool)) { p.onMicDenoise = fn }
+
+// OnMicSensitivity sets what happens when the microphone's sensitivity changes.
+func (p *ControlPlane) OnMicSensitivity(fn func(db int)) { p.onMicSensitivity = fn }
+
+// setSpeakerTuning turns the vendor's tuning on or off.
+func (p *ControlPlane) setSpeakerTuning(on bool) {
+	if p.onSpeakerTuning != nil {
+		p.onSpeakerTuning(on)
+	}
+}
+
+// setSpeakerGain raises the amplifier's gain over the vendor's.
+func (p *ControlPlane) setSpeakerGain(db int) {
+	if p.onSpeakerGain != nil {
+		p.onSpeakerGain(db)
+	}
+}
+
+// setSpeakerStereo turns stereo on or off.
+func (p *ControlPlane) setSpeakerStereo(on bool) {
+	if p.onSpeakerStereo != nil {
+		p.onSpeakerStereo(on)
+	}
+}
+
+// setSpeakerBass changes the bass shelf.
+func (p *ControlPlane) setSpeakerBass(db float64) {
+	if p.onSpeakerBass != nil {
+		p.onSpeakerBass(db)
+	}
+}
+
+// setSpeakerTreble changes the treble shelf.
+func (p *ControlPlane) setSpeakerTreble(db float64) {
+	if p.onSpeakerTreble != nil {
+		p.onSpeakerTreble(db)
+	}
+}
+
+// setClearerSpeech brings the tuning's low band down while words play.
+func (p *ControlPlane) setClearerSpeech(on bool) {
+	if p.onClearerSpeech != nil {
+		p.onClearerSpeech(on)
+	}
+}
+
+// setLouderTop makes the top of the volume dial go hotter.
+func (p *ControlPlane) setLouderTop(on bool) {
+	if p.onLouderTop != nil {
+		p.onLouderTop(on)
+	}
+}
+
+// setMicCancel turns echo cancellation on or off.
+func (p *ControlPlane) setMicCancel(on bool) {
+	if p.onMicCancel != nil {
+		p.onMicCancel(on)
+	}
+}
+
+// setMicLeveling turns the automatic gain on or off.
+func (p *ControlPlane) setMicLeveling(on bool) {
+	if p.onMicLeveling != nil {
+		p.onMicLeveling(on)
+	}
+}
+
+// setMicDenoise turns noise reduction on or off.
+func (p *ControlPlane) setMicDenoise(on bool) {
+	if p.onMicDenoise != nil {
+		p.onMicDenoise(on)
+	}
+}
+
+// setMicSensitivity changes how far over the room counts as speech.
+func (p *ControlPlane) setMicSensitivity(db int) {
+	if p.onMicSensitivity != nil {
+		p.onMicSensitivity(db)
+	}
 }
 
 // OnWakeWord sets the callback for the wake word being switched.

@@ -52,6 +52,59 @@ type Config struct {
 	// under a reply than it would be rather than louder.
 	DuckDb *float64 `json:"duckDb,omitempty"`
 
+	// ── The speaker's own tuning ─────────────────────────────────────────
+	//
+	// These are the settings the audio stack itself has, and they are
+	// what make the speaker sound the way the vendor's own firmware
+	// makes it sound.
+	//
+	// SpeakerGainDb is how far the amplifier's gain is raised over the
+	// vendor's own, in decibels. It is capped at six, because past that
+	// a unit has been reported far too loud.
+	SpeakerGainDb *int `json:"speakerGainDb,omitempty"`
+	// SpeakerTuning turns the vendor's tuning on and off.
+	//
+	// With it on, the speaker plays the sound the vendor's firmware
+	// gives it: the amplifier's own filter and limiter, read off the
+	// device at run time. With it off, the speaker plays what it is
+	// given.
+	SpeakerTuning *bool `json:"speakerTuning,omitempty"`
+	// SpeakerStereo plays the two drivers separately, which athena can
+	// do and which keeps the amplifier's own processing of each.
+	SpeakerStereo *bool `json:"speakerStereo,omitempty"`
+	// SpeakerBass and SpeakerTreble are the listener's own shelves, in
+	// decibels, at most six either way.
+	SpeakerBass   *float64 `json:"speakerBass,omitempty"`
+	SpeakerTreble *float64 `json:"speakerTreble,omitempty"`
+	// ClearerSpeech brings the tuning's low band down while a reply is
+	// playing, so that words are heard over the music.
+	ClearerSpeech *bool `json:"clearerSpeech,omitempty"`
+	// LouderTop makes the top of the volume dial go hotter into the
+	// tuning.
+	LouderTop *bool `json:"louderTop,omitempty"`
+	// SpeakerResampling is how the reply is stretched from the
+	// controller's rate to the speaker's: "sinc", "linear" or "hold".
+	SpeakerResampling *string `json:"speakerResampling,omitempty"`
+
+	// ── The microphone's own settings ───────────────────────────────────
+	// MicSensitivity is how far over the room's own noise counts as
+	// something happening, in decibels.
+	MicSensitivity *int `json:"micSensitivity,omitempty"`
+	// MicLeveling turns the automatic gain control on and off.
+	MicLeveling *bool `json:"micLeveling,omitempty"`
+	// MicDenoise takes the steady noise out of the room.
+	//
+	// It is off by default: it removes the room's own hum as well as
+	// the fan, and a room that sounds right without it is a room worth
+	// hearing as it is.
+	MicDenoise *bool `json:"micDenoise,omitempty"`
+	// MicCancel turns the echo canceller on and off.
+	//
+	// It is on by default: with it off, the speaker's own voice comes
+	// back through the microphones and the wake word hears the panel
+	// talking to itself.
+	MicCancel *bool `json:"micCancel,omitempty"`
+
 	// AutoBrightness says whether the screen follows the room's light.
 	//
 	// With it on, the brightness setting is a ceiling and the room's
