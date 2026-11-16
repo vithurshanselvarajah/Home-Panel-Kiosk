@@ -1,344 +1,556 @@
-// Package mic turns the microphone's raw capture into what the wake word wants to hear.
-//
-// The Echo Show 8 has a four-microphone array, and the card hands it over at 96 kHz as 32-bit
-// samples. Everything downstream wants 16 kHz mono 16-bit, because that is what the wake word model
-// was trained on and what Home Assistant's voice pipeline speaks.
-//
-// So the capture goes through four steps, in this order:
-//
-//   - the four channels are mixed down to one, because the array's channels are four views of the
-//     same room and the model wants one of them;
-//   - the result is brought down from 96 kHz to 16 kHz;
-//   - the echo canceller takes the panel's own voice out;
-//   - the automatic gain control brings the speech up to a level the model knows, whatever the
-//     room is like, and the noise estimator takes the steady hum and hiss out, leaving speech and
-//     whatever is as sudden as speech.
-//
-// The order matters. The echo canceller runs before the leveler, because the leveler measures the
-// room and the panel's own voice is not the room. The leveler runs before the denoiser, because the
-// denoiser needs the noise still in the signal to measure against.
-//
-// Ported from TECHO5 (github.com/HuskerMinion/techo5), MIT licensed. Copyright (c) 2026 Yuri
-// Gelfand.
+// Package mic owns the microphone array: one capture stream, held for the life of the process,
+// with 16 kHz mono frames fanned out to whoever is listening.
 package mic
 
 import (
-	"math"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/aec"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/alsa"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/audio"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/denoise"
-	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/echoref"
-	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/leveler"
-	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/rate"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/mic/framework"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/spectrum"
 )
 
-// The rates. The card hands the microphones over at the amplifier's rate, and everything
-// downstream works at the rate the wake word model wants.
-//
-// CardRate and CardChannels are the card's own format. The audio package
-// has the same two numbers, because it has to open the card in this
-// format to tell a real microphone from a dummy: the dummy opens for the
-// level meter's format but not for this one. The two sets of numbers
-// have to agree, so they are checked against each other.
+// The capture codec accepts one format only: 16 kHz, S24_3LE. Channels, Mics, CenterMic and the
+// loopback layout are the device's own — see device_dot.go and device_cronos.go.
 const (
-	// CardRate is the rate the card captures the microphones at.
-	CardRate = 96000
+	Rate = 16000
+	Bits = 24
 
-	// OutRate is the rate the wake word wants.
-	OutRate = 16000
-
-	// CardChannels is how many microphone channels the card hands over.
-	CardChannels = 4
-
-	// cardFull is the microphones' full scale.
-	//
-	// The card hands the samples over as 32-bit words, but the converter's 24 bits are
-	// left-aligned in the word: the word is the 24-bit value shifted up by eight bits, so the
-	// full scale of the converter is 2^23 and a word at the converter's full scale is 2^31.
-	//
-	// The word is scaled against the converter's full scale, so the shift is undone by the
-	// scaling: a word of 2^23, which is the converter at full scale, comes out at 2^15.
-	cardFull = 1 << 23
+	period  = FrameSamples
+	periods = 8
 )
 
-// The filter lengths, in the same proportions TECHO5 uses them at.
-//
-// The decimator's delay is (taps-1)/2 input samples, so 192 at 96 kHz is 1 ms — the same delay the
-// microphones' own filter has, which is what keeps the echo reference aligned with the speech.
+// Card is the sound card, the speaker's (speaker.Card): found by its id on a board that names one.
+var Card = alsa.CardByID(framework.SoundCard())
+
+// FrameSamples is the frame size handed to listeners, 20 ms at 16 kHz.
+const FrameSamples = Rate / 50
+
 const (
-	decTaps = 192
-
-	// cancelTaps is how far the echo filter reaches, in samples, so 64 ms of tail. Not a setting:
-	// measured on this enclosure, cancellation rises with every tap available, so there is no
-	// room-dependent best value to look for, only what the device can afford.
-	cancelTaps = 1024
-
-	// cancelMu is how fast the echo filter adapts.
-	cancelMu = 0.1
+	acquireRetry    = 250 * time.Millisecond
+	acquireAttempts = 8
 )
 
-// refQuiet is the mean square per sample, at int16 scale, below which the loopback counts as
-// silence. Below it there is no echo to remove, so the filter is skipped entirely and the frame
-// costs nothing — which is what keeps this free on an idle device.
-const refQuiet = 1e-7 * 32768 * 32768 / 4
+// Source is the capture stream. Listeners receive mono frames; a listener that cannot keep up
+// misses frames rather than stalling the reader.
+type Source struct {
+	// The hardware, taken by Start and let go by Close. Nil in between: the handle outlives the
+	// device so that a restart can take it again without every listener being rebuilt.
+	devMu sync.Mutex
+	pcm   capture
 
-// Pipeline is one microphone's chain: the card's capture in, the wake word's audio out.
-//
-// It is not safe for concurrent use: the whole point is that it holds the state of the room's
-// noise, the room's floor and the echo path, and those are one thing.
-type Pipeline struct {
-	// dec brings the card's rate down to the output's, one channel.
-	dec *rate.Decimator
+	mu sync.Mutex
 
-	// level is the automatic gain control.
-	level *leveler.Leveler
+	listeners map[int]*listener
+	raw       map[int]chan []byte
+	next      int
 
-	// noise is the noise estimator.
-	noise *denoise.Stream
+	// dropped counts frames a listener was too slow to take. It matters more than it looks: the
+	// wake model is streaming, so a missing frame corrupts its state rather than just losing audio.
+	dropped atomic.Uint64
 
-	// cancel is the echo canceller, or nil when the panel has no reference to cancel with.
-	cancel *aec.Canceller
+	// rewiring says the next read failure is the handover in Rewire rather than a fault, so Run can
+	// ask for a restart instead of reporting a crash. See the comment on service.ErrRestart.
+	rewiring atomic.Bool
 
-	// The buffers, kept between calls so that a frame costs no allocation.
-	mono    []float32
-	outMono []int16
-	refL    []float32
-	refR    []float32
-	ref     []int16
+	history history
 
-	// clock is the mapping from the capture's sample count to when each sample was recorded.
-	clock echoref.Clock
+	// mixer is read by the reader and replaced from Home Assistant, both under mu.
+	mixer  Mixer
+	mixing framework.Mixing
 
-	// heard is how many samples have been taken from the card.
-	heard uint64
+	// cancel belongs to the reader alone. canceling is the switch, which anything may set, and is read
+	// under mu with the mixer.
+	cancel    *canceller
+	canceling bool
 
-	// leveling and denoising say whether the leveler and the denoiser are applied. The echo
-	// canceller always is: it has nothing to learn from silence.
-	leveling  bool
-	denoising bool
+	// leveler and wasLeveling belong to the reader alone; leveling is the switch, which anything may
+	// set.
+	leveler     *leveler
+	wasLeveling bool
+	leveling    atomic.Bool
+
+	// The same shape for the noise estimator, which also has state to throw away when it is turned off.
+	denoiser     *denoise.Stream
+	wasDenoising bool
+	denoising    atomic.Bool
+
+	// noise measures the room for the ambient noise sensor, while that is on.
+	noise noiseMeter
+	// standout measures how far speech stands out from the room, while something has asked for it.
+	standout standout
+
+	// Which way the loudest sound is, as a beam, or -1 until something asks. finder belongs to the
+	// reader; wantFacing is how anything else asks it to look.
+	finder     *Beamformer
+	facing     atomic.Int32
+	wantFacing atomic.Bool
 }
 
-// New makes a pipeline for a card handing over channels channels at CardRate.
-//
-// The echo canceller is only made when the reference is wanted: a panel whose speaker is not
-// running has nothing to cancel, and the filter would learn the room's noise as if it were echo.
-func New(channels int, withEcho bool) *Pipeline {
-	p := &Pipeline{
-		dec:   rate.NewDecimator(CardRate/OutRate, decTaps),
-		level: leveler.New(OutRate/100, OutRate),
-		noise: denoise.NewStream(OutRate),
-		clock: echoref.NewClock(OutRate),
-		// Leveling and denoising are on by default: without them the speech arrives at a level
-		// the model was never trained on, and in a room with a fan in it the model hears noise.
-		leveling:  true,
-		denoising: true,
+// SetMixing chooses how the microphones are combined. It takes effect on the next frame, and reports
+// what it settled on, which differs from the request only when this build cannot do it.
+func (s *Source) SetMixing(m framework.Mixing) framework.Mixing {
+	mixer, settled := NewMixer(m)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mixer, s.mixing = mixer, settled
+	return settled
+}
+
+// Mixing is the combination in use.
+func (s *Source) Mixing() framework.Mixing {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mixing
+}
+
+// New makes the array without taking the hardware, so listeners can subscribe before there is
+// anything to hear. Listen, Recent and the mixing setting work throughout; frames start at Start.
+func New() *Source {
+	mixer, mixing := NewMixer(framework.Get().Microphone.Mixing)
+	s := &Source{
+		listeners: map[int]*listener{},
+		raw:       map[int]chan []byte{},
+		mixer:     mixer,
+		mixing:    mixing,
+		leveler:   newLeveler(),
+		finder:    NewBeamformer(),
+		cancel:    newCanceller(),
+		canceling: framework.Get().Microphone.Cancel,
+		denoiser:  denoise.NewStream(Rate),
+	}
+	s.finder.hold = 1
+	s.facing.Store(-1)
+	s.leveling.Store(framework.Get().Microphone.Leveling)
+	s.denoising.Store(framework.Get().Microphone.Denoise)
+	return s
+}
+
+var (
+	once   sync.Once
+	shared *Source
+)
+
+// Get is the array. There is one, and everything that wants frames subscribes to it.
+func Get() *Source {
+	once.Do(func() { shared = New() })
+	return shared
+}
+
+func (s *Source) Name() string { return "capture" }
+
+// Start takes the capture device, off Android if it got there first, the same way the speaker does.
+func (s *Source) Start(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// Before the device is opened, so that a unit whose mute is the daemon's own is already cutting
+	// when the first frame arrives. The mute feature restores the same value later in the Device
+	// phase; this is only about the frames captured before it gets there. See framework.Seed.
+	framework.Seed(framework.Get().Microphone.Muted)
+
+	err := s.open()
+	if err == nil || !errors.Is(err, alsa.ErrBusy) {
+		return err
 	}
 
-	if withEcho {
-		if c, err := aec.New(aec.Config{Taps: cancelTaps, Mu: cancelMu}); err == nil {
-			p.cancel = c
+	for range acquireAttempts {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		time.Sleep(acquireRetry)
+
+		err = s.open()
+		if err == nil {
+			slog.Info("capture device acquired")
+			return nil
+		}
+		if !errors.Is(err, alsa.ErrBusy) {
+			return err
 		}
 	}
-
-	// The buffers are sized for a tenth of a second, which is the block
-	// the capture is read in. A block larger than that grows them: a
-	// block that was too long would have its tail dropped, which is a
-	// block of audio the wake word never hears.
-	p.mono = make([]float32, CardRate/10)
-	p.outMono = make([]int16, OutRate/10)
-	p.refL = make([]float32, OutRate/10)
-	p.refR = make([]float32, OutRate/10)
-	p.ref = make([]int16, OutRate/10)
-	return p
+	return err
 }
 
-// SetLeveling turns the automatic gain control on or off.
-func (p *Pipeline) SetLeveling(on bool) { p.leveling = on }
-
-// SetDenoising turns the noise estimator on or off.
-func (p *Pipeline) SetDenoising(on bool) { p.denoising = on }
-
-// SetSensitivity sets how far over the room's own floor counts as something happening, in dB.
-func (p *Pipeline) SetSensitivity(db int) { p.level.AtSensitivity(db) }
-
-// AtGain tells the pipeline what the converter's analog gain is now, which decides how low the
-// leveler's floors may go.
-func (p *Pipeline) AtGain(db int) { p.level.AtGain(db) }
-
-// Level is how loud the room is now, from 0 for quiet to 1 for someone talking close by.
-func (p *Pipeline) Level() float64 { return p.level.Level() }
-
-// Floor is the quietest the room has been heard to be, in dBFS.
-func (p *Pipeline) Floor() float64 { return p.level.Floor() }
-
-// Gain is what the leveler is currently applying, in dB.
-func (p *Pipeline) Gain() float64 { return p.level.Gain() }
-
-// Clipped is how many samples the leveler has had to hold at full scale.
-func (p *Pipeline) Clipped() uint64 { return p.level.Clipped() }
-
-// ERLE is how much quieter the echo canceller has made the room, in dB.
-func (p *Pipeline) ERLE() float64 {
-	if p.cancel == nil {
-		return 0
+// Acquire is New and Start together, for a tool that wants the array for the length of one command.
+func Acquire() (*Source, error) {
+	s := New()
+	if err := s.Start(context.Background()); err != nil {
+		return nil, err
 	}
-	return p.cancel.ERLE()
+	return s, nil
 }
 
-// Forget throws away what the pipeline learned about the room.
-func (p *Pipeline) Forget() {
-	p.level.Forget()
-	p.noise.Forget()
-	if p.cancel != nil {
-		p.cancel.Reset()
-	}
-	p.clock.Reset()
+// capture is the hardware as the reader sees it: whole frames of Channels at Rate in S24_3LE, the
+// microphones and then the loopback. On every board but one that is a single capture device as it
+// comes (openPlain); see openDevice in the device files.
+type capture interface {
+	Read(buf []byte) (int, error)
+	Close() error
 }
 
-// Process takes a block of the card's capture and returns what the wake word should hear.
-//
-// The card's samples are 32-bit, left-aligned in the container, so a sample's value sits in the top
-// bits and the bottom are zero. They are brought down to 16-bit on the way, which is where the
-// conversion loses the least: the input is already at 24 bits of precision inside a 32-bit word.
-//
-// The returned slice is reused on the next call.
-func (p *Pipeline) Process(pcm []byte, channels int) []int16 {
-	frameBytes := channels * 4
-	if frameBytes <= 0 {
+func (s *Source) open() error {
+	// An external capture is used instead of the card: the device program
+	// owns the card through its own backend, so that a recording can
+	// stand in for it.
+	if ext := externalCapture(); ext != nil {
+		s.mu.Lock()
+		s.devMu.Lock()
+		s.pcm = ext
+		s.devMu.Unlock()
+		s.mu.Unlock()
+		afterOpen()
 		return nil
 	}
-	frames := len(pcm) / frameBytes
-	if frames == 0 {
-		return nil
-	}
-	// A block longer than the buffer grows it. A block that was too
-	// long and had its tail dropped would be a block of audio the wake
-	// word never hears, and the loss would be at the end of every read.
-	if frames > len(p.mono) {
-		p.mono = make([]float32, frames)
-		p.outMono = make([]int16, frames/CardRate*OutRate+1)
-		p.refL = make([]float32, len(p.outMono))
-		p.refR = make([]float32, len(p.outMono))
-		p.ref = make([]int16, len(p.outMono))
+
+	pcm, err := openDevice()
+	if err != nil {
+		return fmt.Errorf("mic: opening capture: %w", err)
 	}
 
-	// The four channels are averaged into one. An average of the array is one fixed view of the
-	// room, which is what the echo canceller needs: a beamformer would steer at the loudest sound,
-	// and during playback the loudest sound is the panel's own speaker.
-	for f := 0; f < frames; f++ {
+	s.mu.Lock()
+	s.devMu.Lock()
+	s.pcm = pcm
+	s.devMu.Unlock()
+	s.mu.Unlock()
+
+	afterOpen()
+	return nil
+}
+
+// device is the hardware, or nil when it is not held.
+func (s *Source) device() capture {
+	s.devMu.Lock()
+	defer s.devMu.Unlock()
+	return s.pcm
+}
+
+type listener struct {
+	name    string
+	ch      chan []int16
+	dropped uint64
+	told    uint64
+}
+
+// Listen returns a channel of mono frames and a function that stops the subscription. The name is
+// what a dropped frame is reported against.
+func (s *Source) Listen(name string) (<-chan []int16, func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listenLocked(name)
+}
+
+// listenLocked registers a listener with mu held, including while history is copied.
+func (s *Source) listenLocked(name string) (<-chan []int16, func()) {
+	l := &listener{name: name, ch: make(chan []int16, 8)}
+	id := s.next
+	s.next++
+	s.listeners[id] = l
+
+	return l.ch, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if was, ok := s.listeners[id]; ok {
+			delete(s.listeners, id)
+			close(was.ch)
+			// A turn lasts seconds, so anything it lost would otherwise go unsaid.
+			if lost := was.dropped - was.told; lost > 0 {
+				slog.Warn("listener behind", "who", was.name, "frames", lost, "total", was.dropped)
+			}
+		}
+	}
+}
+
+// ListenRaw returns a channel of interleaved frames, all nine channels as the hardware gives them.
+// For characterising the array; the mono path is what detection and the pipeline use.
+func (s *Source) ListenRaw() (<-chan []byte, func()) {
+	ch := make(chan []byte, 8)
+
+	s.mu.Lock()
+	id := s.next
+	s.next++
+	s.raw[id] = ch
+	s.mu.Unlock()
+
+	return ch, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if c, ok := s.raw[id]; ok {
+			delete(s.raw, id)
+			close(c)
+		}
+	}
+}
+
+// Decode splits an interleaved frame into one slice per microphone, narrowed to 16 bits.
+func Decode(raw []byte) [][]int16 { return decode(raw, 0, Mics) }
+
+// Reference is the playback loopback, left and right. It is what was sent to the DAC rather than
+// anything the microphones heard: bit exact, and decimated by the same hardware that decimates them,
+// so it arrives already aligned with the microphones at their rate.
+func Reference(raw []byte) [][]int16 { return decode(raw, RefFirst, Refs) }
+
+func decode(raw []byte, first, n int) [][]int16 {
+	frameBytes := Channels * Bits / 8
+
+	frames := len(raw) / frameBytes
+	out := make([][]int16, n)
+	for c := range out {
+		out[c] = make([]int16, frames)
+	}
+	for f := range frames {
 		off := f * frameBytes
-		var sum float64
-		for c := 0; c < channels; c++ {
-			sum += float64(int32(uint32(pcm[off+c*4]) | uint32(pcm[off+c*4+1])<<8 |
-				uint32(pcm[off+c*4+2])<<16 | uint32(pcm[off+c*4+3])<<24))
+		for c := range out {
+			at := off + (first+c)*3
+			out[c][f] = int16(audio.DecodeS24LE3(raw[at:at+3]) >> 8)
 		}
-		// The converter's 24 bits are left-aligned in the word: the
-		// word is the 24-bit value shifted up by eight bits.
-		//
-		// A recording of the unit settles it: the low byte of the word
-		// is set in 0.0% of samples and the top byte in 53%. A
-		// sign-extended sample sets the low byte, because the low bits
-		// are the value's own; a left-aligned one does not, because the
-		// low bits are the converter's padding.
-		//
-		// The shift is undone by the scaling rather than separately. The
-		// full scale of the converter is 2^23, and a word at that full
-		// scale is 2^31, so dividing the word by 2^23 leaves the
-		// converter's own scale, which is then the 16-bit scale the
-		// model wants. A word of 2^23 is the converter at full scale and
-		// comes out as 2^15, which is the 16-bit full scale.
-		v := sum / float64(channels) / float64(cardFull)
-		p.mono[f] = float32(v * math.MaxInt16)
 	}
-
-	// Down to the wake word's rate.
-	out := p.outMono[:0]
-	for _, v := range p.mono[:frames] {
-		y, ok := p.dec.Push(v)
-		if !ok {
-			continue
-		}
-		if y > 32767 {
-			y = 32767
-		} else if y < -32768 {
-			y = -32768
-		}
-		out = append(out, int16(y))
-	}
-	if len(out) == 0 {
-		return nil
-	}
-
-	// The echo canceller runs before the leveler, because the leveler measures the room and the
-	// panel's own voice is not the room.
-	if p.cancel != nil {
-		p.cancelEcho(out)
-	}
-
-	// The leveler, then the denoiser. The leveler raises the speech to a level the model knows;
-	// the denoiser takes the steady noise out of what is left.
-	if p.leveling {
-		p.level.Apply(out)
-	}
-	if p.denoising {
-		p.noise.Apply(out)
-	}
-
-	p.heard += uint64(len(out))
 	return out
 }
 
-// cancelEcho subtracts the panel's own voice from the frame.
-//
-// The reference is what the speaker played, read at the moment the microphones would have heard
-// it. When there is no playback there is no reference, and the frame is left alone.
-func (p *Pipeline) cancelEcho(frame []int16) {
-	// The reference is read at the time the frame was recorded, which the clock knows.
-	start := p.clock.At(p.heard)
-	if !echoref.Fill(p.refL[:len(frame)], p.refR[:len(frame)], start) {
+// Run reads until ctx is canceled. It reads whether or not anyone is listening, because a stream
+// left unread overruns and the hardware ring is only 160 ms deep.
+func (s *Source) Run(ctx context.Context) error {
+	pcm := s.device()
+	if pcm == nil {
+		return errors.New("mic: the capture device is not held")
+	}
+	raw := make([]byte, FrameSamples*Channels*Bits/8)
+
+	var overruns uint64
+	report := time.NewTicker(dropReport)
+	defer report.Stop()
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil
+		}
+
+		select {
+		case <-report.C:
+			s.reportDrops()
+		default:
+		}
+
+		// One SoftwareCut policy decision, taken once for the block.
+		n, cut, err := readCaptured(pcm, raw, framework.SoftwareCut, nil)
+		if err != nil {
+			if errors.Is(err, alsa.ErrOverrun) {
+				if overruns++; overruns == 1 || overruns%100 == 0 {
+					slog.Warn("capture overrun", "times", overruns)
+				}
+				continue
+			}
+			// The device was handed back on purpose and this read died with it, so ask to be
+			// started again rather than reporting the handover as a failure.
+			if s.rewiring.Swap(false) {
+				return fmt.Errorf("%w: the capture device was handed back after the mute came off", ErrRestart)
+			}
+			return err
+		}
+		s.broadcastSelected(raw[:n], cut)
+	}
+}
+
+// dropReport is how often a listener losing frames is said out loud. Nothing is logged while nothing
+// is being lost.
+const dropReport = 30 * time.Second
+
+func (s *Source) reportDrops() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, l := range s.listeners {
+		since := l.dropped - l.told
+		if since == 0 {
+			continue
+		}
+		l.told = l.dropped
+		slog.Warn("listener behind", "who", l.name, "frames", since,
+			"per_second", float64(since)/dropReport.Seconds(), "total", l.dropped)
+	}
+}
+
+// broadcast hands the frame to every listener, dropping it for any that is behind. The mono mix is
+// only computed when something wants it.
+func (s *Source) broadcast(raw []byte) {
+	s.broadcastWithCut(raw, framework.SoftwareCut())
+}
+
+// broadcastWithCut shares the capture block's single SoftwareCut decision.
+func (s *Source) broadcastWithCut(raw []byte, cut bool) {
+	s.broadcastSelected(raw, cut)
+}
+
+func (s *Source) broadcastSelected(raw []byte, cut bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// A software-only mute cuts here, before anything reads the frame: what is not handed on cannot
+	// be heard, kept or streamed.
+	if cut {
+		clear(raw)
+	}
+
+	// Everything downstream reads the same single channel, whichever way it was made: wake detection
+	// and what Home Assistant transcribes should never disagree about what was heard.
+	//
+	// The recent history is kept whether or not anyone is listening: a wake word is only recognized
+	// once it has been said, so by the time a turn starts, the words after it are already past.
+	mics := Decode(raw)
+	frame := s.mixer.Mix(mics)
+
+	// While something is playing, an echo canceled fixed path replaces the mix (cancelInput): the filter
+	// learns a single acoustic path, and the beamformer would steer at the loudest thing in the room,
+	// which during playback is the speaker being canceled. It runs whichever output is playing: the jack
+	// is as often a powered speaker in the same room (AUX) as headphones, and where nothing in the room
+	// hears the playback the filter finds no echo and passes the microphone through.
+	if s.canceling && s.cancel != nil {
+		if canceled := s.cancel.apply(raw, cancelInput(s.mixer, mics, frame)); canceled != nil {
+			frame = canceled
+		}
+	}
+
+	// From here the frame belongs to whoever is handed it, so it is copied out of whatever produced
+	// it. Both the canceller and the vendor beamformer return a buffer they overwrite on the next
+	// frame, and the denoiser and the leveler below work in place, so without this a listener holding
+	// a frame would find it turn into a later one: its channel is eight deep, and a wake engine a
+	// frame or two behind would score the newest frame twice over and never see what it missed. That
+	// is the wake word going unheard while music is playing, since canceling is on by default.
+	//
+	// One buffer a frame, shared by every listener, because listeners only read what they are given.
+	// It is 640 bytes every 20 ms, next to the one Decode already allocates per microphone, so
+	// a pool or a ring would save nothing worth measuring — and a ring would have to be sized against
+	// how far behind a listener may fall, which is the thing this is fixing.
+	frame = append([]int16(nil), frame...)
+
+	// Before the noise reduction and the leveling, which would take the room out and put gain back on.
+	s.noise.add(raw, frame)
+	// Before the noise reduction, which would lower the floor it is measured against.
+	s.standout.add(frame, s.leveler.leastNow())
+
+	s.findFacing(mics)
+
+	// After the echo canceller, so the estimator is not asked to learn the speaker as part of the
+	// room, and before leveling, so the gain is not put back on a floor that has just been removed.
+	if quiet := s.denoising.Load(); quiet {
+		s.denoiser.Apply(frame)
+		s.wasDenoising = true
+	} else if s.wasDenoising {
+		s.denoiser.Forget()
+		s.wasDenoising = false
+	}
+
+	// Turning leveling off throws away what it learned, so a room it has adapted badly to is
+	// recovered by switching it off and on rather than by restarting anything.
+	on := s.leveling.Load()
+	switch {
+	case on:
+		s.leveler.apply(frame)
+	default:
+		// Measured even with the gain switched off, because how loud the room is has watchers of its
+		// own: the ring can be set to react to it, and that should not depend on a setting about what
+		// Home Assistant hears.
+		if s.wasLeveling {
+			s.leveler.forget()
+		}
+		if len(frame) > 0 {
+			s.leveler.observe(frame)
+		}
+	}
+	s.wasLeveling = on
+	// Stock DSP and sensors above always process stock data; one final
+	// synchronized selection governs all history, wake, STT and mono listeners.
+	s.remember(frame)
+	spectrum.Mic.Push(frame)
+
+	for _, l := range s.listeners {
+		select {
+		case l.ch <- frame:
+		default:
+			l.dropped++
+			s.dropped.Add(1)
+		}
+	}
+
+	if len(s.raw) == 0 {
 		return
 	}
 
-	// The reference is the average of the two channels, which is what the microphones see of it.
-	for i := range frame {
-		p.ref[i] = int16((p.refL[i] + p.refR[i]) / 2)
-	}
-
-	// A reference that is too quiet to have an echo in it is skipped: adapting on silence would
-	// fit the filter to the room's own noise, which is the one thing it must never learn.
-	var power float64
-	for _, v := range p.ref {
-		power += float64(v) * float64(v)
-	}
-	if power/float64(len(p.ref)) < refQuiet {
-		return
-	}
-
-	if out, err := p.cancel.Process(frame, p.ref); err == nil {
-		copy(frame, out)
+	// The reader reuses its buffer, so raw listeners get their own copy.
+	interleaved := make([]byte, len(raw))
+	copy(interleaved, raw)
+	for _, ch := range s.raw {
+		select {
+		case ch <- interleaved:
+		default:
+		}
 	}
 }
 
-// Push plays a period into the echo reference.
+// Dropped is how many frames a listener has missed.
+func (s *Source) Dropped() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.dropped.Load()
+}
+
+// Close lets the device go. The Source stays usable and its listeners stay subscribed: Start can take
+// the hardware again, which is how a restart works.
+func (s *Source) Close() error {
+	s.devMu.Lock()
+	pcm := s.pcm
+	s.pcm = nil
+	s.devMu.Unlock()
+
+	if pcm == nil {
+		return nil
+	}
+	return pcm.Close()
+}
+
+// Mono takes the center microphone alone, narrowed from 24 bits to 16. The beamformed mix is what
+// listeners get; this is for tools that need one microphone as it comes off the hardware.
+func Mono(raw []byte) []int16 {
+	frameBytes := Channels * Bits / 8
+
+	out := make([]int16, len(raw)/frameBytes)
+	for i := range out {
+		o := i*frameBytes + CenterMic*3
+		out[i] = int16(audio.DecodeS24LE3(raw[o:o+3]) >> 8)
+	}
+	return out
+}
+
+func captureDevice() (int, int, alsa.Config, error) {
+	cfg := alsa.Config{Channels: Channels, Rate: Rate, Format: alsa.FormatS24_3LE,
+		Bits: Bits, PeriodSize: period, Periods: periods}
+	if framework.Board == "cronos" {
+		card, device, found, err := alsa.FindPCM("mt8163cronos", "Microphones", true)
+		if err != nil {
+			return 0, 0, cfg, fmt.Errorf("mic: selecting capture: %w", err)
+		}
+		if found {
+			// Match the FPGA's complete ring; application frames remain 20 ms.
+			cfg.PeriodSize, cfg.Periods = 257, 10
+			return card, device, cfg, nil
+		}
+	}
+	return Card, CaptureDevice, cfg, nil
+}
+
+// ErrRestart says the capture should be started again rather than reported as a failure.
 //
-// The speaker tells the reference what it sent and when its last frame will be heard, so the
-// microphones can be told what they are about to hear again.
-func (p *Pipeline) Push(pcm []byte, rate int, heardEnd time.Time) {
-	echoref.Push(pcm, rate, heardEnd)
-}
-
-// Mark tells the pipeline when a sample of the capture was recorded.
-//
-// The capture and the playback run off the same AFE clocks, so the two never drift; what is left is
-// the jitter of reading a delay and the clock together, which the clock smooths away.
-func (p *Pipeline) Mark(n uint64, at time.Time) {
-	p.clock.Mark(n, at)
-}
-
-// Reset forgets the room, for a capture that starts over.
-func (p *Pipeline) Reset() {
-	p.clock.Reset()
-	p.heard = 0
-	p.dec.Reset()
-}
+// It is what the read loop returns when the device was handed back on purpose and the read died
+// with it, which is what happens when the mute comes off and the card is taken back.
+var ErrRestart = errors.New("mic: the capture device should be started again")

@@ -1,22 +1,17 @@
 // Package fft is an in-place radix-2 transform of one fixed size, with its twiddles and bit-reversal
 // built once.
-//
 // Ported from TECHO5 (github.com/HuskerMinion/techo5), MIT licensed. Copyright (c) 2026 Yuri
-// Gelfand. The transform itself is textbook; the shape of it is TECHO5's, so the denoiser built on
-// it behaves the same on both.
+// Gelfand.
 package fft
 
 import "math"
 
-// FFT is one transform size. It is not safe for concurrent use: the twiddles and the bit-reversal
-// table are read, and the spectrum it is given is written, so one transform belongs to one stream.
 type FFT struct {
 	n       int
 	rev     []int
 	twiddle []complex64 // e^-2πik/n for k < n/2
 }
 
-// New makes a transform of size n, which must be a power of two.
 func New(n int) *FFT {
 	if n&(n-1) != 0 {
 		panic("fft: size is not a power of two")
@@ -77,5 +72,4 @@ func (f *FFT) Inverse(x []complex64) {
 	}
 }
 
-// Conj is the complex conjugate.
 func Conj(c complex64) complex64 { return complex(real(c), -imag(c)) }

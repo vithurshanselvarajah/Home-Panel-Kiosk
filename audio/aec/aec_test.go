@@ -3,25 +3,14 @@ package aec
 import (
 	"math"
 	"math/rand/v2"
+	"strconv"
+	"sync"
 	"testing"
 )
 
-// The echo canceller.
-//
-// What it has to be right about is that it removes the echo and leaves
-// the room. A canceller that adapts on a silent reference fits itself to
-// the room's noise, which is the one thing it must never learn, and one
-// that keeps adapting through somebody talking is fitting the wrong
-// signal.
-//
-// The tests below are the ones that matter, and they measure the
-// cancellation from the signals rather than trusting the filter's own
-// report.
-
 const frame = 320
 
-// echoed passes ref through h and returns it as a microphone signal
-// would arrive.
+// echoed passes ref through h and returns it as a microphone signal would arrive.
 func echoed(ref []int16, h []float64) []int16 {
 	out := make([]int16, len(ref))
 	for i := range ref {
@@ -36,7 +25,6 @@ func echoed(ref []int16, h []float64) []int16 {
 	return out
 }
 
-// noiseAt is n samples of noise at an amplitude.
 func noiseAt(n int, amp float64, seed uint64) []int16 {
 	out := make([]int16, n)
 	r := rand.New(rand.NewPCG(seed, 7))
@@ -46,8 +34,7 @@ func noiseAt(n int, amp float64, seed uint64) []int16 {
 	return out
 }
 
-// erle is measured directly from the signals rather than trusting the
-// Canceller's own report.
+// erle is measured directly from the signals rather than trusting the Canceller's own report.
 func erle(mic, out []int16) float64 {
 	var d, e float64
 	for i := range mic {
@@ -60,9 +47,8 @@ func erle(mic, out []int16) float64 {
 	return 10 * math.Log10(d/e)
 }
 
-// run feeds everything through in frames, and returns the output of the
-// last part only, with the filter frozen for it. Scoring on data the
-// filter is still adapting to would be in-sample.
+// run feeds everything through in frames, and returns the output of the last part only, with the
+// filter frozen for it. Scoring on data the filter is still adapting to would be in-sample.
 func run(t *testing.T, c *Canceller, mic, ref []int16, holdOut int) (gotMic, gotOut []int16) {
 	t.Helper()
 
@@ -85,8 +71,8 @@ func run(t *testing.T, c *Canceller, mic, ref []int16, holdOut int) (gotMic, got
 	return gotMic, gotOut
 }
 
-// A pure delay is the easiest path there is, and the filter has to reach
-// past it: the delay here is longer than the hardware's ~30 samples.
+// A pure delay is the easiest path there is, and the filter has to reach past it: the delay here is
+// longer than the hardware's ~30 samples.
 func TestCancelsAPureDelay(t *testing.T) {
 	c, err := New(Config{Taps: 128, Mu: 0.5})
 	if err != nil {
@@ -105,9 +91,8 @@ func TestCancelsAPureDelay(t *testing.T) {
 	}
 }
 
-// A decaying random tail is the real shape: the measurement on the device
-// showed the echo spread over tens of milliseconds rather than arriving as
-// one reflection.
+// A decaying random tail is the real shape: the measurement on the device showed the echo spread
+// over tens of milliseconds rather than arriving as one reflection.
 func TestCancelsADispersiveTail(t *testing.T) {
 	c, err := New(Config{Taps: 512, Mu: 0.5})
 	if err != nil {
@@ -129,9 +114,8 @@ func TestCancelsADispersiveTail(t *testing.T) {
 	}
 }
 
-// The filter must not treat a talking room as an echo of silence. This is
-// the failure that matters: adapting against a silent reference drives
-// the coefficients anywhere at all.
+// The filter must not treat a talking room as an echo of silence. This is the failure that matters:
+// adapting against a silent reference drives the coefficients anywhere at all.
 func TestSilentReferenceDoesNotDiverge(t *testing.T) {
 	c, err := New(Config{Taps: 256, Mu: 0.5})
 	if err != nil {
@@ -161,9 +145,8 @@ func TestSilentReferenceDoesNotDiverge(t *testing.T) {
 	}
 }
 
-// Near-end speech over the echo is what freezing exists for. A filter that
-// keeps adapting through it is fitting the wrong signal, so it should end
-// up worse than one that was told to stop.
+// Near-end speech over the echo is what freezing exists for. A filter that keeps adapting through it
+// is fitting the wrong signal, so it should end up worse than one that was told to stop.
 func TestFreezingSurvivesDoubleTalk(t *testing.T) {
 	h := make([]float64, 80)
 	for k := 30; k < len(h); k++ {
@@ -197,8 +180,7 @@ func TestFreezingSurvivesDoubleTalk(t *testing.T) {
 	}
 	cs[1].SetAdapting(false)
 
-	// Measure how well each still cancels the echo afterwards, on echo
-	// alone.
+	// Measure how well each still cancels the echo afterwards, on echo alone.
 	var got [2]float64
 	for i, c := range cs {
 		for j := train; j < len(both); j += frame {
@@ -225,24 +207,132 @@ func TestFreezingSurvivesDoubleTalk(t *testing.T) {
 	}
 }
 
-// A canceller that rejects a bad setup is better than one that does not:
-// the taps and the step are the two numbers that decide whether it works.
-func TestRejectsBadConfigAndLengths(t *testing.T) {
-	if _, err := New(Config{Taps: 0, Mu: 0.5}); err == nil {
-		t.Error("a canceller with no taps was accepted")
-	}
-	if _, err := New(Config{Taps: 128, Mu: 0}); err == nil {
-		t.Error("a canceller that never adapts was accepted")
-	}
-	if _, err := New(Config{Taps: 128, Mu: 2}); err == nil {
-		t.Error("a canceller with a step over 2 was accepted")
-	}
-
+func TestResetForgets(t *testing.T) {
 	c, err := New(Config{Taps: 128, Mu: 0.5})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.Process(make([]int16, frame), make([]int16, frame-1)); err == nil {
-		t.Error("mismatched lengths were accepted")
+
+	h := make([]float64, 40)
+	h[30] = 0.5
+	ref := noiseAt(32000, 8000, 7)
+	mic := echoed(ref, h)
+
+	for i := 0; i+frame <= len(mic); i += frame {
+		if _, err := c.Process(mic[i:i+frame], ref[i:i+frame]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c.ERLE() <= 0 {
+		t.Fatal("nothing was canceled before the reset")
+	}
+
+	c.Reset()
+	if c.ERLE() != 0 {
+		t.Fatalf("ERLE survived a reset: %v", c.ERLE())
+	}
+	for k, v := range c.w {
+		if v != 0 {
+			t.Fatalf("the filter survived a reset: w[%d] = %v", k, v)
+		}
+	}
+
+	// Only the first sample is a guarantee. Reset does not stop it learning, so by the end of this
+	// same frame it has started predicting again, which is what it should do.
+	out, err := c.Process(mic[:frame], ref[:frame])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0] != mic[0] {
+		t.Fatalf("the filter still canceled the first sample after a reset: %d became %d", mic[0], out[0])
+	}
+}
+
+// BenchmarkProcess is in units that mean something on the device: a frame is 20 ms of audio, so
+// ns/op divided by 20,000,000 is the fraction of one core the filter costs while audio is playing.
+func BenchmarkProcess(b *testing.B) {
+	for _, taps := range []int{256, 512, 1024, 2048} {
+		c, err := New(Config{Taps: taps, Mu: 0.3})
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		mic, ref := noiseAt(frame, 6000, 1), noiseAt(frame, 8000, 2)
+
+		b.Run(strconv.Itoa(taps), func(b *testing.B) {
+			for range b.N {
+				if _, err := c.Process(mic, ref); err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N)/200000, "%core")
+		})
+	}
+}
+
+func TestRejectsBadConfigAndLengths(t *testing.T) {
+	for _, cfg := range []Config{{Taps: 0, Mu: 0.3}, {Taps: -1, Mu: 0.3}, {Taps: 64, Mu: 0}, {Taps: 64, Mu: 2}} {
+		if _, err := New(cfg); err == nil {
+			t.Errorf("New(%+v) was accepted", cfg)
+		}
+	}
+
+	c, err := New(Config{Taps: 64, Mu: 0.3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Process(make([]int16, 10), make([]int16, 11)); err != ErrLength {
+		t.Fatalf("mismatched lengths gave %v, want ErrLength", err)
+	}
+}
+
+// The switch is thrown from somewhere else. The conversation turns learning off the moment it starts
+// listening to somebody, on its own goroutine, while the capture loop is reading the flag once per
+// sample. Under the race detector this is the test that says so; without it, it still says the filter
+// keeps working while the flag moves under it.
+func TestAdaptingCanBeSwitchedWhileProcessing(t *testing.T) {
+	c, err := New(Config{Taps: 128, Mu: 0.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ref := noiseAt(32000, 8000, 5)
+	h := make([]float64, 20)
+	for k := range h {
+		h[k] = 0.4 * math.Exp(-float64(k)/8)
+	}
+	echo := echoed(ref, h)
+
+	done := make(chan struct{})
+	var flips sync.WaitGroup
+	flips.Add(1)
+	go func() {
+		defer flips.Done()
+		for on := false; ; on = !on {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			c.SetAdapting(on)
+			_ = c.Adapting()
+		}
+	}()
+
+	for j := 0; j+frame <= len(echo); j += frame {
+		out, err := c.Process(echo[j:j+frame], ref[j:j+frame])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(out) != frame {
+			t.Fatalf("got %d samples back, want %d", len(out), frame)
+		}
+	}
+	close(done)
+	flips.Wait()
+
+	c.SetAdapting(true)
+	if !c.Adapting() {
+		t.Error("the last setting did not stick")
 	}
 }

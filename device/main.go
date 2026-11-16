@@ -1067,6 +1067,10 @@ func main() {
 	// still be finishing a frame, and Scorer.Close waits for any inference
 	// already in flight before releasing the native ONNX sessions.
 	speaker_.stop()
+	// The ported speaker is closed with the rest: it holds the card, and
+	// a card that is still open when the program starts again is a card
+	// that ALSA asserts on.
+	speaker_.stopPortedSpeaker()
 	if wake != nil {
 		wake.Close()
 	}

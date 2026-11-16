@@ -10,8 +10,6 @@ const euler = 0.5772156649015328606
 // The gain rule needs it per band per frame, so it is the series near zero and a continued fraction
 // away from it — the split the standard references use, since the series loses its accuracy as x
 // grows and the fraction converges slowly as x falls.
-//
-// Ported from TECHO5 (github.com/HuskerMinion/techo5), MIT licensed.
 func e1(x float64) float64 {
 	switch {
 	case x <= 0:
