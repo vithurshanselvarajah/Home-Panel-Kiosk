@@ -540,6 +540,16 @@ func (c *Client) Buffered() time.Duration {
 	return time.Duration(c.place.queuedMs()) * time.Millisecond
 }
 
+// SetAttach tells the placement how to take the speaker and how to give it
+// back.
+//
+// The placement attaches itself when a stream opens and detaches when it
+// ends, so the source is never detached because the queue happened to be
+// empty at the moment a timer looked.
+func (c *Client) SetAttach(attach, detach func()) {
+	c.place.SetAttach(attach, detach)
+}
+
 // SetPlacement tells the placement where the speaker is and how long it
 // takes to be heard.
 //
