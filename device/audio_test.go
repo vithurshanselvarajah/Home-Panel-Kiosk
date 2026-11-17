@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/speaker"
 	vol "github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/volume"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/sendspin"
@@ -337,10 +338,12 @@ func TestTheWakeWordIsForgottenWhenTheMicrophoneOpens(t *testing.T) {
 // TestTheReplyIsPlayedAtTheSpeakersRate checks that the reply is
 // converted to the rate the speaker plays at.
 //
-// Home Assistant speaks to a speaker at 16 kHz and the speaker plays at
-// 48 kHz. The reply is queued and taken out of the queue at the
-// speaker's rate, so a reply that was not converted would be played
-// three times too fast — a chipmunk rather than a voice.
+// Home Assistant speaks at 16 kHz and the speaker's voice path takes 16 kHz,
+// interpolating it up to the card's own rate itself.
+//
+// The reply used to be converted up to the card's rate here as well, and the
+// speaker converted it again: the reply was heard at three times the speed
+// it was spoken at, and at that speed it was not a voice at all.
 func TestTheReplyIsPlayedAtTheSpeakersRate(t *testing.T) {
 	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 
@@ -352,12 +355,16 @@ func TestTheReplyIsPlayedAtTheSpeakersRate(t *testing.T) {
 	}
 
 	converted := a.resampleVoice(pcm)
-	if len(converted) == len(pcm) {
-		t.Errorf("the reply was %d bytes, the same as it went in: it was not converted", len(converted))
+	// The reply is kept at the rate it arrived at, because that is what the
+	// speaker's voice path takes.
+	if len(converted) != len(pcm) {
+		t.Errorf("the reply was %d bytes, want %d: it was converted", len(converted), len(pcm))
 	}
-	// 160 samples at 16 kHz is 480 at 48 kHz.
-	if len(converted) < 950 || len(converted) > 970 {
-		t.Errorf("the converted reply was %d bytes, want about 960", len(converted))
+
+	// And the voice path interpolates it up by its own factor, so a second
+	// of speech is a second of audio.
+	if up := speaker.VoiceUpsample; up != 3 {
+		t.Errorf("the voice path interpolates by %d, want 3", up)
 	}
 }
 

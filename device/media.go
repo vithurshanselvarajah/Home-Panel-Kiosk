@@ -329,10 +329,16 @@ func resampleToPlayback(pcm []byte, rate int) []byte {
 // whole thing before playing anything would take five minutes to say
 // anything.
 //
-// The audio is converted to the rate the speaker plays at as it goes,
-// because the proxy is asked for that rate but does not always have it.
+// The audio is converted to the rate the speaker's voice path takes as it
+// goes, because the proxy is asked for that rate but does not always have
+// it.
+//
+// It is 16 kHz, the rate the reply is spoken at, not the card's own rate:
+// the speaker's voice path interpolates the reply up to the card itself, and
+// a reply that was converted up first would be interpolated twice and heard
+// at three times the speed it was spoken at.
 func (a *deviceAudio) streamVoice(stream io.Reader, rate int) {
-	resampler := audio.NewResampler(rate, playbackRate)
+	resampler := audio.NewResampler(rate, voiceRate)
 
 	buf := make([]byte, 32*1024)
 	for {

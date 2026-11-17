@@ -1569,11 +1569,10 @@ func (a *deviceAudio) playReply(pcm []byte, final bool) {
 	// The reply is converted before it is queued, and it is the
 	// converted audio that is counted.
 	//
-	// The two have to be counted in the same units: the reply arrives
-	// at sixteen kilohertz and is played at forty-eight, so counting
-	// the arrival and comparing it with the queue would compare sixteen
-	// kilohertz's worth of bytes with forty-eight's, and the progress
-	// would always come out as nothing played.
+	// The two have to be counted in the same units: the reply is queued
+	// at the rate it is played from the queue at, so counting the
+	// arrival and comparing it with the queue compares two different
+	// rates, and the progress would always come out as nothing played.
 	converted := a.resampleVoice(pcm)
 
 	a.mu.Lock()
@@ -1587,13 +1586,16 @@ func (a *deviceAudio) playReply(pcm []byte, final bool) {
 	}
 }
 
-// resampleVoice converts the reply to the rate the speaker plays at.
+// resampleVoice converts the reply to the rate the speaker's voice path
+// takes.
 //
-// The reply comes from Home Assistant at the rate it speaks at, and the
-// speaker plays at its own rate. The reply is queued and taken out of
-// the queue at the speaker's rate, so a reply that was not converted
-// would be played at the wrong speed: three times too fast, and a
-// chipmunk rather than a voice.
+// The reply comes from Home Assistant at the rate it speaks at, 16 kHz, and
+// the speaker's voice path takes 16 kHz and interpolates it up to the card's
+// own rate itself. So the reply is kept as it arrived.
+//
+// It used to be converted up to the card's rate here, and the speaker
+// converted it again: the reply was heard at three times the speed it was
+// spoken at, and at that speed it is not a voice at all.
 //
 // The converter is kept between the chunks, because a reply that is
 // converted one chunk at a time has to be interpolated across the chunk
@@ -1605,7 +1607,7 @@ func (a *deviceAudio) resampleVoice(pcm []byte) []byte {
 
 	a.mu.Lock()
 	if a.voiceResampler == nil {
-		a.voiceResampler = audio.NewResampler(voiceRate, playbackRate)
+		a.voiceResampler = audio.NewResampler(voiceRate, voiceRate)
 		// A new reply starts its count again.
 		a.spokenTotal = 0
 		// And the last reply's completion is not this one's.
@@ -2082,10 +2084,12 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		// moment it is due rather than queued.
 		spk := a.portedSpeaker()
 		if spk != nil {
-			// The reply is mono at the controller's rate; the speaker
-			// takes it and converts it.
+			// The reply is mono at the rate it arrived at, and the
+			// speaker's voice path takes exactly that: it interpolates
+			// the reply up to the card's own rate and lays it into both
+			// channels itself.
 			if len(voice) > 0 {
-				spk.PlayVoice(monoSamples(voice))
+				spk.PlayVoice(monoSamples16(voice))
 			}
 			if len(test) > 0 {
 				spk.Play(monoSamples(test))
