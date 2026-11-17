@@ -732,7 +732,13 @@ func (c *Client) release(s *session) {
 	}
 	c.mu.Unlock()
 	if was {
-		c.place.flush()
+		// The placement is closed, not just flushed: the server has gone,
+		// so the speaker is given back and the source is detached.
+		//
+		// A flush alone leaves the source attached to the speaker for
+		// ever, and the speaker then says the panel is sounding whenever
+		// the source has been quiet for less than two seconds.
+		c.place.close()
 		log.Printf("[sendspin] %q disconnected", s.name())
 		c.changed()
 	}
