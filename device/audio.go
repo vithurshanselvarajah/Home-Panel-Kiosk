@@ -2476,8 +2476,8 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 			// The buffer only has to be big enough that the network
 			// cannot outrun the speaker, and a quarter of a second is
 			// enough for that.
-			RequiredLeadTime: 250 * time.Millisecond,
-			MinBuffer:        250 * time.Millisecond,
+			RequiredLeadTime: 300 * time.Millisecond,
+			MinBuffer:        200 * time.Millisecond,
 		})
 		if err != nil {
 			a.log.Error("the music player could not be started", "error", err)

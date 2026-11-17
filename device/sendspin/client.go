@@ -94,10 +94,10 @@ func New(cfg Config) (*Client, error) {
 	// A quarter of a second is enough for the network not to outrun
 	// the speaker.
 	if cfg.RequiredLeadTime <= 0 {
-		cfg.RequiredLeadTime = 250 * time.Millisecond
+		cfg.RequiredLeadTime = 300 * time.Millisecond
 	}
 	if cfg.MinBuffer <= 0 {
-		cfg.MinBuffer = 250 * time.Millisecond
+		cfg.MinBuffer = 200 * time.Millisecond
 	}
 	st, err := openStore(cfg.StorePath)
 	if err != nil {
