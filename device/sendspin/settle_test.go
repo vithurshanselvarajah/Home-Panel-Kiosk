@@ -60,3 +60,58 @@ func TestALateChunkIsStillPlaced(t *testing.T) {
 		t.Fatal("the late chunk was not queued")
 	}
 }
+
+// The anchor must not be laid before the speaker has started.
+//
+// A speaker that has not written to the card has no position and no
+// latency reading, so an anchor laid against it is the send-ahead alone:
+// the audio is a moment ahead of a card that has not started, and the
+// drift correction spends the first seconds of the track pulling it back.
+//
+// The chunks that arrive in the meantime are held rather than dropped, and
+// placed once the anchor is laid.
+func TestTheAnchorWaitsForTheSpeaker(t *testing.T) {
+	p := newPlacement(syncedFilter())
+	p.open()
+
+	started := false
+	p.started = func() bool { return started }
+	p.position = func() (uint64, time.Duration) { return 0, 0 }
+	p.latency = func() time.Duration { return 0 }
+
+	// The first chunk arrives before the speaker has started.
+	p.write(nowUs(), []int16{1000, -1000, 2000, -2000})
+
+	p.mu.Lock()
+	anchored := p.anchored
+	held := len(p.pending)
+	p.mu.Unlock()
+
+	if anchored {
+		t.Fatal("the anchor was laid before the speaker started")
+	}
+	if held != 1 {
+		t.Fatalf("%d chunks are held, want 1", held)
+	}
+
+	// The speaker starts, and the next chunk lays the anchor and releases
+	// the one that was held.
+	started = true
+	p.write(nowUs()+1000, []int16{3000, -3000, 4000, -4000})
+
+	p.mu.Lock()
+	anchored = p.anchored
+	held = len(p.pending)
+	queued := len(p.pcm)
+	p.mu.Unlock()
+
+	if !anchored {
+		t.Fatal("the anchor was not laid once the speaker started")
+	}
+	if held != 0 {
+		t.Fatalf("%d chunks are still held, want none", held)
+	}
+	if queued == 0 {
+		t.Fatal("nothing is queued: the chunk that was held was lost")
+	}
+}

@@ -2511,6 +2511,10 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 		// The music joins the arbiter, so it is stood down when a reply
 		// takes the speaker and carried on afterwards.
 		player.SetBackgrounds(speaker.Sound().Backgrounds())
+		player.SetStarted(func() bool {
+			spk := speaker.Get()
+			return spk != nil && spk.Started()
+		})
 		player.SetPlacement(
 			func() (uint64, time.Duration) {
 				spk := speaker.Get()

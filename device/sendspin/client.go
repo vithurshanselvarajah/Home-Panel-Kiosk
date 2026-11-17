@@ -558,6 +558,17 @@ func (c *Client) SetAttach(attach, detach func()) {
 	c.place.SetAttach(attach, detach)
 }
 
+// SetStarted tells the placement whether the speaker has started.
+//
+// The anchor is not laid before the speaker has written to the card: a
+// card that has written nothing has no position, and an anchor laid
+// against no position is the send-ahead alone — the audio a moment ahead
+// of a card that has not started, which the drift correction then spends
+// the first seconds of the track pulling back.
+func (c *Client) SetStarted(started func() bool) {
+	c.place.started = started
+}
+
 // SetPlacement tells the placement where the speaker is and how long it
 // takes to be heard.
 //
