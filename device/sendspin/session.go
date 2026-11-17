@@ -79,6 +79,7 @@ type session struct {
 	psk        resolvedPSK
 	roles      []string
 	stateSent  bool // a client/state has gone out on this connection
+	clockNoted bool // the clock has been reported good, once
 	group      groupUpdate
 	lastAudio  time.Time
 	// metadata is what the server says is playing.
@@ -428,9 +429,21 @@ func (s *session) isAdmitted() bool { return s.c.isAdmitted(s) }
 
 // ── player ──────────────────────────────────────────────────────────────────
 
-// available is what client/state reports. It means only "Home Assistant
-// has not taken the music plane"; clock synchronization is independent.
-func (s *session) available() bool { return !s.c.external() }
+// available is what client/state reports: the panel can play, and Home
+// Assistant has not taken the music plane.
+//
+// It is false until the clock filter has converged. A player that says it
+// can play before its clock is good would be scheduled against a wrong
+// offset, and the server would send the audio to the wrong moment.
+func (s *session) available() bool {
+	if s.c.external() {
+		return false
+	}
+	return s.filter.synchronized()
+}
+
+// synced says the clock is good, for the state field.
+func (s *session) synced() bool { return s.filter.synchronized() }
 
 // sendState reports availability and the player's state. It is sent as soon
 // as the role activates: Music Assistant waits for this state before it
@@ -443,12 +456,19 @@ func (s *session) sendState() {
 	s.mu.Lock()
 	s.stateSent = true
 	s.mu.Unlock()
+	// The state says whether the panel is in step with the server's clock.
+	state := "synchronized"
+	if !s.synced() {
+		state = "error"
+	}
 	s.send("client/state", clientState{
 		Available: s.available(),
 		Player: &playerState{
+			State:          state,
 			Volume:         set.Volume,
 			Muted:          set.Muted,
-			OutputDelayMs:  set.StaticDelayMs,
+			StaticDelayMs:  0,
+			OutputDelayMs:  0,
 			RequiredLeadMs: s.c.requiredLeadMs,
 			MinBufferMs:    s.c.minBufferMs(),
 			// The handlers for all three commands are implemented below.
@@ -516,17 +536,41 @@ func (s *session) Controller() *controllerState {
 }
 
 // timeSync keeps the filter fed for as long as the session lives.
+//
+// It also tells the server when the clock has become good, because the
+// player says it is unavailable until then. The state is sent once, when
+// the clock first converges, and not again: the filter's quality is read
+// as lost whenever five seconds pass without a round, and following that
+// would take the player away between every two rounds — which stops the
+// server streaming to it.
 func (s *session) timeSync(stop <-chan struct{}) {
 	for {
 		if err := s.send("client/time", clientTime{ClientTransmitted: nowUs()}); err != nil {
 			return
 		}
+		s.noteClock()
 		select {
 		case <-stop:
 			return
 		case <-time.After(time.Duration(s.filter.syncIntervalMs()) * time.Millisecond):
 		}
 	}
+}
+
+// noteClock tells the server the player is available, the first time the
+// clock filter is good.
+func (s *session) noteClock() {
+	if !s.filter.synchronized() {
+		return
+	}
+	s.mu.Lock()
+	already := s.clockNoted
+	s.clockNoted = true
+	s.mu.Unlock()
+	if already {
+		return
+	}
+	s.sendState()
 }
 
 func (s *session) onStreamStart(f streamFormat) {

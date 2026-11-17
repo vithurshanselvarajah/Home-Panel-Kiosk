@@ -47,10 +47,10 @@ func panelEntities(capabilities PanelCapabilities) *esphome.Registry {
 	}
 	if capabilities.HasBacklight {
 		registry.Add(&esphome.Entity{
-			Kind:        esphome.KindNumber,
-			Name:        "Brightness",
-			ObjectID:    "brightness",
-			Icon:        "mdi:brightness-6",
+			Kind:     esphome.KindNumber,
+			Name:     "Brightness",
+			ObjectID: "brightness",
+			Icon:     "mdi:brightness-6",
 			// The lowest is 1, not 0: the driver runs the backlight from a
 			// PWM, and a level of zero switches that PWM off rather than
 			// running it at no duty. The panel then stops following the
