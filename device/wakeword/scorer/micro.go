@@ -2,7 +2,6 @@ package scorer
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/zserge/microwakeword"
@@ -148,8 +147,3 @@ func (e *microEngine) Info() string {
 
 // Close releases the engine.
 func (e *microEngine) Close() error { return nil }
-
-// logDropped says a model was dropped, once.
-func logDropped(err error) {
-	slog.Error("the wake word was dropped: its model failed on live audio", "err", err)
-}

@@ -365,44 +365,6 @@ func (a *deviceAudio) streamVoice(stream io.Reader, rate int) {
 		a.playVoice(a.compressWith(tail, comp))
 	}
 }
-
-// fetchMedia gets the audio at a URL and turns it into PCM.
-//
-// The request is a plain one: Home Assistant's proxy is on the same
-// network as the panel, and the URL is given to the panel in the clear
-// anyway.
-//
-// What comes back is whatever the proxy made: a WAV file, or FLAC when
-// the proxy was not in the way. Both are turned into the PCM the speaker
-// takes, and the rate the audio was at comes back with it.
-//
-// The whole file is read before anything is played, so this is for the
-// short pieces — the announcement and the test tone. A track is played
-// as it arrives, through openMedia.
-func fetchMedia(ctx context.Context, url string) ([]byte, int, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	response, err := mediaClient().Do(request)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return nil, 0, fmt.Errorf("the audio came back as %s", response.Status)
-	}
-
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return decodeMedia(body)
-}
-
 // mediaClient is the client the media is fetched with.
 //
 // It has no limit on the whole request, because a track takes minutes to

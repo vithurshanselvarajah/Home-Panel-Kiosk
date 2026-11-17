@@ -101,22 +101,3 @@ func pairingToken(clientKey, pairingPSK []byte) string {
 	body := b32.EncodeToString(append(append([]byte(nil), clientKey...), pairingPSK...))
 	return "SP:0" + strings.ReplaceAll(body, "2", "9")
 }
-
-// decodePairingToken is the lenient decoder the spec asks servers for. The
-// device never needs it; the test uses it to prove the encoder round-trips.
-func decodePairingToken(s string) (clientKey, psk []byte, err error) {
-	s = strings.ToUpper(strings.TrimSpace(s))
-	s = strings.TrimPrefix(s, "SP:")
-	if s == "" || s[0] != '0' {
-		return nil, nil, errors.New("sendspin: not a version-0 pairing token")
-	}
-	body := strings.ReplaceAll(s[1:], "9", "2")
-	raw, err := b32.DecodeString(body)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(raw) < 2*keySize {
-		return nil, nil, errors.New("sendspin: pairing token too short")
-	}
-	return raw[:keySize], raw[keySize : 2*keySize], nil
-}

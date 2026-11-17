@@ -73,12 +73,6 @@ type ControlPlane struct {
 	// microphone streams to Home Assistant, and the reply comes back as
 	// audio on the same connection.
 	voice *esphome.Voice
-	// client is the Home Assistant connection the voice assistant uses.
-	//
-	// It is the connection that is open now. A voice turn needs somewhere
-	// to send the audio, and there is nowhere to send it when Home
-	// Assistant is not listening.
-	client *esphome.Client
 	// onSendspinStarted is called when the music player starts.
 	//
 	// The player's identity goes in the device's capabilities, and it is

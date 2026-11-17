@@ -112,31 +112,31 @@ From a terminal in a graphical desktop session, run the installer directly from 
 bash <(wget -qO- https://raw.githubusercontent.com/vithurshanselvarajah/Home-Panel-Kiosk/main/install.sh)
 ```
 
-It downloads the latest stable release for 64-bit Raspberry Pi OS (`arm64`) or Intel/AMD Linux (`amd64`). It installs the package, creates and starts a systemd user service, and saves the current `DISPLAY` and `WAYLAND_DISPLAY` values in that service (defaulting `DISPLAY` to `:0` when needed). The unit is stored under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user`; the installer verifies it is active and reports its status if startup fails. On first install the script asks a few questions so the kiosk can launch preconfigured; you can also pre-fill those values via environment variables (see below) or set `PITOUCH_SKIP_SETUP=1` to fall back to the in-app settings UI. Set `PITOUCH_SKIP_SERVICE=1` to install or update the package without changing the user service. Set `PITOUCH_REPOSITORY` to override the default repository.
+It downloads the latest stable release for 64-bit Raspberry Pi OS (`arm64`) or Intel/AMD Linux (`amd64`). It installs the package, creates and starts a systemd user service, and saves the current `DISPLAY` and `WAYLAND_DISPLAY` values in that service (defaulting `DISPLAY` to `:0` when needed). The unit is stored under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user`; the installer verifies it is active and reports its status if startup fails. On first install the script asks a few questions so the kiosk can launch preconfigured; you can also pre-fill those values via environment variables (see below) or set `HOMEPANEL_SKIP_SETUP=1` to fall back to the in-app settings UI. Set `HOMEPANEL_SKIP_SERVICE=1` to install or update the package without changing the user service. Set `HOMEPANEL_REPOSITORY` to override the default repository.
 
 ### Pre-configuring the install
 
-The installer writes a `settings.json` into Electron's per-user app config directory (`${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk/settings.json`) so the kiosk launches with your settings applied. Any of the following `PITOUCH_*` environment variables can be supplied — when at least one is set, the installer skips its interactive prompts:
+The installer writes a `settings.json` into Electron's per-user app config directory (`${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk/settings.json`) so the kiosk launches with your settings applied. Any of the following `HOMEPANEL_*` environment variables can be supplied — when at least one is set, the installer skips its interactive prompts:
 
 | Variable | Description |
 |----------|-------------|
-| `PITOUCH_DASHBOARD_URL` | Home Assistant dashboard URL (default `http://homeassistant.local:8123`). |
-| `PITOUCH_SLIDESHOW_URL` | Optional Immich Kiosk URL. Leave empty to disable the slideshow. |
-| `PITOUCH_IDLE_SLIDESHOW_MINUTES` | Idle minutes before the slideshow opens (`0` disables). |
-| `PITOUCH_SLIDESHOW_OFF_MINUTES` | Slideshow minutes before the screen turns off (`0` disables). |
-| `PITOUCH_TOUCH_KEYBOARD` | `true` / `false` — enable the automatic touch keyboard. |
-| `PITOUCH_DISPLAY_MODE` | `fullscreen` / `window` — how the device starts (default `fullscreen`). |
-| `PITOUCH_ESPHOME_ENCRYPTION` | `true` / `false` — encrypt the connection to Home Assistant (default `false`). |
-| `PITOUCH_ESPHOME_KEY` | The encryption key. Blank means the application makes one when the connection is turned to encrypted. The same key is given to Home Assistant when the device is added. |
-| `PITOUCH_SKIP_SETUP` | Set to `1` to skip install-time setup entirely; the app will open its settings UI on first launch. |
-| `PITOUCH_SKIP_SERVICE` | Set to `1` to skip installing, enabling, or starting the systemd user service. |
-| `PITOUCH_INSTALL_WLOPM` | Set to `0` to skip installing the optional Wayland display power helper. |
+| `HOMEPANEL_DASHBOARD_URL` | Home Assistant dashboard URL (default `http://homeassistant.local:8123`). |
+| `HOMEPANEL_SLIDESHOW_URL` | Optional Immich Kiosk URL. Leave empty to disable the slideshow. |
+| `HOMEPANEL_IDLE_SLIDESHOW_MINUTES` | Idle minutes before the slideshow opens (`0` disables). |
+| `HOMEPANEL_SLIDESHOW_OFF_MINUTES` | Slideshow minutes before the screen turns off (`0` disables). |
+| `HOMEPANEL_TOUCH_KEYBOARD` | `true` / `false` — enable the automatic touch keyboard. |
+| `HOMEPANEL_DISPLAY_MODE` | `fullscreen` / `window` — how the device starts (default `fullscreen`). |
+| `HOMEPANEL_ESPHOME_ENCRYPTION` | `true` / `false` — encrypt the connection to Home Assistant (default `false`). |
+| `HOMEPANEL_ESPHOME_KEY` | The encryption key. Blank means the application makes one when the connection is turned to encrypted. The same key is given to Home Assistant when the device is added. |
+| `HOMEPANEL_SKIP_SETUP` | Set to `1` to skip install-time setup entirely; the app will open its settings UI on first launch. |
+| `HOMEPANEL_SKIP_SERVICE` | Set to `1` to skip installing, enabling, or starting the systemd user service. |
+| `HOMEPANEL_INSTALL_WLOPM` | Set to `0` to skip installing the optional Wayland display power helper. |
 
 Example fully unattended install:
 
 ```sh
-PITOUCH_DASHBOARD_URL="https://homeassistant.example.com" \
-PITOUCH_SLIDESHOW_URL="https://immich-kiosk.example.com" \
+HOMEPANEL_DASHBOARD_URL="https://homeassistant.example.com" \
+HOMEPANEL_SLIDESHOW_URL="https://immich-kiosk.example.com" \
 bash <(wget -qO- https://raw.githubusercontent.com/vithurshanselvarajah/Home-Panel-Kiosk/main/install.sh)
 ```
 

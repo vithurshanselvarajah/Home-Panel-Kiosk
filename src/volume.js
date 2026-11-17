@@ -97,15 +97,6 @@ async function findMixer() {
         return parseMuted(answer);
       },
       writeMicMuted: (muted) => run("wpctl", ["set-mute", "@DEFAULT_AUDIO_SOURCE@", muted ? "1" : "0"]),
-      // Both are read in one process, because the watch reads them
-      // together and a process each is a process each.
-      readBoth: async () => {
-        const answer = await run("sh", ["-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@; wpctl get-volume @DEFAULT_AUDIO_SOURCE@"]);
-        if (answer === null) return { volume: null, muted: null };
-        const lines = answer.split("\n").filter((line) => line.trim() !== "");
-        if (lines.length < 2) return { volume: null, muted: null };
-        return { volume: parseFraction(lines[0]), muted: parseMuted(lines[1]) };
-      },
     };
     return mixer;
   }
@@ -191,22 +182,6 @@ async function systemVolumePercent() {
   return found.read();
 }
 
-// systemVolumeAndMicMute reads the volume and the microphone's mute in
-// one go.
-//
-// The panel watches the mixer, and the watch reads both. Asking for them
-// one at a time means two processes every time the watch runs, and a
-// watch that runs every few hundred milliseconds means a few processes
-// every few hundred milliseconds for as long as the panel is running.
-//
-// A mixer that can say both in one answer is asked once.
-async function systemVolumeAndMicMute() {
-  const found = await findMixer();
-  if (!found) return { volume: null, muted: null };
-  if (found.readBoth) return found.readBoth();
-  return { volume: await found.read(), muted: found.readMicMuted ? await found.readMicMuted() : null };
-}
-
 // setSystemVolume sets the volume of the system.
 //
 // It is best effort: a machine with no mixer is not a failure, it is a
@@ -218,16 +193,6 @@ async function setSystemVolume(percent) {
   if (!found) return false;
   await found.write(value);
   return true;
-}
-
-// systemMicMuted says whether the system microphone is muted.
-//
-// It is null when the mixer cannot say, which is a mixer that does not
-// know about the microphone rather than a microphone that is open.
-async function systemMicMuted() {
-  const found = await findMixer();
-  if (!found || !found.readMicMuted) return null;
-  return found.readMicMuted();
 }
 
 // setSystemMicMuted mutes the system microphone, or unmutes it.
@@ -243,7 +208,5 @@ async function setSystemMicMuted(muted) {
 module.exports = {
   systemVolumePercent,
   setSystemVolume,
-  systemMicMuted,
   setSystemMicMuted,
-  systemVolumeAndMicMute,
 };

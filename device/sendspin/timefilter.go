@@ -65,13 +65,6 @@ func (f *timeFilter) init(processStd, forget, driftProcessStd float64) {
 	f.forgetVarFactor = forget * forget
 	f.resetLocked()
 }
-
-func (f *timeFilter) reset() {
-	f.mu.Lock()
-	f.resetLocked()
-	f.mu.Unlock()
-}
-
 func (f *timeFilter) resetLocked() {
 	f.count, f.lastUpdate = 0, 0
 	f.offset, f.drift = 0, 0

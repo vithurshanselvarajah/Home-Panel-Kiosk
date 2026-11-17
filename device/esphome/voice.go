@@ -41,22 +41,6 @@ const (
 	startConversationFlag uint32 = 1 << 5
 )
 
-// The request flags for a voice turn.
-//
-// The values are a bitmask on the wire and are not a protobuf enum.
-const (
-	// requestUseVAD says home assistant should use its own voice activity
-	// detection to find the end of the utterance.
-	requestUseVAD uint32 = 1 << 0
-	// requestUseWakeWord says home assistant should run its own wake word
-	// detection on the audio.
-	//
-	// The panel does not set it when the wake word fired locally: the
-	// wake word has already happened, and asking home assistant to look
-	// for it again would make it wait for a second one.
-	requestUseWakeWord uint32 = 1 << 1
-)
-
 // voiceAssistant is the panel's voice assistant.
 //
 // It is one turn at a time: the wake word fires, the turn starts, the
@@ -140,25 +124,6 @@ type Voice struct {
 	// activeWakeWords are the models home assistant has switched on.
 	activeWakeWords []string
 
-	// onTurn is called when a turn starts, with the phrase that fired.
-	onTurn func(phrase string)
-	// onEnd is called when a turn ends, with the transcript and whether
-	// it ended in an error.
-	onEnd func(transcript string, failed bool)
-	// onEvent is called for the events home assistant sends, so the panel
-	// can show what is happening.
-	onEvent func(event VoiceAssistantEvent)
-	// onAnnounce is called when home assistant asks the panel to speak.
-	//
-	// The panel has no way to fetch the audio itself — the reply comes
-	// back on the connection as audio — so the handler is given the media
-	// id and the text, and the announcement is played when the audio
-	// arrives.
-	onAnnounce func(mediaID, text string)
-	// onThinking is called when home assistant starts or stops working.
-	onThinking func(thinking bool)
-	// onSpeaking is called when the reply starts or stops.
-	onSpeaking func(speaking bool)
 	// hooks are the callbacks the device program wires.
 	hooks VoiceHooks
 	// onWakeWord is called when home assistant's picker switches the wake
@@ -515,13 +480,6 @@ func (v *Voice) Transcript() string {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return v.transcript
-}
-
-// replyIsStreaming says whether the reply's audio is streaming.
-func (v *Voice) replyIsStreaming() bool {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return v.streaming
 }
 
 // Spoken says what Home Assistant is saying.

@@ -58,8 +58,6 @@ type Server struct {
 	log *slog.Logger
 	// connections are the clients that are connected now.
 	connections sync.Map
-	// writeMu guards the writes on each connection.
-	writeMu sync.Mutex
 }
 
 // ServerOptions is what the server is made with.
@@ -901,10 +899,3 @@ const (
 // and Home Assistant takes the two parts apart to show them, so there
 // has to be a manufacturer.
 const defaultManufacturer = "Home Panel"
-
-// keepAlive is how long the server waits for a message before it
-// considers the connection dead.
-//
-// The client pings on its own, so a long silence means the client has
-// gone.
-const keepAlive = 60 * time.Second

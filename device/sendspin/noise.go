@@ -23,9 +23,6 @@ var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, no
 // written, so reading message 1 under a placeholder is exact.
 var placeholderPSK = make([]byte, pskSize)
 
-// maxTransportPlaintext is Noise's 65535-byte limit less the 16-byte tag.
-const maxTransportPlaintext = 65535 - 16
-
 // transport is one direction pair of Noise cipher states.
 type transport struct {
 	send, recv *noise.CipherState

@@ -85,10 +85,14 @@ function loadMain() {
 
   // The module requires its own files by a relative path, so the
   // require is given the module's own directory as its base.
+  //
+  // A bare specifier is not one of the module's own files — it is a
+  // package from node_modules — and it is left to the real require.
   const moduleRequire = (id) => {
     if (id === "electron") return electron;
     // Node's own modules are not the application's.
     if (id.startsWith("node:")) return require(id);
+    if (!id.startsWith(".")) return require(id);
     return require(path.join(root, "src", id));
   };
 

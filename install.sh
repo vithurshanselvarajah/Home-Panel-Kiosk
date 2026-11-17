@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPOSITORY=${PITOUCH_REPOSITORY:-vithurshanselvarajah/Home-Panel-Kiosk}
+REPOSITORY=${HOMEPANEL_REPOSITORY:-vithurshanselvarajah/Home-Panel-Kiosk}
 if [[ -z "$REPOSITORY" ]] && command -v git >/dev/null 2>&1; then
   REMOTE=$(git config --get remote.origin.url 2>/dev/null || true)
   if [[ "$REMOTE" =~ github\.com[:/]([^/]+/[^/.]+)(\.git)?$ ]]; then
@@ -9,7 +9,7 @@ if [[ -z "$REPOSITORY" ]] && command -v git >/dev/null 2>&1; then
   fi
 fi
 if [[ ! "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-  echo "Set PITOUCH_REPOSITORY to the GitHub owner/repository (for example owner/PiTouch)." >&2
+  echo "Set HOMEPANEL_REPOSITORY to the GitHub owner/repository (for example owner/Home-Panel-Kiosk)." >&2
   exit 1
 fi
 
@@ -19,16 +19,16 @@ case "$(uname -m)" in
   aarch64) DEB_ARCH=arm64 ;;
   *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
 esac
-[[ "$BITS" == 64 ]] || { echo "PiTouch requires a 64-bit operating system." >&2; exit 1; }
+[[ "$BITS" == 64 ]] || { echo "Home Panel Kiosk requires a 64-bit operating system." >&2; exit 1; }
 
 command -v wget >/dev/null 2>&1 || { echo "wget is required." >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is required to read the GitHub release metadata." >&2; exit 1; }
 command -v apt-get >/dev/null 2>&1 || { echo "This installer requires Debian or Raspberry Pi OS with apt-get." >&2; exit 1; }
-if [[ "${PITOUCH_SKIP_SERVICE:-0}" != "1" ]]; then
-  command -v systemctl >/dev/null 2>&1 || { echo "systemd is required unless PITOUCH_SKIP_SERVICE=1." >&2; exit 1; }
+if [[ "${HOMEPANEL_SKIP_SERVICE:-0}" != "1" ]]; then
+  command -v systemctl >/dev/null 2>&1 || { echo "systemd is required unless HOMEPANEL_SKIP_SERVICE=1." >&2; exit 1; }
 fi
 
-echo "Finding the latest PiTouch release for $DEB_ARCH..."
+echo "Finding the latest Home Panel Kiosk release for $DEB_ARCH..."
 API_URL="https://api.github.com/repos/$REPOSITORY/releases/latest"
 ASSET_URL=$(wget -qO- "$API_URL" | python3 -c '
 import json, sys
@@ -47,9 +47,9 @@ DEB_FILE="$TMP_DIR/$(basename "$ASSET_URL")"
 echo "Downloading $(basename "$DEB_FILE")..."
 wget --show-progress -q -O "$DEB_FILE" "$ASSET_URL"
 
-echo "Installing PiTouch..."
+echo "Installing Home Panel Kiosk..."
 sudo apt-get install -y "$DEB_FILE"
-if [[ "${PITOUCH_INSTALL_WLOPM:-1}" != "0" ]] && command -v apt-cache >/dev/null 2>&1 && apt-cache show wlopm >/dev/null 2>&1; then
+if [[ "${HOMEPANEL_INSTALL_WLOPM:-1}" != "0" ]] && command -v apt-cache >/dev/null 2>&1 && apt-cache show wlopm >/dev/null 2>&1; then
   echo "Installing optional Wayland display power helper..."
   if ! sudo apt-get install -y wlopm; then
     echo "Warning: wlopm could not be installed; screen power controls may remain unavailable." >&2
@@ -59,18 +59,18 @@ fi
 # Resolve the per-user config directory used by the Electron app
 APP_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk
 
-# configure_pi_touch writes the initial settings.json so the app does not need
-# to be configured from its UI. Values may be supplied via PITOUCH_* env vars
+# configure_homepanel writes the initial settings.json so the app does not need
+# to be configured from its UI. Values may be supplied via HOMEPANEL_* env vars
 # (useful for automation) or gathered with read -p prompts.
-configure_pi_touch() {
+configure_homepanel() {
   local settings_file="${APP_CONFIG_DIR}/settings.json"
   local interactive=true
-  if [[ -n "${PITOUCH_DASHBOARD_URL:-}${PITOUCH_SLIDESHOW_URL:-}${PITOUCH_IDLE_SLIDESHOW_MINUTES:-}${PITOUCH_SLIDESHOW_OFF_MINUTES:-}${PITOUCH_TOUCH_KEYBOARD:-}${PITOUCH_DISPLAY_MODE:-}" ]]; then
+  if [[ -n "${HOMEPANEL_DASHBOARD_URL:-}${HOMEPANEL_SLIDESHOW_URL:-}${HOMEPANEL_IDLE_SLIDESHOW_MINUTES:-}${HOMEPANEL_SLIDESHOW_OFF_MINUTES:-}${HOMEPANEL_TOUCH_KEYBOARD:-}${HOMEPANEL_DISPLAY_MODE:-}" ]]; then
     interactive=false
   fi
 
-  if [[ "${PITOUCH_SKIP_SETUP:-0}" == "1" ]]; then
-    echo "Skipping initial setup (PITOUCH_SKIP_SETUP=1). The app will open its settings UI on first launch."
+  if [[ "${HOMEPANEL_SKIP_SETUP:-0}" == "1" ]]; then
+    echo "Skipping initial setup (HOMEPANEL_SKIP_SETUP=1). The app will open its settings UI on first launch."
     return 0
   fi
 
@@ -90,11 +90,11 @@ configure_pi_touch() {
   local existing_display_mode=""
   if [[ -f "$settings_file" ]] && command -v python3 >/dev/null 2>&1; then
     read_existing() {
-      PITOUCH_SETTINGS_PATH="$settings_file" python3 - "$1" <<'PY'
+      HOMEPANEL_SETTINGS_PATH="$settings_file" python3 - "$1" <<'PY'
 import json, os, sys
 key = sys.argv[1]
 try:
-    with open(os.environ["PITOUCH_SETTINGS_PATH"]) as fh:
+    with open(os.environ["HOMEPANEL_SETTINGS_PATH"]) as fh:
         data = json.load(fh)
     value = data.get(key, "")
     if isinstance(value, bool):
@@ -126,9 +126,9 @@ PY
 
   if $interactive; then
     echo ""
-    echo "PiTouch initial setup"
+    echo "Home Panel Kiosk initial setup"
     echo "Press Enter to accept the default shown in [brackets]; leave fields blank to skip optional ones."
-    echo "Set PITOUCH_SKIP_SETUP=1 to skip this step and configure later from the app UI."
+    echo "Set HOMEPANEL_SKIP_SETUP=1 to skip this step and configure later from the app UI."
     if [[ -f "$settings_file" ]]; then
       echo "Existing settings found at $settings_file — defaults are pre-filled from those."
     fi
@@ -167,31 +167,31 @@ PY
     esphome_key=""
     esphome_encryption="false"
   else
-    dashboard_url=${PITOUCH_DASHBOARD_URL:-http://homeassistant.local:8123}
-    slideshow_url=${PITOUCH_SLIDESHOW_URL:-}
-    idle_slideshow_min=${PITOUCH_IDLE_SLIDESHOW_MINUTES:-5}
-    slideshow_off_min=${PITOUCH_SLIDESHOW_OFF_MINUTES:-15}
-    touch_keyboard=${PITOUCH_TOUCH_KEYBOARD:-true}
-    esphome_key=${PITOUCH_ESPHOME_KEY:-}
-    esphome_encryption=${PITOUCH_ESPHOME_ENCRYPTION:-false}
-    display_mode=${PITOUCH_DISPLAY_MODE:-fullscreen}
-    validate_url "$dashboard_url" "dashboard" "https?" || { echo "PITOUCH_DASHBOARD_URL is invalid." >&2; exit 1; }
-    [[ -z "$slideshow_url" ]] || validate_url "$slideshow_url" "slideshow" "https?" || { echo "PITOUCH_SLIDESHOW_URL is invalid." >&2; exit 1; }
-    [[ "$display_mode" == "fullscreen" || "$display_mode" == "window" ]] || { echo "PITOUCH_DISPLAY_MODE must be fullscreen or window." >&2; exit 1; }
+    dashboard_url=${HOMEPANEL_DASHBOARD_URL:-http://homeassistant.local:8123}
+    slideshow_url=${HOMEPANEL_SLIDESHOW_URL:-}
+    idle_slideshow_min=${HOMEPANEL_IDLE_SLIDESHOW_MINUTES:-5}
+    slideshow_off_min=${HOMEPANEL_SLIDESHOW_OFF_MINUTES:-15}
+    touch_keyboard=${HOMEPANEL_TOUCH_KEYBOARD:-true}
+    esphome_key=${HOMEPANEL_ESPHOME_KEY:-}
+    esphome_encryption=${HOMEPANEL_ESPHOME_ENCRYPTION:-false}
+    display_mode=${HOMEPANEL_DISPLAY_MODE:-fullscreen}
+    validate_url "$dashboard_url" "dashboard" "https?" || { echo "HOMEPANEL_DASHBOARD_URL is invalid." >&2; exit 1; }
+    [[ -z "$slideshow_url" ]] || validate_url "$slideshow_url" "slideshow" "https?" || { echo "HOMEPANEL_SLIDESHOW_URL is invalid." >&2; exit 1; }
+    [[ "$display_mode" == "fullscreen" || "$display_mode" == "window" ]] || { echo "HOMEPANEL_DISPLAY_MODE must be fullscreen or window." >&2; exit 1; }
   fi
 
   mkdir -p "$APP_CONFIG_DIR"
 
   # Build the JSON file using python3 (already a hard dependency for this script)
   # so values are escaped properly.
-  PITOUCH_DASHBOARD_URL="$dashboard_url" \
-  PITOUCH_SLIDESHOW_URL="$slideshow_url" \
-  PITOUCH_IDLE_SLIDESHOW_MINUTES="$idle_slideshow_min" \
-  PITOUCH_SLIDESHOW_OFF_MINUTES="$slideshow_off_min" \
-  PITOUCH_TOUCH_KEYBOARD="$touch_keyboard" \
-  PITOUCH_ESPHOME_KEY="$esphome_key" \
-  PITOUCH_ESPHOME_ENCRYPTION="$esphome_encryption" \
-  PITOUCH_DISPLAY_MODE="$display_mode" \
+  HOMEPANEL_DASHBOARD_URL="$dashboard_url" \
+  HOMEPANEL_SLIDESHOW_URL="$slideshow_url" \
+  HOMEPANEL_IDLE_SLIDESHOW_MINUTES="$idle_slideshow_min" \
+  HOMEPANEL_SLIDESHOW_OFF_MINUTES="$slideshow_off_min" \
+  HOMEPANEL_TOUCH_KEYBOARD="$touch_keyboard" \
+  HOMEPANEL_ESPHOME_KEY="$esphome_key" \
+  HOMEPANEL_ESPHOME_ENCRYPTION="$esphome_encryption" \
+  HOMEPANEL_DISPLAY_MODE="$display_mode" \
   python3 - "$settings_file" <<'PY'
 import json, os, sys
 
@@ -207,14 +207,14 @@ def int_env(name, default):
 out_path = sys.argv[1]
 settings = {
     "configured": True,
-    "dashboardUrl": os.environ["PITOUCH_DASHBOARD_URL"],
-    "slideshowUrl": os.environ["PITOUCH_SLIDESHOW_URL"],
-    "idleToSlideshowMinutes": int_env("PITOUCH_IDLE_SLIDESHOW_MINUTES", 5),
-    "slideshowToOffMinutes": int_env("PITOUCH_SLIDESHOW_OFF_MINUTES", 15),
-    "displayMode": os.environ.get("PITOUCH_DISPLAY_MODE", "fullscreen") or "fullscreen",
-    "touchKeyboardEnabled": os.environ.get("PITOUCH_TOUCH_KEYBOARD", "true").lower() not in ("0", "false", "no"),
-    "esphomeEncryptionEnabled": os.environ.get("PITOUCH_ESPHOME_ENCRYPTION", "false").lower() in ("1", "true", "yes"),
-    "esphomeEncryptionKey": os.environ.get("PITOUCH_ESPHOME_KEY", ""),
+    "dashboardUrl": os.environ["HOMEPANEL_DASHBOARD_URL"],
+    "slideshowUrl": os.environ["HOMEPANEL_SLIDESHOW_URL"],
+    "idleToSlideshowMinutes": int_env("HOMEPANEL_IDLE_SLIDESHOW_MINUTES", 5),
+    "slideshowToOffMinutes": int_env("HOMEPANEL_SLIDESHOW_OFF_MINUTES", 15),
+    "displayMode": os.environ.get("HOMEPANEL_DISPLAY_MODE", "fullscreen") or "fullscreen",
+    "touchKeyboardEnabled": os.environ.get("HOMEPANEL_TOUCH_KEYBOARD", "true").lower() not in ("0", "false", "no"),
+    "esphomeEncryptionEnabled": os.environ.get("HOMEPANEL_ESPHOME_ENCRYPTION", "false").lower() in ("1", "true", "yes"),
+    "esphomeEncryptionKey": os.environ.get("HOMEPANEL_ESPHOME_KEY", ""),
 }
 
 with open(out_path, "w", encoding="utf-8") as fh:
@@ -226,7 +226,7 @@ PY
   echo "Initial settings written to $settings_file."
 }
 
-configure_pi_touch
+configure_homepanel
 
 # The Chromium caches are put in memory by the application itself, when it
 # starts. It knows which directories Chromium makes and it can make the
@@ -239,8 +239,8 @@ if [[ -z "$WAYLAND_VALUE" && -n "${XDG_RUNTIME_DIR:-}" && -S "$XDG_RUNTIME_DIR/w
   WAYLAND_VALUE=wayland-0
 fi
 
-if [[ "${PITOUCH_SKIP_SERVICE:-0}" == "1" ]]; then
-  echo "Skipping user service setup (PITOUCH_SKIP_SERVICE=1)."
+if [[ "${HOMEPANEL_SKIP_SERVICE:-0}" == "1" ]]; then
+  echo "Skipping user service setup (HOMEPANEL_SKIP_SERVICE=1)."
 else
   SERVICE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   SERVICE_FILE="$SERVICE_DIR/homepanel-kiosk.service"
@@ -300,9 +300,9 @@ UNIT
     exit 1
   fi
 
-  echo "PiTouch is installed and its user service is running."
+  echo "Home Panel Kiosk is installed and its user service is running."
 fi
-if [[ "${PITOUCH_SKIP_SETUP:-0}" == "1" ]]; then
+if [[ "${HOMEPANEL_SKIP_SETUP:-0}" == "1" ]]; then
   echo "Initial setup was skipped; open Settings from the side panel to configure the dashboard."
 else
   echo "If you skipped setup, open Settings from the side panel to update the dashboard URL."

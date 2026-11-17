@@ -83,12 +83,6 @@ func (m *micBridge) start(ctx context.Context) error {
 	}()
 	return nil
 }
-
-// close releases the microphone.
-func (m *micBridge) close() error {
-	return m.src.Close()
-}
-
 // frames is the channel the frames arrive on.
 func (m *micBridge) frames(name string) (<-chan []int16, func()) {
 	return m.src.Listen(name)
@@ -208,16 +202,6 @@ func monoSamples(pcm []byte) []int16 {
 	}
 	return out
 }
-
-// stereoSamples turns interleaved stereo little-endian bytes into samples.
-func stereoSamples(pcm []byte) []int16 {
-	out := make([]int16, 0, len(pcm)/2)
-	for i := 0; i+1 < len(pcm); i += 2 {
-		out = append(out, int16(uint16(pcm[i])|uint16(pcm[i+1])<<8))
-	}
-	return out
-}
-
 // startingSpeaker is a speaker being started.
 //
 // A caller that finds one waits for it: the speaker is started once, and

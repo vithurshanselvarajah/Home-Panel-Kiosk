@@ -38,7 +38,6 @@ var cameraModePattern = regexp.MustCompile(`([0-9]{2,5})x([0-9]{2,5})`)
 type cameraInput struct {
 	device     string
 	name       string
-	input      string
 	modes      []string
 	modeInputs map[string]string
 	maxMode    string

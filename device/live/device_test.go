@@ -313,23 +313,6 @@ func (d *device) retryUntilConnected() {
 		time.Sleep(2 * time.Second)
 	}
 }
-
-// restoreHomeAssistant puts Home Assistant's entry back.
-//
-// The tests point the entry at the machine they run on, because a
-// machine whose address has changed is a panel Home Assistant cannot
-// reach. The entry is put back when the tests are done, because the
-// entry belongs to the panel that is really there.
-//
-// It is done once, at the end of the run, and not after each test: a
-// reconfigure reloads the entry, and a reload drops the connection and
-// takes a moment to come back. Doing it between the tests would stop
-// the next test's panel from ever connecting.
-func restoreHomeAssistant(t *testing.T) {
-	t.Helper()
-	restoreHomeAssistantEntry(t)
-}
-
 // restoreHomeAssistantEntry puts the entry back.
 //
 // It is a function of its own so that it can be called when the tests
@@ -401,24 +384,6 @@ func (d *device) stop() {
 	waitForFreePort(livePort())
 	waitForFreePort(liveSendspinPort())
 }
-
-// deviceID is the address Home Assistant knows the device by.
-//
-// It is the device's own address, which is the base64url of its public
-// key, and it is what the entities are filed under.
-func (d *device) deviceID() string {
-	lines, err := d.peer("device_id", "")
-	if err != nil {
-		return ""
-	}
-	for _, line := range lines {
-		if strings.HasPrefix(line, "device_id:") {
-			return strings.TrimPrefix(line, "device_id:")
-		}
-	}
-	return ""
-}
-
 // speakerBytes says how many bytes the speaker has played.
 //
 // The speaker's audio is written to a file, so the size of the file is

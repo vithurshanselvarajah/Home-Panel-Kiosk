@@ -321,7 +321,7 @@ func (s *ControlServer) handle(conn net.Conn, message ControlMessage) {
 		token := ""
 		var err error
 		if s.sendspinPairingToken == nil {
-			err = fmt.Errorf("Sendspin pairing is unavailable")
+			err = fmt.Errorf("sendspin pairing is unavailable")
 		} else {
 			token, err = s.sendspinPairingToken()
 		}

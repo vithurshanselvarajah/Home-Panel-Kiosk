@@ -34,11 +34,8 @@ var cipherSuite = noise.NewCipherSuite(
 	noise.HashSHA256,
 )
 
-// The noise protocol name and the prologue.
-var (
-	noiseProtocolName = []byte("Noise_NNpsk0_25519_ChaChaPoly_SHA256")
-	noisePrologue     = []byte("NoiseAPIInit\x00\x00")
-)
+// The noise protocol prologue.
+var noisePrologue = []byte("NoiseAPIInit\x00\x00")
 
 // noiseProtocolSelected is the byte the server sends to say which
 // protocol it chose. Only one exists.
@@ -75,8 +72,6 @@ type noiseConnection struct {
 	recvNonce uint64
 	// handshake holds the state until the handshake is done.
 	handshake *noise.HandshakeState
-	// buffer holds bytes that arrived early.
-	buffer []byte
 	// pending holds bytes that were read before the handshake started.
 	//
 	// The first byte of the connection says which conversation it is,

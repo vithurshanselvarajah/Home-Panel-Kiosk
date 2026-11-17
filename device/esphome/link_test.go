@@ -36,19 +36,6 @@ func (l *linkRecorder) record(connected bool) {
 	l.mu.Unlock()
 }
 
-// linksAfter gives back the reports made after the nth one.
-//
-// The nth is counted from zero, so linksAfter(0) is every report after
-// the first.
-func (l *linkRecorder) linksAfter(n int) []bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if n+1 >= len(l.links) {
-		return nil
-	}
-	return append([]bool(nil), l.links[n+1:]...)
-}
-
 // wentDown says whether the link was reported as down.
 //
 // The report is a moment of truth, so the check waits for it rather
@@ -160,22 +147,6 @@ func dialPlain(t *testing.T, address string) net.Conn {
 		t.Fatal(err)
 	}
 	return conn
-}
-
-// waitForLink waits for the link to be reported as a thing.
-func waitForLink(t *testing.T, recorder *linkRecorder, want bool) {
-	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		recorder.mu.Lock()
-		links := append([]bool(nil), recorder.links...)
-		recorder.mu.Unlock()
-		if len(links) > 0 && links[len(links)-1] == want {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("the link was never reported as %v: %v", want, recorder.links)
 }
 
 // openConnections is how many connections the server has open.

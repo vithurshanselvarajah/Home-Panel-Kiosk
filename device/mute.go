@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/latch"
 )
@@ -248,11 +247,3 @@ func ledBrightness(path string) string {
 	}
 	return level
 }
-
-// The latch's own timing, for the wait after a change.
-//
-// The latch reports its new position within a moment of the pulse, and
-// the watch polls for it. This is how long the watch waits between
-// readings, and it is short enough that a button press is reflected
-// while the finger is still on it.
-const latchPollInterval = 200 * time.Millisecond

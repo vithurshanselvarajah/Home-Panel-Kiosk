@@ -1,7 +1,6 @@
 package scorer
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,6 +49,3 @@ func MicroModel(dir string) (string, bool) {
 	}
 	return "", false
 }
-
-// errNoModel is what the panel says when there is no model to run.
-var errNoModel = fmt.Errorf("no wake word model was found")

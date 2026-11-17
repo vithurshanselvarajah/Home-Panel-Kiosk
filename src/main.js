@@ -2077,26 +2077,6 @@ function createOverlayView() {
   });
 }
 
-function waitForOverlayLoad(webContents) {
-  return new Promise((resolve, reject) => {
-    const finish = () => { cleanup(); resolve(); };
-    const fail = (_event, code, description, _url, isMainFrame) => {
-      if (!isMainFrame) return;
-      cleanup();
-      reject(new Error(`Panel camera view failed to load (${code}): ${description}`));
-    };
-    const destroyed = () => { cleanup(); reject(new Error("Panel camera view was closed")); };
-    const cleanup = () => {
-      webContents.removeListener("did-finish-load", finish);
-      webContents.removeListener("did-fail-load", fail);
-      webContents.removeListener("destroyed", destroyed);
-    };
-    webContents.once("did-finish-load", finish);
-    webContents.on("did-fail-load", fail);
-    webContents.once("destroyed", destroyed);
-  });
-}
-
 function destroyOverlayView() {
   if (!overlayView) return;
   if (overlayAttached && win && !win.isDestroyed()) {

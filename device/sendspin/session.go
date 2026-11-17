@@ -595,8 +595,6 @@ const (
 	// stoppedFor is how long a paused track stays paused before it is
 	// ended.
 	stoppedFor = 30 * time.Minute
-	// stopSettle is how long a stop has to last before it is counted.
-	stopSettle = 4 * time.Second
 )
 
 // settleStop ends a pause that the server never takes back.

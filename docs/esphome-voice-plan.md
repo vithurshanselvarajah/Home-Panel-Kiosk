@@ -433,8 +433,9 @@ behaviour must be verified against a real MA instance.
 The user wants the panel's camera feed viewable in HA.
 
 **The panel has no camera today** — `cdd595d` removed the HA camera feature
-(the MQTT-era camera list), and there is no V4L2 or `getUserMedia` code in the
-tree. So this is a new capture source, not a re-wiring.
+(the camera entity that used to list images), and there is no V4L2 or
+`getUserMedia` code in the tree. So this is a new capture source, not a
+re-wiring.
 
 Design:
 

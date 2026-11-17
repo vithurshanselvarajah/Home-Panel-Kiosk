@@ -2,7 +2,6 @@ package esphome
 
 import (
 	"errors"
-	"sync"
 )
 
 // The errors the voice assistant can return.
@@ -17,21 +16,6 @@ var (
 	// ErrTurnRunning says a turn is already running.
 	ErrTurnRunning = errors.New("esphome: a turn is already running")
 )
-
-// voiceTurn is the state of one turn.
-//
-// It is the bridge between the wake word, which says a turn should start,
-// and the connection, which carries it.
-type voiceTurn struct {
-	// client is the connection the turn is running on.
-	client *Client
-	// conversationID identifies the turn.
-	conversationID string
-	// phrase is the wake word that fired.
-	phrase string
-	// ended says the turn has finished.
-	ended bool
-}
 
 // VoiceHooks are the callbacks the voice assistant makes.
 //
@@ -217,9 +201,3 @@ func (s *Server) currentClient() *Client {
 	})
 	return found
 }
-
-// turnMu guards the turn's own state.
-//
-// It is separate from the voice assistant's lock because the turn spans
-// several calls: it starts, streams, and ends.
-var turnMu sync.Mutex

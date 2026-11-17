@@ -316,7 +316,11 @@ func (o *placement) write(at int64, samples []int16) {
 		}
 	}
 
-	frame := o.frameFor(at) + o.delay
+	// The frame is worked out here because laying the anchor is a side
+	// effect of it: the first chunk decides where the track starts. The
+	// value itself is not used yet, because a chunk that arrives before
+	// the anchor is laid is held rather than placed.
+	o.frameFor(at)
 	if !o.anchored {
 		// The anchor is not laid yet: the speaker has not started. The
 		// chunk is held rather than dropped, because the anchor will be
@@ -350,7 +354,7 @@ func (o *placement) write(at int64, samples []int16) {
 		o.write(c.at, c.samples)
 	}
 	o.mu.Lock()
-	frame = o.frameFor(at) + o.delay
+	frame := o.frameFor(at) + o.delay
 	if frame > int64(o.played) && frame-int64(o.played) > holdMax {
 		o.dropped++
 		o.mu.Unlock()
@@ -808,14 +812,6 @@ func (o *placement) queuedMs() int {
 	defer o.mu.Unlock()
 	return len(o.pcm) / outChannels * 1000 / outRate
 }
-
-// misses are the chunks that were late and the chunks that were dropped.
-func (o *placement) misses() (late, dropped int64) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	return o.late, o.dropped
-}
-
 // scaleSample scales a sample by a gain.
 func scaleSample(s int16, gain float32) int16 {
 	if gain == 1 {

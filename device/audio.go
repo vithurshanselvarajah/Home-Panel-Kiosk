@@ -84,13 +84,6 @@ type deviceAudio struct {
 	// onVolume is called when the panel's volume changes, so the speaker's
 	// entity can report it.
 	onVolume func(volume float32)
-	// onSystemVolume is called when the panel's volume changes, so the
-	// system mixer can be set to match.
-	//
-	// The mixer is the application’s business — it is what the person
-	// means by the volume — so the panel asks for it rather than
-	// reaching for it itself.
-	onSystemVolume func(level int)
 	// onPanelsVolume is called when the volume changes, so the panels'
 	// sliders follow it.
 	//
@@ -188,14 +181,6 @@ type deviceAudio struct {
 	clocked audio.ClockedOutput
 	// clockedChannels is how many channels the clocked output really has.
 	clockedChannels int
-	// clockedDisabled says the clocked output could not be used, so the
-	// music goes through the shared speaker instead. It is not retried
-	// after it has failed: a card that would not open for stereo will
-	// not open for it later either.
-	clockedDisabled bool
-	// lastClockedAttempt is when the clocked output was last tried, so it
-	// is not tried on every period.
-	lastClockedAttempt time.Time
 
 	// voice is the reply being played, and the mixer takes it out of here.
 	voice []byte
@@ -381,29 +366,6 @@ const (
 	playbackRate = audio.PlaybackRate
 )
 
-// athenaRate is the rate the Echo Show 8's speaker runs at.
-//
-// The amplifier's tuning was made for it, so it is the rate the card is
-// opened at and the rate everything is converted to on the way out.
-const athenaRate = 96000
-
-// cardRate is the rate the sound card is opened at.
-//
-// On the Echo Show 8 that is the amplifier's own rate, 96 kHz, because
-// the tuning inside the amplifier was made for it: at 48 kHz every
-// corner of its equaliser and its limiter sits an octave low, so the
-// tone is wrong and the protection that should be catching the peaks is
-// not catching them.
-//
-// The mix is still made at playbackRate and converted on the way out,
-// because nothing upstream needs the higher rate.
-const cardRate = athenaRate
-
-// upsampleTaps is the length of each phase of the filter that takes the
-// mix up to the card's rate: 96 taps at 96 kHz, flat to 21 kHz and about
-// 74 dB down on the images from 27 kHz. 1 ms of delay.
-const upsampleTaps = 48
-
 // voiceRate is the rate the reply arrives at.
 //
 // Home Assistant speaks to a speaker at 16 kHz, whatever the speaker
@@ -574,18 +536,6 @@ func (a *deviceAudio) playTestSound() error {
 	a.ensureOutput()
 	return nil
 }
-
-// captureLevel is the level of the microphone, as a percentage of full
-// scale.
-//
-// It is zero until the microphone is open, because a level that says
-// something about a microphone that is not open is a level that is lying.
-func (a *deviceAudio) captureLevel() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.level
-}
-
 // monitoringMic reports whether the microphone is open for the level meter
 // alone.
 //
@@ -888,21 +838,6 @@ func (a *deviceAudio) duckLevel() float64 {
 	defer a.mu.Unlock()
 	return a.duckDB
 }
-
-// mutedNow is whether the microphone is muted.
-//
-// The hardware latch is the source of truth when the board has one, so
-// the button on the unit is reflected here without anything having to
-// ask for it.
-func (a *deviceAudio) mutedNow() bool {
-	if a.mute != nil {
-		return a.mute.Get()
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.muted
-}
-
 // speaking says whether the panel is playing a reply.
 //
 // It is what the wake word's bar follows: while the panel is speaking,
@@ -912,14 +847,6 @@ func (a *deviceAudio) speaking() bool {
 	defer a.mu.Unlock()
 	return a.voiceActive
 }
-
-// currentVolume returns the panel's volume level.
-func (a *deviceAudio) currentVolume() int {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.volume
-}
-
 // setDuckDb sets how far the music is turned down under a reply.
 //
 // The level is in decibels, and it is negative: the music is quieter
@@ -1002,17 +929,6 @@ func clampVolume(level int) int {
 	}
 	return level
 }
-
-// applyConfig applies the configuration the controller pushed.
-func (a *deviceAudio) applyConfig(c Config) {
-	if c.DuckDb != nil {
-		a.mu.Lock()
-		a.duckDB = float64(*c.DuckDb)
-		a.mu.Unlock()
-	}
-	a.applySendspinConfig(c)
-}
-
 // startCapture opens the microphone and streams it to the controller.
 //
 // The stream begins when the controller asks for it and stops when it says
@@ -1120,28 +1036,6 @@ func (a *deviceAudio) startCapture() {
 		}
 	}()
 }
-
-// pushEchoReference tells the echo canceller what the speaker is playing.
-//
-// The reference is the period as it goes to the card, stamped with when
-// its last frame will be heard. The microphones take out what was heard
-// over the stretch of time each of their reads covers.
-//
-// Without a clock the time is a guess, and a guess that is late misses
-// the start of every echo — so the clocked output is asked when its next
-// frame reaches the speaker, and the guess is only used when there is
-// none.
-func (a *deviceAudio) pushEchoReference(stereo []byte, clocked audio.ClockedOutput) {
-	// The ported speaker feeds its own echo reference: it knows what it
-	// sent the card and when that will be heard, and the microphone's
-	// canceller takes it out of what the microphones hear.
-	//
-	// On a board whose card has a write back of what it plays, the
-	// reference is the card's own copy, which is locked to the microphones
-	// by the card's clock. Where there is none, the speaker's software
-	// reference is used, which is what this used to do by hand.
-}
-
 // openMicrophone opens the microphone and returns it as the wake word wants to hear it.
 //
 // On the Echo Show 8 the card hands the microphones over at 96 kHz as
@@ -2075,8 +1969,7 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	var clocked audio.ClockedOutput
 	channels := 2
 	// The writer is the card, which the ported speaker writes to.
-	var writer io.WriteCloser
-	writer = a.externalWriter()
+	var writer io.WriteCloser = a.externalWriter()
 
 	a.mu.Lock()
 	// The loop may have been replaced while the speaker was opening, in
@@ -2257,79 +2150,6 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 		}
 	}
 }
-
-// openClocked opens the clocked speaker, if it can be opened.
-//
-// It is tried at most once a second, because a card that will not open
-// for the clocked output will not open for it on the next period either,
-// and a failure on every period would fill the log.
-//
-// The channel count is a request. The card may give fewer than were
-// asked for, and the output says what it really has.
-func (a *deviceAudio) openClocked(ctx context.Context) (audio.ClockedOutput, int) {
-	a.mu.Lock()
-	disabled := a.clockedDisabled
-	last := a.lastClockedAttempt
-	a.mu.Unlock()
-	if disabled {
-		return nil, 0
-	}
-	if !last.IsZero() && time.Since(last) < time.Second {
-		return nil, 0
-	}
-
-	a.mu.Lock()
-	a.lastClockedAttempt = time.Now()
-	a.mu.Unlock()
-
-	// The music is stereo, and stereo is what the player fills. A card
-	// that will not do stereo falls back to mono inside the backend.
-	out, err := a.backend.OpenClockedOutput(ctx, cardRate, 2)
-	if err != nil {
-		a.log.Warn("the clocked speaker could not be opened; using the shared speaker", "error", err)
-		a.mu.Lock()
-		a.clockedDisabled = true
-		a.mu.Unlock()
-		return nil, 0
-	}
-	channels := 2
-	if counted, ok := out.(interface{ Channels() int }); ok {
-		if n := counted.Channels(); n > 0 {
-			channels = n
-		}
-	}
-	if channels != 2 {
-		a.log.Info("the clocked speaker is not stereo", "channels", channels)
-	}
-	return out, channels
-}
-
-// mixVoiceIntoStereo mixes a mono reply into a stereo buffer.
-//
-// The reply is laid into both channels, so it sits in the middle of the
-// music rather than on one side of it.
-//
-// The reply is mono and the buffer is stereo, so the reply's own samples
-// are walked one at a time and laid into each frame's two channels.
-func (a *deviceAudio) mixVoiceIntoStereo(stereo, voice []byte) {
-	sample := 0
-	for i := 0; i+3 < len(stereo) && sample+1 < len(voice); i += 4 {
-		v := int32(int16(uint16(voice[sample]) | uint16(voice[sample+1])<<8))
-		sample += 2
-		for _, j := range []int{i, i + 2} {
-			sum := int32(int16(uint16(stereo[j])|uint16(stereo[j+1])<<8)) + v
-			if sum > 32767 {
-				sum = 32767
-			}
-			if sum < -32768 {
-				sum = -32768
-			}
-			sample := int16(sum)
-			stereo[j], stereo[j+1] = byte(sample), byte(uint16(sample)>>8)
-		}
-	}
-}
-
 // musicConnected says whether the music player has a server behind it.
 //
 // The player's own status says "connected" or "playing" when there is one,
@@ -2444,64 +2264,6 @@ func (a *deviceAudio) finishPlayback() {
 		}
 	}
 }
-
-// applyGain scales the audio by the device's volume.
-//
-// The scale is applied here rather than on the sound card so that the
-// volume is the same for the voice and the music.
-//
-// It is the curve's gain and not the percentage itself: a percentage of a
-// linear scale is not a percentage of how loud something sounds, and a
-// half-dial that is a quarter of the power is a half-dial nobody can hear
-// over the room. The curve is TECHO5's, and its top sits below unity so
-// that the amplifier's own protection stays in front of the signal.
-//
-// The mixer is not touched by this: the device program owns the level, and
-// a level applied in two places is a level nobody can reason about.
-func applyGain(pcm []byte, volume int) {
-	gain := vol.GainForPercent(volume)
-	if gain == 1 {
-		return
-	}
-	scale(pcm, float64(gain))
-}
-
-// scale multiplies every sample by gain, holding it inside int16.
-func scale(pcm []byte, gain float64) {
-	if gain == 1 {
-		return
-	}
-	for i := 0; i+1 < len(pcm); i += 2 {
-		v := float64(int16(uint16(pcm[i]) | uint16(pcm[i+1])<<8))
-		v *= gain
-		if v > 32767 {
-			v = 32767
-		}
-		if v < -32768 {
-			v = -32768
-		}
-		sample := int16(v)
-		pcm[i], pcm[i+1] = byte(sample), byte(uint16(sample)>>8)
-	}
-}
-
-// sendspinToken answers home assistant's request for the music player's
-// pairing token.
-//
-// Home Assistant hands the token to a Sendspin server such as Music
-// Assistant, which pairs with the player over it. That is what stops the
-// same speaker appearing twice: the server pairs with the player that is
-// already there rather than making one of its own.
-func (a *deviceAudio) sendspinToken() (token, clientID string, ok bool) {
-	a.mu.Lock()
-	player := a.sendspin
-	a.mu.Unlock()
-	if player == nil {
-		return "", "", false
-	}
-	return player.PairingToken(), player.ClientID(), true
-}
-
 // applySendspinConfig starts or stops the music player.
 //
 // The panel's own settings decide whether the device is a music player at
@@ -2786,12 +2548,6 @@ func (a *deviceAudio) stop() {
 	a.closeOutput()
 	a.stopSendspin("the device is shutting down")
 }
-
-// dB converts a decibel figure into a gain.
-func dB(db float64) float64 {
-	return math.Pow(10, db/20)
-}
-
 // sendspinInstance is the player's name on the network.
 //
 // It has to be unique on the network: two players with the same
