@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/asp"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/mic/framework"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/speaker"
 	"log/slog"
 	"net"
 	"os"
@@ -111,6 +113,11 @@ type ControlServer struct {
 	socket string
 	// registry holds the entities Home Assistant sees.
 	registry *esphome.Registry
+	// brightnessCeiling is the brightness the person set, as a
+	// percentage: the brightest the panel is allowed to be. It is what the
+	// brightness entity reports, because with the automatic brightness on
+	// the level the screen is at is not what the person set.
+	brightnessCeiling int
 	// log is where the messages go.
 	log *slog.Logger
 	// onCommand is called when the panel asks for something.
@@ -532,6 +539,13 @@ func (s *ControlServer) SetState(state ControlState) {
 	brightnessFollower := s.onBrightness
 	s.mu.Unlock()
 	if !changed {
+		// The entities are published even when the state has not changed.
+		//
+		// They carry a guess until the panel first reports, and a
+		// reconnecting panel with an identical state publishes nothing.
+		// Home Assistant would then be left with the guess for ever,
+		// and the guess is not what the panel is doing.
+		s.applyEntities(state)
 		return
 	}
 	s.applyEntities(state)
@@ -560,6 +574,18 @@ func (s *ControlServer) State() ControlState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.state
+}
+
+// SetBrightnessCeiling records the brightness the person set.
+//
+// It is what the brightness entity reports: with the automatic brightness
+// on, the level the screen is at is the room's light and not the person's
+// setting, and publishing that would mean Home Assistant sets sixty and
+// sees twelve back.
+func (s *ControlServer) SetBrightnessCeiling(percent int) {
+	s.mu.Lock()
+	s.brightnessCeiling = percent
+	s.mu.Unlock()
 }
 
 // SetLux publishes the room's light.
@@ -636,31 +662,51 @@ func (s *ControlServer) SetVoiceSettings(threshold float64, wakeEnabled bool, du
 //
 // The values come from the ported stack's own settings, which are what the
 // speaker and the microphone are actually running with.
-func (s *ControlServer) SetAudioSettings(set framework.Settings, clearer, louder bool) {
+func (s *ControlServer) SetAudioSettings(set framework.Settings, spk *speaker.Player) {
 	if s.registry == nil {
 		return
+	}
+	// The shelves and the stereo come from the player, not from the
+	// settings: the player is what is in force. The settings hold what was
+	// asked for, and the player settles it — a board that cannot do stereo
+	// takes it off, and the shelves live only in the player.
+	var clearer, louder bool
+	var tone asp.Tone
+	var stereo bool
+	if spk != nil {
+		clearer, louder = spk.ClearerSpeech(), spk.LouderTop()
+		tone = spk.Tone()
+		stereo = spk.Stereo()
 	}
 	for _, entity := range s.registry.All() {
 		switch entity.ObjectID {
 		case "speaker_tuning":
+			on := set.Speaker.ASP
+			if spk != nil {
+				on = spk.ASP()
+			}
 			s.registry.SetState(entity.Key, esphome.EntityValue{
-				Kind: esphome.KindSwitch, Bool: set.Speaker.ASP,
+				Kind: esphome.KindSwitch, Bool: on,
 			})
 		case "speaker_gain_db":
+			gain := set.Speaker.GainDB
+			if spk != nil {
+				gain = spk.GainDB()
+			}
 			s.registry.SetState(entity.Key, esphome.EntityValue{
-				Kind: esphome.KindNumber, Number: float64(set.Speaker.GainDB),
+				Kind: esphome.KindNumber, Number: float64(gain),
 			})
 		case "speaker_stereo":
 			s.registry.SetState(entity.Key, esphome.EntityValue{
-				Kind: esphome.KindSwitch, Bool: set.Speaker.Stereo,
+				Kind: esphome.KindSwitch, Bool: stereo,
 			})
 		case "speaker_bass_db":
 			s.registry.SetState(entity.Key, esphome.EntityValue{
-				Kind: esphome.KindNumber, Number: set.Speaker.Bass,
+				Kind: esphome.KindNumber, Number: tone.Bass,
 			})
 		case "speaker_treble_db":
 			s.registry.SetState(entity.Key, esphome.EntityValue{
-				Kind: esphome.KindNumber, Number: set.Speaker.Treble,
+				Kind: esphome.KindNumber, Number: tone.Treble,
 			})
 		case "speaker_clearer_speech":
 			s.registry.SetState(entity.Key, esphome.EntityValue{
@@ -748,9 +794,19 @@ func (s *ControlServer) applyEntities(state ControlState) {
 				})
 			}
 		case "brightness":
+			// The ceiling, not the level the screen is at.
+			//
+			// With the automatic brightness on, the screen is dimmed to
+			// the room's light, so the level the driver is at is not
+			// what the person set. Publishing that would mean Home
+			// Assistant sets sixty and sees twelve back.
+			brightness := state.Brightness
+			if s.brightnessCeiling > 0 {
+				brightness = s.brightnessCeiling
+			}
 			s.registry.SetState(entity.Key, esphome.EntityValue{
 				Kind:   esphome.KindNumber,
-				Number: float64(state.Brightness),
+				Number: float64(brightness),
 			})
 		case "idle_slideshow_minutes":
 			s.registry.SetState(entity.Key, esphome.EntityValue{Kind: esphome.KindNumber, Number: float64(state.IdleToSlideshowMinutes)})

@@ -403,6 +403,10 @@ func (s *CameraService) SetFPS(fps int) error {
 }
 
 func (s *CameraService) SetResolution(mode string) error {
+	// "Maximum" is what the entity says, and the mode it stands for is
+	// kept apart: a select that reports a value which is not one of its
+	// own options is one Home Assistant rejects.
+	chosen := mode
 	if mode == "Maximum" {
 		mode = s.input.maxMode
 	}
@@ -428,7 +432,7 @@ func (s *CameraService) SetResolution(mode string) error {
 		done = s.stopCaptureLocked()
 	}
 	if s.resolution != nil {
-		s.registry.SetState(s.resolution.Key, esphome.EntityValue{Kind: esphome.KindSelect, Text: mode})
+		s.registry.SetState(s.resolution.Key, esphome.EntityValue{Kind: esphome.KindSelect, Text: chosen})
 	}
 	s.mu.Unlock()
 	if enabled {

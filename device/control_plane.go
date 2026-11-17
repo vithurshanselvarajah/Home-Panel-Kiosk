@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/ambient"
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
@@ -59,6 +60,10 @@ type ControlPlane struct {
 	autoBrightness bool
 	// lightLux is the last reading of the room's light.
 	lightLux float64
+	// luxAt is when the reading was last published, and luxPublished
+	// whether it has been published at all.
+	luxAt        time.Time
+	luxPublished bool
 	// brightnessCeiling is the brightness the person set, as a
 	// percentage: the brightest the panel is allowed to be.
 	brightnessCeiling int
@@ -922,8 +927,18 @@ func (p *ControlPlane) publishVoiceSettings() {
 	if p.server == nil || p.audio == nil {
 		return
 	}
+	// The threshold is the wake word's own, not the audio's copy of it.
+	//
+	// The wake word ignores a threshold that is not a fraction, and
+	// ignores one at all when there is no model loaded — and then the
+	// audio's copy and the wake word's disagree, and Home Assistant sees
+	// the one that is not in force.
+	threshold := p.audio.wakeThreshold()
+	if p.wake != nil {
+		threshold = p.wake.Threshold()
+	}
 	p.server.SetVoiceSettings(
-		p.audio.wakeThreshold(),
+		threshold,
 		p.wakeEnabled(),
 		p.audio.duckLevel(),
 	)
@@ -939,12 +954,7 @@ func (p *ControlPlane) SetAudioSettings() {
 	if p.server == nil {
 		return
 	}
-	spk := speaker.Get()
-	clearer, louder := false, false
-	if spk != nil {
-		clearer, louder = spk.ClearerSpeech(), spk.LouderTop()
-	}
-	p.server.SetAudioSettings(framework.Get(), clearer, louder)
+	p.server.SetAudioSettings(framework.Get(), speaker.Get())
 }
 
 // SetAutoBrightness says whether the screen follows the room's light.
@@ -960,7 +970,11 @@ func (p *ControlPlane) setAutoBrightness(on bool) {
 	p.mu.Lock()
 	p.autoBrightness = on
 	p.mu.Unlock()
-	p.server.SetAutoBrightness(on)
+	// The socket is not always there: the control plane can be set up
+	// without it, and a nil server here would take the program down.
+	if p.server != nil {
+		p.server.SetAutoBrightness(on)
+	}
 	if p.onAutoBrightness != nil {
 		p.onAutoBrightness(on)
 	}
@@ -972,16 +986,37 @@ func (p *ControlPlane) setAutoBrightness(on bool) {
 // rounded, because a lux that moves by a fraction is not a different
 // light, and a sensor entity that changes every poll is one nobody can
 // read.
+//
+// The first reading is published whatever it is: a room that reads zero
+// and never changes would otherwise never be seen at all, and Home
+// Assistant would not know a reading had been taken.
+//
+// After that a reading is published when it has moved enough to be worth
+// saying, or when it has been a while since the last one: a sensor that
+// only speaks when something happens is one that goes stale.
 func (p *ControlPlane) SetLux(lux float64) {
 	rounded := math.Round(lux)
 	p.mu.Lock()
-	changed := rounded != p.lightLux
+	first := !p.luxPublished
+	moved := rounded != p.lightLux && math.Abs(rounded-p.lightLux) >= luxDeadband
+	quiet := time.Since(p.luxAt) >= luxRefresh
 	p.lightLux = rounded
+	p.luxAt = time.Now()
+	p.luxPublished = true
 	p.mu.Unlock()
-	if changed {
+	if first || moved || quiet {
 		p.server.SetLux(rounded)
 	}
 }
+
+// The light reading's own rules.
+const (
+	// luxDeadband is how much the reading has to move to be worth saying.
+	luxDeadband = 2
+	// luxRefresh is how long the reading is left unsaid before it is said
+	// again, so that it does not go stale.
+	luxRefresh = 30 * time.Second
+)
 
 // BrightnessCeiling is the brightness the person set, as a percentage.
 //
@@ -1000,6 +1035,9 @@ func (p *ControlPlane) setBrightnessCeiling(percent int) {
 	p.mu.Lock()
 	p.brightnessCeiling = percent
 	p.mu.Unlock()
+	if p.server != nil {
+		p.server.SetBrightnessCeiling(percent)
+	}
 }
 
 // AutoBrightness says whether the screen follows the room's light.
