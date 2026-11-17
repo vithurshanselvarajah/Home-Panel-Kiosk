@@ -54,6 +54,10 @@ func TestTheStreamedMediaIsPlayed(t *testing.T) {
 	speaker.volume = 100
 
 	go speaker.playMediaURL(context.Background(), server.URL, false)
+	// The speaker is one for the whole program, so the loop that
+	// has it is stopped: a test that leaves it running is a test that
+	// leaves the next one without a speaker.
+	defer speaker.stopPortedSpeaker()
 
 	// The speaker is playing within a few seconds.
 	deadline := time.Now().Add(10 * time.Second)
@@ -116,6 +120,10 @@ func TestTheStreamedFLACIsPlayed(t *testing.T) {
 	speaker.volume = 100
 
 	go speaker.playMediaURL(context.Background(), server.URL, false)
+	// The speaker is one for the whole program, so the loop that
+	// has it is stopped: a test that leaves it running is a test that
+	// leaves the next one without a speaker.
+	defer speaker.stopPortedSpeaker()
 
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {

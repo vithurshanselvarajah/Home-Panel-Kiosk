@@ -73,6 +73,10 @@ func TestTheMusicHasNoGaps(t *testing.T) {
 	audio.volume = 100
 
 	go audio.playMediaURL(context.Background(), server.URL, false)
+	// The speaker is one for the whole program, so the loop that
+	// has it is stopped: a test that leaves it running is a test that
+	// leaves the next one without a speaker.
+	defer audio.stopPortedSpeaker()
 	// Watch the queue depth while it plays.
 	for i := 0; i < 30; i++ {
 		time.Sleep(100 * time.Millisecond)

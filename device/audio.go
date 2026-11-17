@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
@@ -332,6 +333,8 @@ type deviceAudio struct {
 
 	// speakerCancel stops the ported speaker's loop.
 	speakerCancel context.CancelFunc
+	// speakerDone is closed when the speaker's write loop has finished.
+	speakerDone chan struct{}
 
 	// micBridge is the microphone, as the ported audio stack holds it: it
 	// opens the card itself, cancels the panel's own voice out of what the
@@ -342,6 +345,9 @@ type deviceAudio struct {
 	// speakerPlayer is the speaker, as the ported audio stack holds it: it
 	// is the mixer, and it writes to the card.
 	speakerPlayer *speaker.Player
+	// speakerStarting is the speaker being started, so that a second
+	// caller waits for it rather than starting one too.
+	speakerStarting *startingSpeaker
 	// musicSource is the music, as a source the speaker pulls from.
 	musicSource *musicSource
 
@@ -1183,12 +1189,13 @@ type micReader struct {
 	bridge *micBridge
 	frames <-chan []int16
 	stop   func()
-	closed bool
+	// closed is set by Close and read by Read, on different goroutines.
+	closed atomic.Bool
 }
 
 // Read reads one block of the wake word's audio.
 func (m *micReader) Read(p []byte) (int, error) {
-	if m.closed {
+	if m.closed.Load() {
 		return 0, io.EOF
 	}
 	for {
@@ -1216,7 +1223,7 @@ func (m *micReader) Read(p []byte) (int, error) {
 
 // Close releases the microphone.
 func (m *micReader) Close() error {
-	m.closed = true
+	m.closed.Store(true)
 	if m.stop != nil {
 		m.stop()
 	}
@@ -1933,6 +1940,14 @@ func (a *deviceAudio) closeOutput() {
 	if cancel != nil {
 		cancel()
 	}
+	// The speaker is stopped before the output is released.
+	//
+	// Releasing the output first lets the next thing that wants to make a
+	// sound start a new loop, and that loop finds the speaker still
+	// running and takes it as its own — and then this loop's cleanup
+	// stops it. Two write loops on one player, and the card gets the
+	// audio of both.
+	a.stopPortedSpeaker()
 	if writer != nil {
 		_ = writer.Close()
 	}
@@ -2021,16 +2036,23 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 	// A card that is still open when the next open comes is a card that
 	// ALSA asserts on, and an assertion takes the whole process down.
 	defer func() {
+		// The speaker is stopped BEFORE the output is released.
+		//
+		// The output is released first, the next thing that wants to
+		// make a sound starts a new loop, and that loop finds a speaker
+		// that is still running and takes it as its own — and then this
+		// loop's cleanup stops it. Two write loops on one player, and
+		// the card gets the audio of both.
+		//
+		// Stopping the speaker first means the next loop finds the card
+		// closed and the speaker's queues empty, and starts its own.
+		a.stopPortedSpeaker()
 		if clocked != nil {
 			_ = clocked.Close()
 		} else if writer != nil {
 			_ = writer.Close()
 		}
 		a.releaseOutput(generation)
-		// The speaker is stopped with the loop, so that the next thing
-		// that wants to make a sound finds the card closed and the
-		// speaker's queues empty.
-		a.stopPortedSpeaker()
 	}()
 
 	ticker := time.NewTicker(10 * time.Millisecond)

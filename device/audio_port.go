@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -217,6 +218,28 @@ func stereoSamples(pcm []byte) []int16 {
 	return out
 }
 
+// startingSpeaker is a speaker being started.
+//
+// A caller that finds one waits for it: the speaker is started once, and
+// two write loops on one player would fight over the queues.
+type startingSpeaker struct {
+	finished chan struct{}
+	once     sync.Once
+}
+
+// finish says the speaker has been started, or has failed to.
+func (s *startingSpeaker) finish() { s.once.Do(func() { close(s.finished) }) }
+
+// waitForSpeaker waits until the speaker is free to be taken.
+//
+// The speaker is one for the whole program, so a caller that could not
+// take it waits for whoever holds it to let go. The wait is on the
+// speaker's own release, not on a guess, so that a release that happens
+// between the check and the wait is not missed.
+func (a *deviceAudio) waitForSpeaker(ctx context.Context) error {
+	return speaker.Get().WaitForRelease().Wait(ctx)
+}
+
 // startPortedSpeaker opens the ported speaker and runs its loop.
 //
 // The speaker holds the card for as long as it is running, and it is
@@ -224,17 +247,81 @@ func stereoSamples(pcm []byte) []int16 {
 // open comes is a card that ALSA asserts on, and an assertion takes the
 // process down, so the speaker is started once and kept.
 func (a *deviceAudio) startPortedSpeaker(ctx context.Context) error {
+	// The speaker is started once. Two write loops on one player would
+	// fight over the queues, and the card would get the audio of both.
+	//
+	// The check and the claim are under one lock: a check that released
+	// the lock before the claim let two callers through, and both started
+	// the speaker.
 	a.mu.Lock()
 	if a.speakerPlayer != nil {
 		a.mu.Unlock()
 		return nil
 	}
-	a.mu.Unlock()
-
+	// A speaker being started already is waited for, rather than a second
+	// one started: two write loops on one player fight over the queues.
+	if starting := a.speakerStarting; starting != nil {
+		a.mu.Unlock()
+		select {
+		case <-starting.finished:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		a.mu.Lock()
+		player := a.speakerPlayer
+		a.mu.Unlock()
+		if player != nil {
+			return nil
+		}
+		return a.startPortedSpeaker(ctx)
+	}
+	// The player is claimed before the card is taken, so a second caller
+	// waits for the first to finish rather than starting one too.
+	starting := &startingSpeaker{finished: make(chan struct{})}
+	a.speakerStarting = starting
 	spk := speaker.Get()
+	// The claim is on the speaker itself, because the speaker is one for
+	// the whole program: two callers that each thought they held it would
+	// both write to it.
+	//
+	// The claim is not taken here, but after the lock is released and
+	// the deferred cleanup is armed: a claim that failed while the lock
+	// was held waited for this caller's own "finished" channel, which
+	// nothing closes until this call returns. It waited for ever.
+	if !spk.Claim() {
+		a.mu.Unlock()
+		// Somebody else has it. This caller waits for them to let go.
+		//
+		// The wait is on the speaker itself, not on this caller's own
+		// start: the other holder is not this caller, so its start says
+		// nothing about when the claim will be given back.
+		if err := a.waitForSpeaker(ctx); err != nil {
+			return err
+		}
+		return a.startPortedSpeaker(ctx)
+	}
+	// The player is claimed here, before the write loop starts: a claim
+	// made after the loop was launched let a second caller through, and
+	// two write loops fought over the queues.
+	a.speakerPlayer = spk
+	a.mu.Unlock()
+	defer func() {
+		a.mu.Lock()
+		a.speakerStarting = nil
+		a.mu.Unlock()
+		starting.finish()
+	}()
+
 	// The device is taken first: the write loop needs it, and reports
 	// the failure if it cannot be had.
 	if err := spk.Start(ctx); err != nil {
+		a.mu.Lock()
+		a.speakerPlayer = nil
+		a.mu.Unlock()
+		// The claim is given back: the speaker was never opened, and a
+		// claim that was never given back would hold the speaker for
+		// ever. Nothing else in the program could ever make a sound.
+		spk.Release()
 		return err
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -242,13 +329,17 @@ func (a *deviceAudio) startPortedSpeaker(ctx context.Context) error {
 	go func() {
 		defer close(done)
 		if err := spk.Run(runCtx); err != nil && runCtx.Err() == nil {
-			a.log.Warn("the speaker stopped", "error", err)
+			// The write loop is already running: another caller got
+			// there first, and this one has nothing to do.
+			if !strings.Contains(err.Error(), "already running") {
+				a.log.Warn("the speaker stopped", "error", err)
+			}
 		}
 	}()
 
 	a.mu.Lock()
-	a.speakerPlayer = spk
 	a.speakerCancel = cancel
+	a.speakerDone = done
 	a.mu.Unlock()
 
 	// The speaker opens the card itself, which takes a moment; the run
@@ -269,13 +360,38 @@ func (a *deviceAudio) stopPortedSpeaker() {
 	a.mu.Lock()
 	cancel := a.speakerCancel
 	spk := a.speakerPlayer
+	done := a.speakerDone
+	// The claim is taken here, before the wait, so that a second caller
+	// does not stop a speaker that has just been started by somebody
+	// else. The wait is here and not in the caller, because the caller
+	// and the write loop's own cleanup both stop the speaker, and only
+	// one of them may wait for the loop.
 	a.speakerCancel = nil
+	a.speakerDone = nil
 	a.speakerPlayer = nil
 	a.mu.Unlock()
+
 	if cancel != nil {
 		cancel()
 	}
+	// The write loop is waited for before the player is let go.
+	//
+	// Two write loops on one player fight over the queues, and the card
+	// gets the audio of both: the speaker starts again as soon as it is
+	// stopped, and the old loop was still writing. So the player stays
+	// claimed until the loop has finished.
+	if done != nil {
+		<-done
+	}
 	if spk != nil {
+		// The claim is given back by the close: the speaker was this
+		// caller's own, because only the holder of the claim can have
+		// set it.
+		//
+		// A caller that holds no speaker does not give the claim back:
+		// the claim may belong to somebody else by now, and a stop that
+		// took a speaker that was not its own would take the card out
+		// from under them.
 		_ = spk.Close()
 	}
 	speaker.SetExternalPlayback(nil)
