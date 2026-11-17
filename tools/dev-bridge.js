@@ -38,7 +38,7 @@ let state = {
   displayMode: "fullscreen",
   brightness: 60,
   volume: 60,
-  version: "0.0.3",
+  version: "0.0.1",
   serviceStatus: { control: "unknown", immich: "unknown", dashboard: "unknown" },
   lastActivity: new Date().toISOString(),
 };
