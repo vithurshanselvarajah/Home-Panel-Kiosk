@@ -29,8 +29,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/wakeword"
 )
 
 // queueFrames is how much audio may be in flight to the scorer goroutine.
@@ -95,7 +93,7 @@ type Stats struct {
 
 // Scorer runs a Detector over pushed audio on its own goroutine.
 type Scorer struct {
-	det       *wakeword.Detector
+	det       Engine
 	threshold float32
 	// bargeThreshold is used instead of threshold while the speaker is
 	// streaming, mirroring home assistant's own effective threshold. Zero
@@ -255,9 +253,9 @@ func (s *Scorer) traceFrame(score, bar float32, crossed bool) {
 // because this is the only place that knows: the bar depends on whether the
 // speaker was streaming at the instant the frame was SCORED, and by the time a
 // callback asks, playback may have ended.
-func NewScorer(inf wakeword.Inferer, threshold float32, onCross func(score, threshold float32, at time.Time)) *Scorer {
+func NewScorer(det Engine, threshold float32, onCross func(score, threshold float32, at time.Time)) *Scorer {
 	s := &Scorer{
-		det:       wakeword.New(inf),
+		det:       det,
 		threshold: threshold,
 		refract:   DefaultRefractory,
 		onCross:   onCross,
@@ -350,6 +348,22 @@ func (s *Scorer) PushBytesAt(b []byte, at time.Time) {
 		cp[i] = int16(uint16(b[2*i]) | uint16(b[2*i+1])<<8)
 	}
 	s.enqueue(cp, at)
+}
+
+// Engine is what the scorer drives: the thing that turns audio into a score.
+//
+// The score is the model's own, and what counts as a crossing is the
+// scorer's: the engine says how much of the wake word is in the audio, and
+// the scorer decides whether that is enough.
+//
+// Not safe for concurrent use: the scorer drives it from its own goroutine,
+// which is the only place ordering is meaningful.
+type Engine interface {
+	// Push feeds audio and reports the score, and whether the engine has
+	// scored yet. False before the engine has seen enough audio.
+	Push(samples []int16) (score float32, ready bool, err error)
+	// Reset forgets what has been heard, as if the engine were new.
+	Reset()
 }
 
 // queued is one frame and its capture time.
@@ -492,11 +506,12 @@ func (s *Scorer) run() {
 		}
 
 		t0 := time.Now()
-		if _, err := s.det.Push(pcm); err != nil {
+		score, ready, err := s.det.Push(pcm)
+		if err != nil {
 			s.recordErr(err)
 			continue
 		}
-		if !s.det.Ready() {
+		if !ready {
 			s.mu.Lock()
 			s.stats.Frames++
 			s.stats.NotReady++
@@ -506,11 +521,6 @@ func (s *Scorer) run() {
 		s.mu.Lock()
 		s.ready = true
 		s.mu.Unlock()
-		score, err := s.det.Score()
-		if err != nil {
-			s.recordErr(err)
-			continue
-		}
 
 		now := time.Now()
 		// Feature extraction plus classification: the whole cost of one frame,

@@ -97,7 +97,7 @@ func Open(model string, threshold float32, onCross func(score, threshold float32
 		return nil, fmt.Errorf("scorer: %w", err)
 	}
 
-	s := NewScorer(inf, threshold, onCross)
+	s := NewScorer(newOWWEngine(inf), threshold, onCross)
 	s.closer = inf
 	s.phrase = DisplayName(stem)
 	s.info = fmt.Sprintf("onnxruntime %s, model %s, xnnpack=%v, streaming embedding: %s",

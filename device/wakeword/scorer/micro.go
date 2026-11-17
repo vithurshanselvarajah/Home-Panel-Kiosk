@@ -47,20 +47,25 @@ const neverFires = 1.1
 type microEngine struct {
 	det   *microwakeword.Detector
 	front *microFront
-	// buf is the audio the front end has not read yet.
-	buf []int16
 	// window and step are the front end's geometry, in samples.
 	window, step int
 }
 
-// microFront is one feature front end: a window of audio in, a frame of
-// features out.
+// featureFront is a microWakeWord feature front end: one window of audio in,
+// a frame of features out.
 //
 // Both kinds keep state between windows (the noise estimates), so the front
 // end is fed every window in order, or the next utterance is scored from a
 // cold state.
-type microFront interface {
+type featureFront interface {
 	ProcessFrame(window []int16) []uint16
+}
+
+// microFront is one feature front end and the audio it has not read yet.
+type microFront struct {
+	fe           featureFront
+	buf          []int16
+	window, step int // in samples
 }
 
 // newMicroEngine loads a model and makes the front end that goes with it.
@@ -95,11 +100,11 @@ func newMicroEngine(path string) (e *microEngine, err error) {
 	// The engine's own front end: a float approximation of the reference's
 	// integer arithmetic. It is what has always run, and the models were
 	// scored against it.
-	fe := audiofrontend.DefaultConfig(FeatureStep)
+	fc := audiofrontend.DefaultConfig(FeatureStep)
 	f := &microFront{
-		fe:     audiofrontend.New(fe),
-		window: fe.SampleRate * fe.WindowSizeMs / 1000,
-		step:   fe.SampleRate * fe.StepSizeMs / 1000,
+		fe:     audiofrontend.New(fc),
+		window: fc.SampleRate * fc.WindowSizeMs / 1000,
+		step:   fc.SampleRate * fc.StepSizeMs / 1000,
 	}
 	return &microEngine{det: det, front: f, window: f.window, step: f.step}, nil
 }
@@ -119,20 +124,20 @@ func (e *microEngine) Push(samples []int16) (score float32, ok bool, err error) 
 		}
 	}()
 
-	e.buf = append(e.buf, samples...)
-	for len(e.buf) >= e.window {
-		raw := e.front.fe.ProcessFrame(e.buf[:e.window])
+	e.front.buf = append(e.front.buf, samples...)
+	for len(e.front.buf) >= e.front.window {
+		raw := e.front.fe.ProcessFrame(e.front.buf[:e.front.window])
 		feat := make([]int8, mwwfront.Channels)
 		mwwfront.Quantize(raw, feat)
 		e.det.ProcessFeatures([][]int8{feat})
-		e.buf = e.buf[e.step:]
+		e.front.buf = e.front.buf[e.front.step:]
 	}
 	return float32(e.det.SlidingAverage()), true, nil
 }
 
 // Reset forgets what has been heard, as if the engine were new.
 func (e *microEngine) Reset() {
-	e.buf = e.buf[:0]
+	e.front.buf = e.front.buf[:0]
 	e.det.Reset()
 }
 
