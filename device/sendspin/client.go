@@ -655,29 +655,22 @@ func (c *Client) hello() clientHello {
 	}
 }
 
-// bufferCapacity caps the compressed bytes a server may have outstanding.
+// bufferCapacity caps how far ahead the server may send, which is the
+// stall the room can ride out.
 //
-// The cap is on the BYTES ON THE WIRE, not on the audio they decode to: the
-// spec counts each chunk's encoded size, so a server may hold
-// bufferCapacity bytes of compressed audio outstanding at once.
+// The spec counts bytes and carries one number for every format, so it is
+// sized for the widest we offer: every codec then gets the same cushion,
+// bounded by the server's own 30 second cap rather than by bytes.
 //
-// FLAC compresses roughly 2:1, so 288000 bytes of FLAC is about 3 seconds
-// of stereo 48 kHz audio, and the server will queue that much. Sizing the cap
-// as if the bytes were PCM (which is what "six seconds of PCM" means)
-// doubles the queue, and the queue then overruns the player's own limit and
-// is thrown away — which is silence.
-//
-// So the cap is set in wire bytes for the codec that is actually sent, and
-// the player's own limit is kept above what the server can queue.
-const bufferCapacity = 6 * outRate * outChannels * outBits / 8 / 2
+// The cap is on the BYTES ON THE WIRE, not on the audio they decode to, but
+// it is sized as if they were PCM: FLAC compresses roughly 2:1, so a server
+// may hold twice as many seconds of FLAC as the number says. The queue is
+// bounded by the placement's own holdMax, which is above this, so the
+// server's cap always binds first. A queue that never overruns is never
+// thrown away, and a thrown-away queue is a gap in the music.
+const bufferSeconds = 30
 
-// maxBufferedFrames is how much decoded audio the player keeps queued.
-//
-// It is above the 30 seconds a server may hold outstanding (the spec's own
-// ceiling on a player's outstanding duration), so the server's cap always
-// binds first. A queue that never overruns is never thrown away, and a
-// thrown-away queue is a gap in the music.
-const maxBufferedFrames = outRate * 32
+const bufferCapacity = bufferSeconds * outRate * outChannels * outBits / 8
 
 // ── admission ──────────────────────────────────────────────────────────────
 //
