@@ -1,6 +1,6 @@
 module github.com/vithurshanselvarajah/Home-Panel-Kiosk/device
 
-go 1.25.0
+go 1.27.0
 
 // The wake word engine is vendored, not fetched: it is the one that runs the
 // model, and a version of it that changed under the panel would change what
