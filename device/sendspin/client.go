@@ -3,6 +3,7 @@ package sendspin
 import (
 	"context"
 	"fmt"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/speaker"
 	"log"
 	"net"
 	"net/http"
@@ -481,6 +482,9 @@ func (c *Client) transport(cmd *controllerCommand) bool {
 	if s == nil {
 		return false
 	}
+	// What was asked for is remembered, so a stop that arrives from the
+	// server is told from a pause the panel asked for itself.
+	s.asked.Store(cmd.Command)
 	return s.send("client/command", clientCommand{Controller: cmd}) == nil
 }
 
@@ -535,6 +539,15 @@ func (c *Client) Active() bool {
 // Buffered is how much audio is queued and not yet played.
 func (c *Client) Buffered() time.Duration {
 	return time.Duration(c.place.queuedMs()) * time.Millisecond
+}
+
+// SetBackgrounds tells the placement which arbiter it belongs to.
+//
+// The arbiter is what stands the music down when a reply takes the speaker,
+// and what lets it carry on afterwards. Without it the music and the reply
+// fight for the card.
+func (c *Client) SetBackgrounds(arbiter *speaker.Arbiter) {
+	c.place.backgrounds = arbiter
 }
 
 // SetAttach tells the placement how to take the speaker and how to give it

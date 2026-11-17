@@ -1,6 +1,7 @@
 package sendspin
 
 import (
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/speaker"
 	"log"
 	"math"
 	"sync"
@@ -79,7 +80,16 @@ const (
 type placement struct {
 	mu    sync.Mutex
 	ready bool
-	held  bool
+	// held is whether the server has said it is not playing, or the
+	// placement is not ready. It gates the rendering.
+	held bool
+	// suspended is whether the arbiter has stood the placement down
+	// because something else took the speaker. It gates the rendering
+	// too, and it is kept apart from held so the two do not fight: the
+	// server's state and the speaker's owner are different things.
+	suspended bool
+	// joined is whether the placement is in the arbiter's stack.
+	joined bool
 
 	// pcm holds frames from base onward. played is where the card has got
 	// to, which is what decides whether a chunk is late — base only says
@@ -138,6 +148,9 @@ type placement struct {
 	// is pulling from it.
 	attach func()
 	detach func()
+	// backgrounds is the arbiter the placement belongs to, so that it is
+	// stood down when something else takes the speaker.
+	backgrounds *speaker.Arbiter
 
 	// position is the speaker's own frame counter and latency.
 	position func() (uint64, time.Duration)
@@ -208,7 +221,14 @@ func (o *placement) close() {
 	o.held = false
 	o.reset()
 	detach := o.detach
+	backgrounds := o.backgrounds
+	joined := o.joined
+	o.joined = false
 	o.mu.Unlock()
+
+	if joined && backgrounds != nil {
+		backgrounds.Gave(o)
+	}
 	if detach != nil {
 		detach()
 	}
@@ -222,11 +242,19 @@ func (o *placement) close() {
 // anchor with it, and not the placement itself.
 func (o *placement) openAgain() {
 	o.mu.Lock()
+	first := !o.joined
+	o.joined = true
 	o.ready = true
-	o.held = false
 	o.reset()
 	attach := o.attach
+	backgrounds := o.backgrounds
 	o.mu.Unlock()
+
+	if first && backgrounds != nil {
+		// The music joins the arbiter, so it is stood down when a reply
+		// takes the speaker and carried on afterwards.
+		backgrounds.Took(o)
+	}
 	if attach != nil {
 		attach()
 	}
@@ -238,13 +266,6 @@ func (o *placement) write(at int64, samples []int16) {
 	defer o.mu.Unlock()
 
 	if !o.ready {
-		o.dropped++
-		return
-	}
-	if o.held {
-		// The audio is held: the server keeps sending, and what it sends
-		// belongs to a timeline the panel is not playing. It is dropped,
-		// so that a play starts from the server's now.
 		o.dropped++
 		return
 	}
@@ -388,7 +409,7 @@ func (o *placement) Render(from uint64, buf []int16) {
 		o.base = at
 	}
 
-	if o.held || !o.ready || at < o.base {
+	if o.held || o.suspended || !o.ready || at < o.base {
 		return
 	}
 	o.correct(from)
@@ -589,33 +610,48 @@ func (o *placement) Duck(db int) {
 // already says.
 func (o *placement) Suspend() {
 	o.mu.Lock()
-	o.held = true
+	o.suspended = true
 	o.mu.Unlock()
 }
 
 func (o *placement) Resume() {
 	o.mu.Lock()
-	o.held = false
+	o.suspended = false
 	o.mu.Unlock()
+}
+
+// Requeue re-scales what is already queued, which can be seconds of audio.
+//
+// The placement applies its gain as the frames are rendered, so there is
+// nothing queued at a level that has to be changed: the frames that have
+// not been rendered yet are rendered at the new one.
+func (o *placement) Requeue() {}
+
+// Ready says whether the placement is ready to be played from.
+func (o *placement) Ready() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.ready
 }
 
 // Held says whether the audio is held.
 func (o *placement) Held() bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return o.held
+	return o.held || o.suspended
 }
 
 // hold stops the audio, or starts it again.
 //
-// What is queued is dropped and the anchor with it: a pause means the
-// timeline is about to change, and what was queued belongs to the
-// timeline before it. The next chunk lays a new anchor against the card.
+// The hold gates the RENDERING, not the writing: what the server sends
+// while the audio is held is still placed, so the buffer is warm and the
+// anchor is live, and a play starts at once. Dropping it instead would
+// leave the placement with nothing to play and no anchor, and the audio
+// would have to be laid again from scratch against the card.
 //
-// Holding does not let go of the stream: the server keeps sending, and the
-// chunks that arrive while the audio is held are dropped rather than
-// queued, so that a play starts from the server's now rather than from
-// where the audio was left.
+// What is queued when the hold goes on is dropped, and the anchor with it:
+// a pause means the timeline is about to change, and what was queued
+// belongs to the timeline before it.
 func (o *placement) hold(paused bool) {
 	o.mu.Lock()
 	o.held = paused
