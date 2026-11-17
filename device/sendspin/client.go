@@ -481,9 +481,6 @@ func (c *Client) transport(cmd *controllerCommand) bool {
 	if s == nil {
 		return false
 	}
-	if c.place.logRaw {
-		log.Printf("[sendspin] transport %q", cmd.Command)
-	}
 	return s.send("client/command", clientCommand{Controller: cmd}) == nil
 }
 
