@@ -119,3 +119,60 @@ func TestTheSpeakerStartsAtHalf(t *testing.T) {
 		t.Errorf("the speaker starts at %d, it should start at 50", defaultVolume)
 	}
 }
+
+// TestTheLouderSpeechIsPublishedAsItIs checks that the Louder speech
+// switch says what the device is actually doing.
+//
+// The switch is a writeback like the others: Home Assistant sets it, and
+// the published state has to say what was done, or Home Assistant shows a
+// switch that is off while the replies are being compressed.
+func TestTheLouderSpeechIsPublishedAsItIs(t *testing.T) {
+	registry := esphome.NewRegistry()
+	voiceEntities(registry)
+
+	server := &ControlServer{registry: registry}
+	plane := &ControlPlane{server: server, audio: &deviceAudio{}}
+	// The switch is wired the way the program wires it: the control plane
+	// tells the audio, and the audio does it.
+	plane.OnLouderSpeech(func(on bool) {
+		plane.audio.setLouderSpeech(on)
+	})
+	plane.SetAudioSettings()
+
+	// The switch is off to begin with.
+	for _, entity := range registry.All() {
+		if entity.ObjectID != "speaker_louder_speech" {
+			continue
+		}
+		if entity.StateOf().Bool {
+			t.Error("the Louder speech switch says it is on, and it is off")
+		}
+	}
+
+	// Turning it on changes the device, and the published state says so.
+	plane.setLouderSpeech(true)
+	if !louderSpeechOn.Load() {
+		t.Error("the Louder speech switch was turned on, and the device did not change")
+	}
+	plane.SetAudioSettings()
+	for _, entity := range registry.All() {
+		if entity.ObjectID != "speaker_louder_speech" {
+			continue
+		}
+		if !entity.StateOf().Bool {
+			t.Error("the Louder speech switch is on, and the entity says it is off")
+		}
+	}
+
+	// And turning it off again.
+	plane.setLouderSpeech(false)
+	plane.SetAudioSettings()
+	for _, entity := range registry.All() {
+		if entity.ObjectID != "speaker_louder_speech" {
+			continue
+		}
+		if entity.StateOf().Bool {
+			t.Error("the Louder speech switch is off, and the entity says it is on")
+		}
+	}
+}

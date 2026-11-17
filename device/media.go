@@ -340,11 +340,16 @@ func resampleToPlayback(pcm []byte, rate int) []byte {
 func (a *deviceAudio) streamVoice(stream io.Reader, rate int) {
 	resampler := audio.NewResampler(rate, voiceRate)
 
+	// The announcement is compressed as well as the reply: it is words,
+	// said by the panel, and it is heard over the music just as the reply
+	// is.
+	comp := &louder{}
+
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := stream.Read(buf)
 		if n > 0 {
-			a.playVoice(resampler.Convert(buf[:n]))
+			a.playVoice(a.compressWith(resampler.Convert(buf[:n]), comp))
 		}
 		if err != nil {
 			if err != io.EOF {
@@ -357,7 +362,7 @@ func (a *deviceAudio) streamVoice(stream io.Reader, rate int) {
 	// The tail of the audio is held by the converter, because there is
 	// no next sample to interpolate towards.
 	if tail := resampler.Flush(); len(tail) > 0 {
-		a.playVoice(tail)
+		a.playVoice(a.compressWith(tail, comp))
 	}
 }
 

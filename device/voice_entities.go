@@ -161,6 +161,14 @@ func voiceEntities(registry *esphome.Registry) {
 		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
 		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
 	})
+	registry.Add(&esphome.Entity{
+		Kind:     esphome.KindSwitch,
+		Name:     "Sound · Louder speech",
+		ObjectID: "speaker_louder_speech",
+		Icon:     "mdi:message-processing",
+		Category: esphome.EntityCategory_ENTITY_CATEGORY_CONFIG,
+		State:    esphome.EntityValue{Kind: esphome.KindSwitch, Bool: false},
+	})
 
 	// The microphone's own settings.
 	registry.Add(&esphome.Entity{

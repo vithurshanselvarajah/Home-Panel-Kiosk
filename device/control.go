@@ -716,6 +716,10 @@ func (s *ControlServer) SetAudioSettings(set framework.Settings, spk *speaker.Pl
 			s.registry.SetState(entity.Key, esphome.EntityValue{
 				Kind: esphome.KindSwitch, Bool: louder,
 			})
+		case "speaker_louder_speech":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: louderSpeechOn.Load(),
+			})
 		case "mic_cancel":
 			s.registry.SetState(entity.Key, esphome.EntityValue{
 				Kind: esphome.KindSwitch, Bool: set.Microphone.Cancel,

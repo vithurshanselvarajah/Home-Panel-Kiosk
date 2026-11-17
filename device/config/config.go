@@ -82,6 +82,12 @@ type Config struct {
 	// LouderTop makes the top of the volume dial go hotter into the
 	// tuning.
 	LouderTop *bool `json:"louderTop,omitempty"`
+	// LouderSpeech compresses the replies and announcements, so that the
+	// quiet parts of the words come up and the loud ones are held down.
+	//
+	// It is what Amazon does with a reply, and a reply that is only
+	// brought up to a level still sounds quieter than Amazon's.
+	LouderSpeech *bool `json:"louderSpeech,omitempty"`
 	// SpeakerResampling is how the reply is stretched from the
 	// controller's rate to the speaker's: "sinc", "linear" or "hold".
 	SpeakerResampling *string `json:"speakerResampling,omitempty"`
