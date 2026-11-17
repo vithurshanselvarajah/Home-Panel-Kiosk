@@ -488,6 +488,27 @@ function ensureOverlayView() {
   resizeOverlay();
 }
 
+// The overlay is a whole renderer process. Once nothing needs it for a while,
+// close it so the memory is released on a small device, and rebuild it on the
+// next use.
+function scheduleOverlayRecycle() {
+  if (overlayRecycleTimer) return;
+  overlayRecycleTimer = setTimeout(() => {
+    overlayRecycleTimer = undefined;
+    if (overlayExpanded || sidePanelOpen || keyboardVisible || mode === "url") return;
+    destroyOverlayView();
+  }, OVERLAY_RECYCLE_DELAY_MS);
+}
+
+function ensureOverlayView() {
+  // A pending recycle would close the overlay we are about to use.
+  clearTimeout(overlayRecycleTimer);
+  overlayRecycleTimer = undefined;
+  if (overlayView) return;
+  createOverlayView();
+  resizeOverlay();
+}
+
 function setKeyboardVisible(visible) {
   const next = Boolean(visible) && settings.touchKeyboardEnabled && mode !== "slideshow";
   if (keyboardVisible === next) return;
@@ -1383,6 +1404,29 @@ function setDisplayMode(mode) {
 
   writeSettingsFile({ ...settings }).catch((error) => console.warn("The display mode could not be saved:", error.message));
   return true;
+}
+
+function createOverlayView() {
+  overlayView = new WebContentsView({ webPreferences: {
+    // The overlay loads a bundled local page, so it is trusted enough to run
+    // unsandboxed and share the field editing helper with the main process.
+    preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: false,
+  } });
+  overlayView.setBackgroundColor("#00000000");
+  overlayView.webContents.loadFile(path.join(__dirname, "ui", "index.html"));
+  overlayView.webContents.on("did-finish-load", sendState);
+}
+
+function destroyOverlayView() {
+  if (!overlayView) return;
+  if (overlayAttached && win && !win.isDestroyed()) {
+    win.contentView.removeChildView(overlayView);
+  }
+  overlayAttached = false;
+  overlayView.webContents.close();
+  overlayView = null;
+  // Force the next sendState to reach the rebuilt overlay.
+  lastSentState = "";
 }
 
 function createWindow() {
