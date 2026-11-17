@@ -51,6 +51,13 @@ func SoundCard() string { return "" }
 // StateDir is where the device program's runtime state lives.
 const StateDir = "/run/home-panel"
 
+// ModelDir is where the wake word models live.
+//
+// The models are not part of the program: they change far less often than
+// it does, and a model is chosen by the person who installs it rather than
+// by the build.
+const ModelDir = StateDir + "/models"
+
 // SpeakerGainMax is how far the speaker's gain may be raised, in dB.
 //
 // It is deliberately small: a unit was reported far too loud at the top of the range.
