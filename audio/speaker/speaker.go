@@ -1386,6 +1386,20 @@ func (p *Player) Tone() asp.Tone {
 // ASP reports whether the driver tuning is being applied.
 func (p *Player) ASP() bool { return p.on.Load() }
 
+// Stereo reports whether the output is in stereo.
+//
+// It is the settled answer, not the one that was asked for: a board that
+// cannot do stereo takes it off, and the entity has to say what is in
+// force rather than what was asked of it.
+func (p *Player) Stereo() bool { return p.stereo.Load() }
+
+// GainDB is the speaker's gain, in decibels.
+func (p *Player) GainDB() int {
+	p.gainMu.Lock()
+	defer p.gainMu.Unlock()
+	return p.gainDB
+}
+
 // Resampling is the one in use.
 func (p *Player) Resampling() framework.Resampling {
 	p.voiceMu.Lock()

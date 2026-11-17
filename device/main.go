@@ -908,7 +908,12 @@ func main() {
 	// follows it: the same switch, reached from the other side.
 	control.OnWakeWord(func(enabled bool) {
 		wake.SetEnabled(enabled)
+		speaker_.setWakeEnabled(enabled)
 		speaker_.setListening(enabled && wake.Ready())
+		// The entity is published, so that the switch and the picker
+		// agree. They are two controls for one setting, and without
+		// this the picker says one thing and the switch another.
+		control.PublishVoiceSettings()
 	})
 
 	// The voice settings, as Home Assistant sees them.
