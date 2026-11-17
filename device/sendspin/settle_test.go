@@ -115,3 +115,57 @@ func TestTheAnchorWaitsForTheSpeaker(t *testing.T) {
 		t.Fatal("nothing is queued: the chunk that was held was lost")
 	}
 }
+
+// The chunk that was held must be played whole.
+//
+// The anchor is laid when the speaker starts, and the chunks that arrived
+// before it are released then. If the anchor is laid against the chunk
+// that is arriving now, the waiting chunks are older than the anchor, and
+// the anchor puts them before the card: they are dropped as late, and the
+// track starts with a gap.
+//
+// This is the jitter at the start of a track: it happens on a fresh boot
+// and after a pause, which are the two times the speaker is not running
+// when the first chunk arrives.
+func TestTheHeldChunkIsPlayedWhole(t *testing.T) {
+	p := newPlacement(syncedFilter())
+	p.open()
+
+	started := false
+	p.started = func() bool { return started }
+	p.position = func() (uint64, time.Duration) { return 0, 0 }
+	p.latency = func() time.Duration { return 0 }
+
+	// The first chunk arrives before the speaker has started. It is a
+	// hundred milliseconds of audio.
+	const frames = outRate / 10
+	first := make([]int16, frames*outChannels)
+	for i := range first {
+		first[i] = int16(i)
+	}
+
+	// It is stamped with the moment it was sent, which is a hundred
+	// milliseconds before the next one.
+	p.write(nowUs()-100*1000, first)
+
+	// The speaker starts, and the next chunk arrives.
+	started = true
+	p.write(nowUs(), []int16{3000, -3000, 4000, -4000})
+
+	p.mu.Lock()
+	queued := len(p.pcm) / outChannels
+	late := p.late
+	dropped := p.dropped
+	p.mu.Unlock()
+
+	if late != 0 {
+		t.Errorf("%d chunks were dropped as late, the chunk that was held was never played", late)
+	}
+	if dropped != 0 {
+		t.Errorf("%d chunks were dropped", dropped)
+	}
+	if queued < frames {
+		t.Errorf("%d frames are queued, want at least %d: the chunk that was held lost its beginning",
+			queued, frames)
+	}
+}

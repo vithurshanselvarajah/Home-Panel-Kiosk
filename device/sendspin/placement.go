@@ -318,8 +318,23 @@ func (o *placement) write(at int64, samples []int16) {
 	}
 	// The chunks that arrived before the speaker started are placed now,
 	// against the anchor that has just been laid.
+	//
+	// The anchor is laid against the OLDEST of them, not against the
+	// chunk that arrived now. The anchor maps one server timestamp to one
+	// output frame, and the chunks are a little older than the newest
+	// one: laid against the newest, the older ones belong before the
+	// anchor, and they are dropped as late. The track then starts with a
+	// gap where the beginning of it should be, and the next correction
+	// pulls the rest of the audio forward to fill it.
+	//
+	// That is the jitter at the start of a track: it happens on a fresh
+	// boot and after a pause, which are the two times the speaker is not
+	// running when the first chunk arrives.
 	held := o.pending
 	o.pending = nil
+	if len(held) > 0 {
+		o.anchorAt(held[0].at)
+	}
 	o.mu.Unlock()
 	for _, c := range held {
 		o.write(c.at, c.samples)
@@ -372,11 +387,6 @@ func (o *placement) frameFor(at int64) int64 {
 		return o.frame + (at-o.at)*outRate/1e6
 	}
 
-	// The frame the speaker is writing is going to the card next and is
-	// heard the card's latency later, so this is where the server's
-	// intended moment falls. It has to be the real latency rather than a
-	// margin: a room next to one that measures its own is only in step if
-	// both mean the same moment by "play at".
 	// The anchor waits for the speaker.
 	//
 	// A speaker that has not written to the card has no position and no
@@ -388,6 +398,20 @@ func (o *placement) frameFor(at int64) int64 {
 		return o.frame
 	}
 
+	return o.anchorAt(at)
+}
+
+// anchorAt lays the anchor against the given server timestamp.
+//
+// It maps that one timestamp to the output frame it is to be heard at, and
+// that mapping is what every later chunk is placed by.
+//
+// The frame the speaker is writing is going to the card next and is
+// heard the card's latency later, so this is where the server's intended
+// moment falls. It has to be the real latency rather than a margin: a
+// room next to one that measures its own (or anything else that follows
+// the spec) is only in step if both mean the same moment by "play at".
+func (o *placement) anchorAt(at int64) int64 {
 	written, latency := o.position()
 	ahead := time.Until(o.serverToLocal(at)) - latency
 	// The offset is clamped at zero: the audio the server sends may
