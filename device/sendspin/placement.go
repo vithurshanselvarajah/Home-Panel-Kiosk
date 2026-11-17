@@ -271,15 +271,8 @@ func (o *placement) write(at int64, samples []int16) {
 	}
 
 	frame := o.frameFor(at) + o.delay
-	if o.logRaw {
-		log.Printf("[sendspin] place frame=%d anchor=%d at=%d o.at=%d played=%d base=%d ahead=%d queued=%d",
-			frame, o.frame, at, o.at, o.played, o.base, frame-int64(o.played), len(o.pcm)/outChannels)
-	}
 	if frame > int64(o.played) && frame-int64(o.played) > holdMax {
 		o.dropped++
-		if o.logRaw {
-			log.Printf("[sendspin] DROPPED too far ahead: %d frames", frame-int64(o.played))
-		}
 		return
 	}
 
@@ -328,11 +321,24 @@ func (o *placement) frameFor(at int64) int64 {
 	// both mean the same moment by "play at".
 	written, latency := o.position()
 	ahead := time.Until(o.serverToLocal(at)) - latency
-	// The offset is not clamped at zero: the audio the server sends may
-	// already be late, and the frame it belongs at is then before the
-	// speaker started writing. Clamping it lost the whole offset, and the
-	// anchor was then nothing like the frame the audio belonged at.
-	o.frame = int64(written) + int64(ahead.Seconds()*outRate)
+	// The offset is clamped at zero: the audio the server sends may
+	// already be late — the first chunk of a stream is stamped with when
+	// it was sent, not when it is to be played — and then the audio plays
+	// on arrival, which is what it does.
+	//
+	// Without the clamp the anchor was a second ahead of the card, and
+	// the drift correction spent the next few seconds pulling it back a
+	// second at a time. That is the jitter at the start of a track.
+	//
+	// The anchor itself is not clamped: it is a frame index, and a frame
+	// before the speaker started writing is a negative one, which is the
+	// frame the audio belongs at.
+	o.frame = int64(written) + int64(max(0, ahead.Seconds()*outRate))
+	if o.logRaw {
+		log.Printf("[sendspin] anchored frame=%d written=%d ahead_ms=%d latency_ms=%d at=%d now=%d serverLocal=%v",
+			o.frame, written, ahead.Milliseconds(), latency.Milliseconds(), at, nowUs(),
+			o.serverToLocal(at))
+	}
 	o.at = at
 	o.anchored = true
 	if o.frame < 0 {
@@ -430,6 +436,20 @@ func (o *placement) correct(from uint64) {
 		return
 	}
 	if o.filter == nil {
+		return
+	}
+	// Nothing is corrected until the clock is good.
+	//
+	// Without a sync the clock reads the server's timestamps as local
+	// ones, decades out, and every period would re-anchor against an
+	// answer it does not have. What is queued is held: the anchor is
+	// wrong until a sync lands, and the first correction after one puts
+	// it right in a single step.
+	//
+	// Correcting against an unconverged clock is what made the first
+	// second of a track jitter: the correction read a second of error
+	// and snapped it back a second at a time.
+	if !o.filter.synchronized() {
 		return
 	}
 	now := o.filter.serverTime(nowUs())

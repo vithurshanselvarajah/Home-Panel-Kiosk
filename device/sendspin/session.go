@@ -202,17 +202,11 @@ func (s *session) dispatch(env envelope) error {
 		var r streamRoles
 		json.Unmarshal(env.Payload, &r)
 		if r.covers("player") && s.isAdmitted() {
-			if s.c.place.logRaw {
-				log.Printf("[sendspin] stream/clear")
-			}
 			s.c.place.flush()
 		}
 	case "stream/end":
 		var r streamRoles
 		json.Unmarshal(env.Payload, &r)
-		if s.c.place.logRaw {
-			log.Printf("[sendspin] stream/end covers=%v", r.covers("player"))
-		}
 		if r.covers("player") {
 			s.endStream()
 		}
@@ -222,9 +216,6 @@ func (s *session) dispatch(env envelope) error {
 			s.mu.Lock()
 			s.group = g
 			s.mu.Unlock()
-			if s.c.place.logRaw {
-				log.Printf("[sendspin] group/update state=%q", g.PlaybackState)
-			}
 			s.onPlaybackState(g.PlaybackState)
 			s.c.changed()
 		}
@@ -638,11 +629,6 @@ func (s *session) onStreamStart(f streamFormat) {
 		s.c.place.openAgain()
 	}
 	s.dec, s.streaming = d, true
-	if s.c.place.logRaw {
-		log.Printf("[sendspin] stream/start %s %dHz %dch", f.Codec, f.SampleRate, f.Channels)
-	} else {
-		log.Printf("[sendspin] stream: %s %dHz %dch", f.Codec, f.SampleRate, f.Channels)
-	}
 	s.c.changed()
 }
 
