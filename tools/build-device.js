@@ -108,7 +108,7 @@ for (const architecture of ARCHITECTURES) {
 
       CGO_CFLAGS: `-I${path.join(deviceDir, "wakeword", "ort", "include")} -I${includeDirectory} -O2`,
 
-      CGO_LDFLAGS: `-L${libraryDirectory} -lonnxruntime -Wl,-rpath,$ORIGIN -Wl,-rpath,${path.join(vendorDir, "..", "runtime", architecture.goarch)}`,
+      CGO_LDFLAGS: `-L${libraryDirectory} -lonnxruntime -Wl,-rpath,$ORIGIN`,
     },
   });
   if (build.status !== 0) {
