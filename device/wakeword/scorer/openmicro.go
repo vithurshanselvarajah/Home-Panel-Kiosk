@@ -22,7 +22,9 @@ func OpenMicro(path string, threshold float32, onCross func(score, threshold flo
 
 	s := NewScorer(eng, threshold, onCross)
 	s.closer = eng
-	s.phrase = DisplayName(filepath.Base(path))
+	// The phrase is the model's name, as a person says it: the extension is
+	// part of the file, not part of the phrase.
+	s.phrase = DisplayName(strings.TrimSuffix(filepath.Base(path), ".tflite"))
 	s.info = eng.Info()
 	return s, nil
 }
