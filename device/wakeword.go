@@ -57,6 +57,14 @@ type wakeWord struct {
 func openWakeWord(log *slog.Logger) (*wakeWord, error) {
 	dir := scorer.Dir()
 
+	// A microWakeWord model is preferred: it is self-contained, so there is
+	// no shared mel and embedding chain to load and no runtime to load
+	// either. The engine is pure Go, so there is no library to install and
+	// no library version to keep in step with the model.
+	if model, ok := scorer.MicroModel(dir); ok {
+		return openMicroWakeWord(log, dir, model)
+	}
+
 	// The models are looked for in the directory, and the classifier is
 	// whichever one is there. A panel with one model has one wake word.
 	models, err := findModels(dir)
@@ -85,6 +93,27 @@ func openWakeWord(log *slog.Logger) (*wakeWord, error) {
 	}
 
 	log.Info("the local wake word is ready", "model", wake.model, "phrase", wake.scorer.Phrase())
+	return wake, nil
+}
+
+// openMicroWakeWord loads a microWakeWord model.
+func openMicroWakeWord(log *slog.Logger, dir, model string) (*wakeWord, error) {
+	wake := &wakeWord{
+		gate:      gate.New(gate.Options{}),
+		enabled:   true,
+		threshold: defaultWakeThreshold,
+	}
+
+	opened, err := scorer.OpenMicro(filepath.Join(dir, model+".tflite"),
+		float32(defaultWakeThreshold), wake.crossed)
+	if err != nil {
+		return nil, err
+	}
+	wake.scorer = opened
+	wake.model = model
+
+	log.Info("the local wake word is ready", "model", wake.model, "phrase", wake.scorer.Phrase(),
+		"engine", opened.Info())
 	return wake, nil
 }
 
