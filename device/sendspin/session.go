@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -80,8 +81,24 @@ type session struct {
 	roles      []string
 	stateSent  bool // a client/state has gone out on this connection
 	clockNoted bool // the clock has been reported good, once
-	group      groupUpdate
-	lastAudio  time.Time
+	// serverPlaying is what the server last said it was doing. It is one
+	// of the two inputs to the gate: the audio is heard only when the
+	// placement is ready and the server is playing.
+	serverPlaying bool
+	// serverSaid is whether the server has said anything yet. Before it
+	// has, the audio is held: a player that plays before the server has
+	// said it is playing is playing what nobody asked for.
+	serverSaid bool
+	// asked is the last transport the panel asked for, and it is how a
+	// pause asked for here is told from a pause the server did on its
+	// own. Music Assistant reports a pause as a stop, so a stop that
+	// nobody here asked for is the server's own pause.
+	asked atomic.Value // string
+	// settleGen counts the pauses, so a timer armed for one of them does
+	// nothing if the pause was taken back before it fired.
+	settleGen atomic.Int64
+	group     groupUpdate
+	lastAudio time.Time
 	// metadata is what the server says is playing.
 	//
 	// It is separate from the group and the player: this is the music
@@ -203,6 +220,7 @@ func (s *session) dispatch(env envelope) error {
 		json.Unmarshal(env.Payload, &r)
 		if r.covers("player") && s.isAdmitted() {
 			s.c.place.flush()
+			s.regate()
 		}
 	case "stream/end":
 		var r streamRoles
@@ -536,26 +554,99 @@ func (s *session) onServerState(st serverState) {
 // from the screen, and starts the track over when it goes straight from
 // playing to stopped.
 func (s *session) onPlaybackState(state string) {
+	s.mu.Lock()
+	s.serverSaid = true
 	switch state {
-	case "paused", "stopped":
-		s.hold(true)
 	case "playing":
-		s.hold(false)
+		// The server is playing, so nothing is held any more.
+		s.serverPlaying = true
+		s.asked.Store("")
+	case "paused":
+		s.serverPlaying = false
+		s.asked.Store("")
+		// A pause left this way is a stop.
+		s.settleStop()
+	case "stopped":
+		s.serverPlaying = false
+		// A stop that nobody here asked for is the server's own pause:
+		// Music Assistant does not pause a Sendspin stream, it ends it,
+		// and a stop that arrives straight after a pause asked for here
+		// is that pause coming back as a stop.
+		if s.askedFor() != "pause" {
+			s.serverPlaying = true
+		}
+		s.asked.Store("")
 	}
+	s.mu.Unlock()
+	s.regate()
 }
 
-// hold stops or starts the audio without letting go of the track.
+// The settling of a pause and a stop.
 //
-// The placement is flushed, so the audio that was queued is dropped and
-// the next chunk is placed afresh: a pause means the timeline is about to
-// change, and what was queued belongs to the timeline before it.
+// A pause that the server never takes back is a stop: the server reports
+// a pause as a stop, and it sends only what changes, so a pause that is
+// never followed by a play would leave the panel holding the audio for
+// ever, with nothing to show for it.
 //
-// The hold is released when the server says it is playing again, and not
-// only when a new stream starts: the server ends the stream on a pause and
-// resumes the same one, and it says it is playing before it says it has
-// started.
-func (s *session) hold(paused bool) {
-	s.c.place.hold(paused)
+// A stop is only counted as one once it has stayed stopped for a moment:
+// the server ends one track and starts the next in whichever order it
+// likes, and that gap is not somebody stopping the music.
+const (
+	// stoppedFor is how long a paused track stays paused before it is
+	// ended.
+	stoppedFor = 30 * time.Minute
+	// stopSettle is how long a stop has to last before it is counted.
+	stopSettle = 4 * time.Second
+)
+
+// settleStop ends a pause that the server never takes back.
+//
+// The timer is armed with a generation, so a pause that is taken back
+// before the timer fires does nothing: the generation has moved on.
+func (s *session) settleStop() {
+	s.mu.Lock()
+	generation := s.settleGen.Add(1)
+	s.mu.Unlock()
+
+	time.AfterFunc(stoppedFor, func() {
+		s.mu.Lock()
+		same := s.settleGen.Load() == generation
+		s.mu.Unlock()
+		if !same {
+			return
+		}
+		s.onPlaybackState("stopped")
+	})
+}
+
+// askedFor is the last transport the panel asked for, empty when it has
+// not asked for anything.
+func (s *session) askedFor() string {
+	v, _ := s.asked.Load().(string)
+	return v
+}
+
+// regate works out whether the audio should be heard.
+//
+// It is two inputs anded: the placement has to be ready, and the server
+// has to say it is playing. Both are needed, and either can change at any
+// moment — the server sends its state and the stream lifecycle separately,
+// and they do not always arrive in the same order.
+//
+// Working it out here, rather than setting the hold from one of them, is
+// what keeps the two from racing: a "playing" that arrives before the
+// stream ends would otherwise un-hold and then be held again, and the
+// audio would be silent in between.
+func (s *session) regate() {
+	s.mu.Lock()
+	playing := s.serverPlaying
+	said := s.serverSaid
+	s.mu.Unlock()
+
+	ready := s.c.place.Ready()
+	// The audio is held until the server has said it is playing, and
+	// whenever the placement is not ready.
+	s.c.place.hold(!said || !playing || !ready)
 }
 
 // Controller says what the transport can do.
@@ -627,6 +718,7 @@ func (s *session) onStreamStart(f streamFormat) {
 	// starts releases the hold a pause put on it.
 	if s.isAdmitted() {
 		s.c.place.openAgain()
+		s.regate()
 	}
 	s.dec, s.streaming = d, true
 	s.c.changed()
@@ -660,7 +752,8 @@ func (s *session) playing() bool {
 // placed again, and the room would say playing in silence.
 func (s *session) endStream() {
 	if s.streaming && s.isAdmitted() {
-		s.c.place.hold(true)
+		s.c.place.flush()
+		s.regate()
 	}
 	// The decoder is KEPT.
 	//
@@ -682,10 +775,12 @@ func (s *session) onAudio(msg []byte) {
 	if s.dec == nil || !s.isAdmitted() || s.c.external() {
 		return
 	}
-	// And it is not placed while the audio is held.
-	if s.c.place.Held() {
-		return
-	}
+	// The audio is placed even while the audio is held: the hold gates
+	// the rendering, not the writing. What the server sends while the
+	// panel is paused is still placed, so the buffer is warm and the
+	// anchor is live, and a play starts at once. Dropping it instead
+	// would leave the placement with nothing to play and no anchor, and
+	// the audio would have to be laid again from scratch.
 	ts, payload, err := chunkPayload(msg, s.dec.f.Codec)
 	if err != nil {
 		return

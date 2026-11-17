@@ -2508,6 +2508,9 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 				spk.Detach(a.musicSourceFor(player))
 			},
 		)
+		// The music joins the arbiter, so it is stood down when a reply
+		// takes the speaker and carried on afterwards.
+		player.SetBackgrounds(speaker.Sound().Backgrounds())
 		player.SetPlacement(
 			func() (uint64, time.Duration) {
 				spk := speaker.Get()
