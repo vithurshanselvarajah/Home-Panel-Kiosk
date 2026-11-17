@@ -21,12 +21,12 @@ func TestTheVoiceSettingsAreEntities(t *testing.T) {
 		byID[entity.ObjectID] = entity
 	}
 
-	for _, want := range []string{"wake_word_threshold", "wake_word_enabled", "music_ducking_db", "music_enabled", "music_unpaired"} {
+	for _, want := range []string{"wake_word_threshold", "wake_word_enabled", "music_ducking_db", "music_enabled", "music_unpaired", "speaker_louder_speech"} {
 		if byID[want] == nil {
 			t.Errorf("the %s setting is not an entity", want)
 		}
 	}
-	for _, id := range []string{"wake_word_threshold", "wake_word_enabled", "music_ducking_db", "music_enabled", "music_unpaired"} {
+	for _, id := range []string{"wake_word_threshold", "wake_word_enabled", "music_ducking_db", "music_enabled", "music_unpaired", "speaker_louder_speech"} {
 		entity := byID[id]
 		if entity != nil && entity.Category != esphome.EntityCategory_ENTITY_CATEGORY_CONFIG {
 			t.Errorf("entity %q has category %v, want configuration", id, entity.Category)

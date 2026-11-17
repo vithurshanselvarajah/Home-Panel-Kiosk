@@ -252,6 +252,13 @@ type deviceAudio struct {
 	// reply is played three times too fast, which is a chipmunk rather
 	// than a voice.
 	voiceResampler *audio.Resampler
+	// voiceLouder compresses the reply, so that the quiet parts of the
+	// words come up and the loud ones are held down.
+	//
+	// One is kept for the whole reply, so the level it follows runs on
+	// across the chunks: a compressor that started again at every chunk
+	// would hear every chunk as a new word beginning.
+	voiceLouder *louder
 
 	// media is the music Home Assistant is playing, and the mixer takes
 	// it out of here.
@@ -1582,6 +1589,14 @@ func (a *deviceAudio) playReply(pcm []byte, final bool) {
 	// rates, and the progress would always come out as nothing played.
 	converted := a.resampleVoice(pcm)
 
+	// The reply is compressed on its way to the speaker, so that the
+	// quiet parts of the words come up and the loud ones are held down.
+	//
+	// It is done here, ahead of the speaker, so that the echo
+	// canceller's reference — which is made from what the speaker was
+	// sent — includes it.
+	converted = a.compressVoice(converted)
+
 	a.mu.Lock()
 	a.spokenTotal += int64(len(converted))
 	a.mu.Unlock()
@@ -1624,6 +1639,54 @@ func (a *deviceAudio) resampleVoice(pcm []byte) []byte {
 	a.mu.Unlock()
 
 	return resampler.Convert(pcm)
+}
+
+// compressVoice compresses the reply, if the Louder speech switch is on.
+//
+// The compressor is kept for the whole reply, so the level it follows runs
+// on across the chunks: a compressor that started again at every chunk
+// would hear every chunk as a new word beginning, and the first of every
+// chunk would be lifted the whole way up.
+//
+// With the switch off the audio is passed through as it is, and the
+// compressor is let go, so that turning the switch on mid-reply starts
+// from the level the reply is at.
+func (a *deviceAudio) compressVoice(pcm []byte) []byte {
+	if len(pcm) == 0 {
+		return pcm
+	}
+	if !louderSpeechOn.Load() {
+		a.mu.Lock()
+		a.voiceLouder = nil
+		a.mu.Unlock()
+		return pcm
+	}
+
+	a.mu.Lock()
+	if a.voiceLouder == nil {
+		a.voiceLouder = &louder{}
+	}
+	comp := a.voiceLouder
+	a.mu.Unlock()
+
+	return a.compressWith(pcm, comp)
+}
+
+// compressWith compresses the audio with the given compressor.
+//
+// It is the announcement's own compressor, so that the announcement is
+// compressed as a whole rather than a chunk at a time.
+func (a *deviceAudio) compressWith(pcm []byte, comp *louder) []byte {
+	if len(pcm) == 0 || !louderSpeechOn.Load() {
+		return pcm
+	}
+	out := comp.process(monoSamples16(pcm))
+	converted := make([]byte, len(out)*2)
+	for i, s := range out {
+		converted[i*2] = byte(uint16(s))
+		converted[i*2+1] = byte(uint16(s) >> 8)
+	}
+	return converted
 }
 
 // flushVoice finishes the reply's conversion.
@@ -1783,6 +1846,10 @@ func (a *deviceAudio) finishVoice() {
 		// beginning of its own audio, and a converter carried over from
 		// the last reply would interpolate across the two.
 		a.voiceResampler = nil
+		// The compressor is for one reply as well: the next one starts
+		// at the beginning of its own audio, and a compressor carried
+		// over would start the new reply at the old reply's level.
+		a.voiceLouder = nil
 	}
 	a.mu.Unlock()
 	if over {
@@ -1840,6 +1907,7 @@ func (a *deviceAudio) flush() {
 	a.voiceStreaming = false
 	a.voiceMixed = false
 	a.voiceResampler = nil
+	a.voiceLouder = nil
 	a.mu.Unlock()
 	a.closeOutput()
 	a.endVoice()
@@ -1858,6 +1926,7 @@ func (a *deviceAudio) markReplyPlayedOut() {
 	a.mu.Lock()
 	a.voiceActive = false
 	a.voiceResampler = nil
+	a.voiceLouder = nil
 	// The reply is all played, so the progress of the reply is all of it.
 	//
 	// The panel shows the answer's words as the audio is played, and it

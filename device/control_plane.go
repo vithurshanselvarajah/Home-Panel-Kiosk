@@ -102,6 +102,7 @@ type ControlPlane struct {
 	onSpeakerTreble  func(db float64)
 	onClearerSpeech  func(on bool)
 	onLouderTop      func(on bool)
+	onLouderSpeech   func(on bool)
 	onMicCancel      func(on bool)
 	onMicLeveling    func(on bool)
 	onMicDenoise     func(on bool)
@@ -388,6 +389,8 @@ func wireEntities(registry *esphome.Registry, server *ControlServer, plane *Cont
 				plane.setClearerSpeech(value.Bool)
 			case "speaker_louder_top":
 				plane.setLouderTop(value.Bool)
+			case "speaker_louder_speech":
+				plane.setLouderSpeech(value.Bool)
 			case "mic_cancel":
 				plane.setMicCancel(value.Bool)
 			case "mic_leveling":
@@ -1135,6 +1138,9 @@ func (p *ControlPlane) OnClearerSpeech(fn func(on bool)) { p.onClearerSpeech = f
 // OnLouderTop sets what happens when louder top volume is switched.
 func (p *ControlPlane) OnLouderTop(fn func(on bool)) { p.onLouderTop = fn }
 
+// OnLouderSpeech sets what happens when louder speech is switched.
+func (p *ControlPlane) OnLouderSpeech(fn func(on bool)) { p.onLouderSpeech = fn }
+
 // OnMicCancel sets what happens when echo cancellation is switched.
 func (p *ControlPlane) OnMicCancel(fn func(on bool)) { p.onMicCancel = fn }
 
@@ -1193,6 +1199,13 @@ func (p *ControlPlane) setClearerSpeech(on bool) {
 func (p *ControlPlane) setLouderTop(on bool) {
 	if p.onLouderTop != nil {
 		p.onLouderTop(on)
+	}
+}
+
+// setLouderSpeech compresses the replies so they sit nearer the top.
+func (p *ControlPlane) setLouderSpeech(on bool) {
+	if p.onLouderSpeech != nil {
+		p.onLouderSpeech(on)
 	}
 }
 
