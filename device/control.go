@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/mic/framework"
 	"log/slog"
 	"net"
 	"os"
@@ -619,6 +620,71 @@ func (s *ControlServer) SetVoiceSettings(threshold float64, wakeEnabled bool, du
 		case "music_ducking_db":
 			s.registry.SetState(entity.Key, esphome.EntityValue{
 				Kind: esphome.KindNumber, Number: duckDB,
+			})
+		}
+	}
+}
+
+// SetAudioSettings tells Home Assistant what the speaker and the
+// microphone are actually doing.
+//
+// Every setting the panel can change is reported back, so that the entity
+// shows what the device is using rather than what was last asked of it. A
+// setting that is only read and never written back is a setting Home
+// Assistant cannot see: it sets the bass shelf and the slider keeps the
+// value it had, and nothing says the two disagree.
+//
+// The values come from the ported stack's own settings, which are what the
+// speaker and the microphone are actually running with.
+func (s *ControlServer) SetAudioSettings(set framework.Settings, clearer, louder bool) {
+	if s.registry == nil {
+		return
+	}
+	for _, entity := range s.registry.All() {
+		switch entity.ObjectID {
+		case "speaker_tuning":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: set.Speaker.ASP,
+			})
+		case "speaker_gain_db":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindNumber, Number: float64(set.Speaker.GainDB),
+			})
+		case "speaker_stereo":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: set.Speaker.Stereo,
+			})
+		case "speaker_bass_db":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindNumber, Number: set.Speaker.Bass,
+			})
+		case "speaker_treble_db":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindNumber, Number: set.Speaker.Treble,
+			})
+		case "speaker_clearer_speech":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: clearer,
+			})
+		case "speaker_louder_top":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: louder,
+			})
+		case "mic_cancel":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: set.Microphone.Cancel,
+			})
+		case "mic_leveling":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: set.Microphone.Leveling,
+			})
+		case "mic_denoise":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindSwitch, Bool: set.Microphone.Denoise,
+			})
+		case "mic_sensitivity_db":
+			s.registry.SetState(entity.Key, esphome.EntityValue{
+				Kind: esphome.KindNumber, Number: float64(set.Microphone.Sensitivity),
 			})
 		}
 	}

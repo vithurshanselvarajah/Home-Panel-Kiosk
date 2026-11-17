@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/mic/framework"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/speaker"
 	"log/slog"
 	"math"
 	"net"
@@ -925,6 +927,24 @@ func (p *ControlPlane) publishVoiceSettings() {
 		p.wakeEnabled(),
 		p.audio.duckLevel(),
 	)
+}
+
+// SetAudioSettings tells Home Assistant what the speaker and the
+// microphone are actually doing.
+//
+// The values come from the audio stack's own settings and from the speaker,
+// which are what is really in force: a setting that is only read and never
+// written back is one Home Assistant cannot see.
+func (p *ControlPlane) SetAudioSettings() {
+	if p.server == nil {
+		return
+	}
+	spk := speaker.Get()
+	clearer, louder := false, false
+	if spk != nil {
+		clearer, louder = spk.ClearerSpeech(), spk.LouderTop()
+	}
+	p.server.SetAudioSettings(framework.Get(), clearer, louder)
 }
 
 // SetAutoBrightness says whether the screen follows the room's light.

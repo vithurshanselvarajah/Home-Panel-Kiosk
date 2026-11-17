@@ -817,7 +817,10 @@ func (s *session) onCommand(c playerCommand) {
 			v = c.OutputDelayMs
 		}
 		if v != nil {
-			set.StaticDelayMs = clamp(*v, 0, 5000)
+			// A second is the longest a room may be held back, as it is
+			// upstream. A delay beyond that would hold the audio so far
+			// back that it is late for ever.
+			set.StaticDelayMs = clamp(*v, 0, maxDelayMs)
 		}
 	default:
 		return
