@@ -16,11 +16,6 @@ const BINARY_NAMES = {
 
 const ARCHITECTURES = ["x64", "arm64"];
 
-const RUNTIME_LIBRARIES = {
-  x64: "libonnxruntime-linux-amd64.so.1",
-  arm64: "libonnxruntime-linux-arm64.so.1",
-};
-
 const RUNTIME_PACKAGE_NAME = "libonnxruntime.so.1";
 
 const RUNTIME_CACHE = path.join(
@@ -61,9 +56,10 @@ function copySidecar(outputPath) {
 }
 
 function findRuntime(architecture) {
+  const goarch = architecture === "x64" ? "amd64" : "arm64";
 
   const built = path.join(
-    __dirname, "..", "vendor", RUNTIME_LIBRARIES[architecture]
+    VENDOR_DIRECTORY, goarch, RUNTIME_PACKAGE_NAME
   );
   if (fs.existsSync(built)) return built;
 
@@ -71,8 +67,13 @@ function findRuntime(architecture) {
   if (!fs.existsSync(RUNTIME_CACHE)) return null;
   for (const entry of fs.readdirSync(RUNTIME_CACHE)) {
     if (!entry.startsWith(release)) continue;
-    const library = path.join(RUNTIME_CACHE, entry, "lib", "libonnxruntime.so.1.23.2");
-    if (fs.existsSync(library)) return library;
+    const libraryDirectory = path.join(RUNTIME_CACHE, entry, "lib");
+    if (!fs.existsSync(libraryDirectory)) continue;
+    for (const file of fs.readdirSync(libraryDirectory)) {
+      if (file.startsWith("libonnxruntime.so.1")) {
+        return path.join(libraryDirectory, file);
+      }
+    }
   }
   return null;
 }

@@ -4,9 +4,9 @@ The device program is a sidecar: a separate process that owns the
 connection to Home Assistant, the microphone, the speaker and the wake
 word. This application only renders what it reports.
 
-The binaries are built ahead of time and kept here, one per architecture,
-so the package is self-contained and needs nothing from the network at
-install time.
+The binaries are built ahead of time and placed here, one per
+architecture, so the package is self-contained and needs nothing from the
+network at install time.
 
 ## What is here
 
@@ -23,6 +23,11 @@ beside them in the package. Everything else is static.
 The runtime is in a directory of its own for each architecture because the
 loader finds a library by its soname — `libonnxruntime.so.1` — and the two
 cannot both have that name in one place.
+
+The four files above are built, not kept. They are not in the repository
+and are not in `.gitignore` by name: the build makes them, and CI makes
+them from scratch for the package. `COPYING` and `THIRD-PARTY-NOTICE.md`
+are the exception, because they are ours and not the runtime's.
 
 ## Rebuilding
 

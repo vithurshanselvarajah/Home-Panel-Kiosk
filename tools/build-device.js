@@ -62,6 +62,16 @@ function fetchRuntime(architecture) {
   return target;
 }
 
+function findRuntimeLibrary(libraryDirectory) {
+  if (!fs.existsSync(libraryDirectory)) return null;
+  const candidates = fs
+    .readdirSync(libraryDirectory)
+    .filter((name) => /^libonnxruntime\.so\.1/.test(name))
+    .sort((a, b) => b.length - a.length);
+  if (candidates.length === 0) return null;
+  return path.join(libraryDirectory, candidates[0]);
+}
+
 fs.mkdirSync(vendorDir, { recursive: true });
 
 for (const architecture of ARCHITECTURES) {
@@ -71,13 +81,13 @@ for (const architecture of ARCHITECTURES) {
   const target = path.join(vendorDir, `home-panel-device-linux-${architecture.goarch}`);
   console.log(`build: the device for ${architecture.goarch}`);
 
-  const runtimeLibrary = path.join(libraryDirectory, "libonnxruntime.so.1.23.2");
+  const runtimeLibrary = findRuntimeLibrary(libraryDirectory);
 
   const runtimeDirectory = path.join(vendorDir, architecture.goarch);
   fs.mkdirSync(runtimeDirectory, { recursive: true });
   const runtimeTarget = path.join(runtimeDirectory, "libonnxruntime.so.1");
-  if (!fs.existsSync(runtimeLibrary)) {
-    fail(`the onnx runtime for ${architecture.goarch} was not found: ${runtimeLibrary}`);
+  if (!runtimeLibrary) {
+    fail(`the onnx runtime for ${architecture.goarch} was not found in ${libraryDirectory}`);
   }
   fs.copyFileSync(runtimeLibrary, runtimeTarget);
   fs.chmodSync(runtimeTarget, 0o755);
