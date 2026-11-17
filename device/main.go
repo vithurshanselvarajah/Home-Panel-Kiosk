@@ -670,7 +670,17 @@ func main() {
 			// volume, and the panel's own gain follows it, so the music
 			// and the reply are played at the level Home Assistant
 			// shows.
-			speaker_.setVolume(int(volume * 100))
+			level := int(volume * 100)
+			speaker_.setVolume(level)
+			// The level is kept, as the panel's own is.
+			//
+			// Without this the level Home Assistant asked for is lost
+			// on the next start: the kept level is restored, and then
+			// Home Assistant asks for its own again, and the panel
+			// comes back at a level nobody chose.
+			keepSetting(*settingsFile, log, func(c *Config) {
+				c.Volume = &level
+			})
 		},
 		OnMute: func(muted bool) {
 			// The media player's mute is not acted on.
@@ -1719,6 +1729,12 @@ func applyConfig(c Config, reporter *stateReporter, audio *deviceAudio, wake *wa
 	// they are what make the speaker sound the way the vendor's own
 	// firmware makes it sound.
 	audio.applyAudioSettings(c)
+	// What the speaker and the microphone are now doing is reported back,
+	// so that Home Assistant shows the setting the device is using rather
+	// than the one that was last asked of it.
+	if control != nil {
+		control.SetAudioSettings()
+	}
 
 	if c.WakeWordEnabled != nil {
 		wake.SetEnabled(*c.WakeWordEnabled)
