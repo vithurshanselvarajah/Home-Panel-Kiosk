@@ -337,6 +337,12 @@ func (s *ControlServer) handle(conn net.Conn, message ControlMessage) {
 		handler := s.onTransport
 		s.mu.Unlock()
 		if handler != nil {
+			// The transport is written down, because a button that does
+			// nothing is the hardest kind of fault to see: the panel
+			// says nothing, the device program says nothing, and the
+			// music carries on.
+			s.log.Info("the panel asked for the transport", "action", message.Command.Action,
+				"source", message.Command.Source)
 			handler(message.Command)
 		}
 	case "mute":
