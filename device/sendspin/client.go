@@ -534,6 +534,26 @@ func (c *Client) Active() bool {
 	return s.playing()
 }
 
+// Streaming says whether the music server is playing music.
+//
+// It is not the same as Active, which says whether the server has sent
+// anything at all: the decoder is kept across the end of a stream, so a
+// server that is connected but paused still has one.
+//
+// The distinction matters because the two have their own transports: a
+// command for the music Home Assistant is playing must not be sent to a
+// music server that is merely connected, or it pauses nothing and the
+// music Home Assistant is playing carries on.
+func (c *Client) Streaming() bool {
+	c.mu.Lock()
+	s := c.admitted
+	c.mu.Unlock()
+	if s == nil {
+		return false
+	}
+	return s.playingMusic()
+}
+
 // Buffered is how much audio is queued and not yet played.
 func (c *Client) Buffered() time.Duration {
 	return time.Duration(c.place.queuedMs()) * time.Millisecond

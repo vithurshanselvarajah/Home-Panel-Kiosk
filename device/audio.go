@@ -2721,7 +2721,12 @@ func (a *deviceAudio) startSendspinPump() {
 			// player is in step with its server, how much music is
 			// queued — change without the session changing.
 			a.setSendspinStatus(player.Status())
-			if player.Active() {
+			// The output is kept open while the server is playing
+			// music, and not merely while it is connected: a server
+			// that is connected and paused has nothing to play, and
+			// holding the card open for it would keep the amplifier
+			// awake for silence.
+			if player.Streaming() {
 				a.ensureOutput()
 			}
 		}
