@@ -35,6 +35,15 @@ func TestTheMusicCanBePaused(t *testing.T) {
 	defer server.Close()
 
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
+	// The speaker is one for the whole program, so the loop that has it
+	// is stopped: a test that leaves it running is a test that leaves the
+	// next one without a speaker.
+	//
+	// The music is stopped as well: a paused track is still music, and
+	// the loop that has the speaker waits for the music to end before it
+	// lets the speaker go.
+	defer audio.stopPortedSpeaker()
+	defer audio.StopMedia()
 
 	played := make(chan struct{})
 	go func() {
@@ -99,6 +108,10 @@ func TestTheMusicCanBeStopped(t *testing.T) {
 	defer server.Close()
 
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
+	// The speaker is one for the whole program, so the loop that has it is
+	// stopped: a test that leaves it running is a test that leaves the next
+	// one without a speaker.
+	defer audio.stopPortedSpeaker()
 	go audio.playMediaURL(context.Background(), server.URL, false)
 
 	waitFor(t, func() bool {
