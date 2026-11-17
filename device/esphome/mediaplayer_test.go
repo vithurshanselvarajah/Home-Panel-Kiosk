@@ -76,6 +76,12 @@ func TestAMediaPlayerCommandSetsTheVolume(t *testing.T) {
 	}
 }
 
+// The mute is handed on, and the player does not say it is muted.
+//
+// There is one mute on this device and it is the microphone's, so the
+// speaker's mute is not acted on. The player must therefore not claim to
+// be muted either: a player that says it is muted while the music is
+// playing is telling Home Assistant something untrue.
 func TestAMediaPlayerCommandSetsTheMute(t *testing.T) {
 	player := NewMediaPlayer(nil)
 
@@ -91,8 +97,8 @@ func TestAMediaPlayerCommandSetsTheMute(t *testing.T) {
 	if !got {
 		t.Error("the player was not told it was muted")
 	}
-	if !player.Muted() {
-		t.Error("the player does not think it is muted")
+	if player.Muted() {
+		t.Error("the player says it is muted, but the mute is not acted on")
 	}
 }
 

@@ -216,12 +216,19 @@ func (m *MediaPlayer) HandleCommand(key uint32, request *MediaPlayerCommandReque
 	}
 }
 
-// setMuted records the mute state.
+// setMuted is told the player was muted.
+//
+// The mute is not acted on: there is one mute on this device and it is the
+// microphone's, and it is the hardware latch's. The speaker has a level
+// rather than a mute, and a level of zero is silence when a person wants
+// it.
+//
+// So the state is NOT recorded: the player says it is not muted, because it
+// is not. A player that said it was muted while the music was playing
+// would be telling Home Assistant something untrue, and Home Assistant
+// would show a speaker that is silent and is not.
 func (m *MediaPlayer) setMuted(muted bool) {
-	m.mu.Lock()
-	m.muted = muted
-	m.mu.Unlock()
-	m.log.Info("the player was muted", "muted", muted)
+	m.log.Info("the speaker's mute was ignored", "muted", muted)
 	if m.onMute != nil {
 		m.onMute(muted)
 	}
