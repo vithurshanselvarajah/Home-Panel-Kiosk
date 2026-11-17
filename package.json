@@ -3,6 +3,7 @@
   "version": "0.0.3",
   "private": true,
   "description": "A lightweight Home Assistant display kiosk for Linux and Raspberry Pi",
+  "author": "Vithurshan Selvarajah <vit@selvarajah.co.uk>",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
