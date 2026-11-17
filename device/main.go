@@ -995,6 +995,10 @@ func main() {
 		speaker_.setLouderTop(on)
 		log.Info("louder top volume was switched", "on", on)
 	})
+	control.OnLouderSpeech(func(on bool) {
+		speaker_.setLouderSpeech(on)
+		log.Info("louder speech was switched", "on", on)
+	})
 	control.OnMicCancel(func(on bool) {
 		speaker_.setMicCancel(on)
 		log.Info("echo cancellation was switched", "on", on)

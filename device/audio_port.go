@@ -651,6 +651,11 @@ func (a *deviceAudio) applyAudioSettings(c Config) {
 		louderTop = *c.LouderTop
 	}
 	setLouderTop(louderTop)
+	louderSpeech := false
+	if c.LouderSpeech != nil {
+		louderSpeech = *c.LouderSpeech
+	}
+	louderSpeechOn.Store(louderSpeech)
 }
 
 // The speaker's own settings, and the microphone's.
@@ -716,6 +721,15 @@ func (a *deviceAudio) setClearerSpeech(on bool) {
 // setLouderTop makes the top of the volume dial go hotter into the tuning.
 func (a *deviceAudio) setLouderTop(on bool) {
 	setLouderTop(on)
+}
+
+// setLouderSpeech compresses the replies, so that the quiet parts of the
+// words come up and the loud ones are held down.
+//
+// It is what Amazon does with a reply: speech that has only been brought
+// up to a level still sounds quieter than Amazon's, which compresses it.
+func (a *deviceAudio) setLouderSpeech(on bool) {
+	louderSpeechOn.Store(on)
 }
 
 // setMicCancel turns echo cancellation on or off.
