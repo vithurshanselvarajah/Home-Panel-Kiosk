@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/mewkiz/flac/frame"
+	"github.com/pion/opus"
 )
 
 // The one format the device asks for. A single rate and channel count, so the
@@ -45,6 +46,14 @@ type streamFormat struct {
 // at outRate.
 type decoder struct {
 	f streamFormat
+	// opus is the Opus decoder, when the stream is Opus.
+	//
+	// It is state: an Opus frame is decoded against the one before it, so
+	// the decoder is kept for the length of the stream.
+	opus opus.Decoder
+	// opusOut is where the Opus samples are decoded into. An Opus frame
+	// is at most 120 ms: 5760 samples per channel at 48 kHz.
+	opusOut []int16
 }
 
 var errFormat = errors.New("sendspin: stream format the device did not ask for")
@@ -61,6 +70,15 @@ func newDecoder(f streamFormat) (*decoder, error) {
 				return nil, errors.New("sendspin: flac codec_header is not a FLAC stream header")
 			}
 		}
+	case "opus":
+		// The decoder is made here, so a codec that cannot be decoded
+		// is refused when the stream starts rather than when the first
+		// chunk arrives.
+		dec, err := opus.NewDecoderWithOutput(outRate, outChannels)
+		if err != nil {
+			return nil, fmt.Errorf("%w: opus decoder: %w", errFormat, err)
+		}
+		return &decoder{f: f, opus: dec}, nil
 	case "pcm":
 	default:
 		return nil, fmt.Errorf("%w: codec %q", errFormat, f.Codec)
@@ -74,6 +92,16 @@ func newDecoder(f streamFormat) (*decoder, error) {
 // may) is laid into both channels: one sample, one frame, the same in each
 // ear, which is what a single enclosure wants.
 func (d *decoder) decode(dst []int16, payload []byte) ([]int16, error) {
+	if d.f.Codec == "opus" {
+		if d.opusOut == nil {
+			d.opusOut = make([]int16, 5760*outChannels)
+		}
+		n, err := d.opus.DecodeToInt16(payload, d.opusOut)
+		if err != nil {
+			return dst, fmt.Errorf("sendspin: opus decode: %w", err)
+		}
+		return append(dst, d.opusOut[:n*outChannels]...), nil
+	}
 	if d.f.Codec == "pcm" {
 		n := len(payload) / 2 / d.f.Channels
 		for i := 0; i < n; i++ {

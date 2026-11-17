@@ -55,6 +55,9 @@ const holdMax = 60 * outRate
 //
 // maxSnap is the largest correction that can be one, above which the anchor
 // predates a change of clock rather than having drifted.
+// maxDelayMs is the longest a room may be held back, in milliseconds.
+const maxDelayMs = 1000
+
 // reanchorFrames is how far a chunk may be from the anchor before the
 // placement lays a new one.
 //
@@ -160,10 +163,6 @@ type placement struct {
 	// gain is what frames are multiplied by now and target what a duck
 	// has asked for.
 	gain, target float32
-
-	// logRaw says to log the placement, for working out where the audio
-	// goes.
-	logRaw bool
 
 	// chunks is how many chunks have arrived and samples how many frames
 	// they carried.
@@ -355,11 +354,6 @@ func (o *placement) frameFor(at int64) int64 {
 	// before the speaker started writing is a negative one, which is the
 	// frame the audio belongs at.
 	o.frame = int64(written) + int64(max(0, ahead.Seconds()*outRate))
-	if o.logRaw {
-		log.Printf("[sendspin] anchored frame=%d written=%d ahead_ms=%d latency_ms=%d at=%d now=%d serverLocal=%v",
-			o.frame, written, ahead.Milliseconds(), latency.Milliseconds(), at, nowUs(),
-			o.serverToLocal(at))
-	}
 	o.at = at
 	o.anchored = true
 	if o.frame < 0 {
@@ -557,6 +551,10 @@ func (o *placement) tail() int64 {
 // setDelay holds the room back by ms against the server's schedule, now:
 // what is queued moves with it.
 func (o *placement) setDelay(ms int) {
+	// The delay is held to what a room can be held back by: a second. A
+	// delay beyond that would hold the audio so far back that it is late
+	// for ever.
+	ms = min(max(ms, 0), maxDelayMs)
 	n := int64(ms) * outRate / 1000
 
 	o.mu.Lock()
