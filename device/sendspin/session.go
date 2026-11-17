@@ -738,6 +738,32 @@ func (s *session) playing() bool {
 	return s.dec != nil
 }
 
+// playingMusic says whether the server is playing music right now.
+//
+// It is the server's own answer rather than the decoder's presence: a
+// server that is connected and paused still has a decoder, and a command
+// sent to it pauses nothing.
+//
+// The server says it is playing, and the panel is not holding it: a
+// pause asked for here is a pause the server has been told about, and
+// the server has to answer it.
+func (s *session) playingMusic() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.serverPlaying && s.serverSaid && !s.heldForPause()
+}
+
+// heldForPause says whether the panel has asked for a pause that the
+// server has not answered yet.
+//
+// A local pause is a request: the panel has asked the server to stop,
+// and the server will say so when it has done it. Until then the music
+// is still the server's to play.
+func (s *session) heldForPause() bool {
+	asked, _ := s.asked.Load().(string)
+	return asked == "pause"
+}
+
 // endStream is the server saying the stream is over.
 //
 // The spec has stream/end stop the output and clear the buffers, and the

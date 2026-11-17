@@ -443,6 +443,16 @@ func (o *placement) anchorAt(at int64) int64 {
 		o.frame = 0
 	}
 	o.played = uint64(o.frame)
+	// Both conversions of the same timestamp: the lead through the local
+	// clock, and the lead in the server's own frame. They should agree,
+	// and where they do not, one of the two is wrong.
+	//
+	// This is said once, when the anchor is laid: an anchor that is
+	// wrong is the whole of the crackle, and the correction spends its
+	// time snapping it back in small steps.
+	log.Printf("[sendspin] anchored frame=%d ahead_ms=%d latency_ms=%d lead_ms=%d written=%d queued_ms=%d",
+		o.frame, ahead.Milliseconds(), latency.Milliseconds(),
+		(at-o.filter.serverTime(nowUs()))/1000, written, len(o.pcm)/outChannels*1000/outRate)
 	return o.frame
 }
 

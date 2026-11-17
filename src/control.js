@@ -222,9 +222,6 @@ class ControlClient {
    * @param {object} command the command
    * @returns {boolean} whether it was sent
    */
-  /**
-   * Asks the device program to mute the microphone.
-   *
   sendTransport(command) {
     if (!this.connection || !this.connected) return false;
     try {

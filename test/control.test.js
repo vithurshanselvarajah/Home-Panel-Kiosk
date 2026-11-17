@@ -78,7 +78,7 @@ test("the client gives a command to the peer", async () => {
   fs.rmSync(socket, { force: true });
 });
 
-test("the client returns a camera frame with its request id", async () => {
+test("the client sends the camera password", async () => {
   const socket = socketPath();
   const received = [];
   const server = net.createServer((conn) => {
@@ -92,10 +92,10 @@ test("the client returns a camera frame with its request id", async () => {
   const client = new ControlClient({ socket });
   client.start();
   await waitFor(() => client.connected);
-  assert.equal(client.sendCameraFrame("request-7", "an-image", ""), true);
-  await waitFor(() => received.some((message) => message.action === "camera_frame"));
-  assert.deepEqual(received.find((message) => message.action === "camera_frame"), {
-    action: "camera_frame", cameraRequestId: "request-7", cameraData: "an-image", cameraError: "",
+  assert.equal(client.sendCameraPassword("a-secret"), true);
+  await waitFor(() => received.some((message) => message.action === "camera_password"));
+  assert.deepEqual(received.find((message) => message.action === "camera_password"), {
+    action: "camera_password", cameraPassword: "a-secret",
   });
   client.stop();
   server.close();

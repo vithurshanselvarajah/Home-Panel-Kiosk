@@ -169,3 +169,59 @@ func TestTheHeldChunkIsPlayedWhole(t *testing.T) {
 			queued, frames)
 	}
 }
+
+// A server that is connected but paused is not playing music.
+//
+// The decoder is kept across the end of a stream, so a server that has
+// been paused still has one. A command sent to it pauses nothing, and
+// the music Home Assistant is playing carries on: the person pressed
+// pause and the music did not stop.
+func TestAPausedServerIsNotPlayingMusic(t *testing.T) {
+	s := &session{filter: newTimeFilter()}
+
+	// The server has said it is playing.
+	s.serverSaid = true
+	s.serverPlaying = true
+	if !s.playingMusic() {
+		t.Fatal("the server says it is playing, and it does not")
+	}
+
+	// It is paused now.
+	s.serverPlaying = false
+	if s.playingMusic() {
+		t.Error("the server is paused, and it says it is playing music")
+	}
+
+	// And playing again.
+	s.serverPlaying = true
+	if !s.playingMusic() {
+		t.Error("the server is playing again, and it does not say so")
+	}
+}
+
+// A pause asked for here is a request, not a pause.
+//
+// The server has been told to stop and has not said so yet. The music is
+// still the server's to play, so a command sent to it is not swallowed.
+func TestAPauseAskedForHereIsNotYetAPause(t *testing.T) {
+	s := &session{filter: newTimeFilter()}
+	s.serverSaid = true
+	s.serverPlaying = true
+
+	// The panel asks for a pause.
+	s.asked.Store("pause")
+	if s.playingMusic() {
+		t.Error("the server is still playing, and it says it is not")
+	}
+}
+
+// A server that has not said anything is not playing music.
+//
+// A server that has never answered has never said it is playing, and a
+// command sent to it pauses nothing.
+func TestAServerThatHasNotSpokenIsNotPlayingMusic(t *testing.T) {
+	s := &session{filter: newTimeFilter()}
+	if s.playingMusic() {
+		t.Error("the server has not said anything, and it says it is playing music")
+	}
+}
