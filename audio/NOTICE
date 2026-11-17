@@ -3,10 +3,13 @@ The audio stack in this directory is derived from TECHO5
 TECHO5 contributors.
 
 The packages under alsa, asp, audio, aec, beat, denoise, echoref, fft, hook, i2c,
-rate, safe, spectrum, subband, vec, and the microphone and the speaker under
-mic and speaker, are TECHO5's, copied with only the import paths rewritten,
-the licence noted above, and the framework's own configuration, board
-description and service plumbing replaced by the shim under mic/framework.
+mwwfront, oww, rate, safe, safename, spectrum, subband, tflite, unseen, vec,
+and the microphone and the speaker under mic and speaker, are TECHO5's,
+copied with only the import paths rewritten, the licence noted above, and
+the framework's own configuration, board description and service plumbing
+replaced by the shim under mic/framework. The wake word engine under
+third_party/microwakeword is TECHO5's too, with its import paths
+rewritten.
 
 The shim under mic/framework stands in for the parts of TECHO5's daemon
 framework that the audio code used: the configuration, the board the build
@@ -20,8 +23,20 @@ Notices carried over from TECHO5's NOTICE, for the parts of it that are
 here:
 
   microWakeWord's audio front end (TensorFlow Lite Micro's microfrontend),
-  in TECHO5's lib/mwwfront — Apache License 2.0. Not here: this project
-  uses openWakeWord through the ONNX Runtime, not microWakeWord.
+  in TECHO5's lib/mwwfront — Apache License 2.0. Here, in audio/mwwfront,
+  with the engine and its interpreter under audio/third_party/microwakeword
+  and audio/tflite.
+
+  The microWakeWord TFLite model files in
+  audio/third_party/microwakeword/testdata (all but add_pool.tflite) are
+  from the micro-wake-word-models project by Kevin Ahrendt and
+  contributors (https://github.com/kahrendt/micro-wake-word-models) —
+  Apache License 2.0. The notice is in testdata/NOTICE.
+
+  The openWakeWord mel and embedding models, in audio/oww/assets — the
+  shared front end every openWakeWord classifier is trained against, from
+  the openWakeWord project (https://github.com/dscripka/openWakeWord) —
+  Apache License 2.0.
 
   KISS FFT's fixed point real FFT, in TECHO5's lib/fft — BSD 3-Clause
   License. Here, in audio/fft.
