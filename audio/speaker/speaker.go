@@ -1358,6 +1358,10 @@ func (p *Player) SetTone(t asp.Tone) { p.tone.Store(t) }
 // (asp.SpeechCut). It is the tuning's own stage, so it does nothing where the tuning is off.
 func (p *Player) SetClearerSpeech(on bool) { p.clearer.Store(on) }
 
+// ClearerSpeech says whether the tuning's low band is brought down while
+// words are played.
+func (p *Player) ClearerSpeech() bool { return p.clearer.Load() }
+
 // Tone is what the shelves are set to.
 func (p *Player) Tone() asp.Tone {
 	t, _ := p.tone.Load().(asp.Tone)

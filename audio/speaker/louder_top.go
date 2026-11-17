@@ -42,6 +42,10 @@ func LouderTopPossible() bool {
 // period, so the level changes at once; on a tuning with no lift, or played untuned, it does nothing.
 func (p *Player) SetLouderTop(on bool) { p.louderTop.Store(on) }
 
+// LouderTop says whether the top of the volume dial goes hotter into the
+// tuning.
+func (p *Player) LouderTop() bool { return p.louderTop.Load() }
+
 // inFront is the curve to put in front of the tuning now: the lifted one while Louder top volume is
 // on and this tuning has one, else first (nil when there is none).
 func (p *Player) inFront() *[VolumeSteps + 1]float64 {
