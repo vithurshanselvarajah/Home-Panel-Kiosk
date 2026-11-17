@@ -2103,16 +2103,15 @@ func (a *deviceAudio) outputLoop(ctx context.Context, generation int) {
 			}
 		}
 
-		musicReady := player != nil && player.Active()
-		if musicReady {
-			// The music is attached to the speaker as a source it pulls
-			// from: the frames are placed by the server's clock, so
-			// they have to be asked for at the moment they are due.
-			source := a.musicSourceFor(player)
-			spk.Attach(source)
-		} else if spk != nil {
-			spk.Detach(a.musicSource)
-		}
+		// The music is NOT attached here.
+		//
+		// The placement attaches itself when a stream opens and detaches
+		// when it ends. A timer that looked at whether there was audio
+		// right now would detach the source whenever the queue was
+		// momentarily empty — between two chunks, and after a clear — and
+		// it would never be attached again, because the queue stays
+		// empty while nothing is pulling from it. The music would then
+		// never come back, and the room would say playing in silence.
 
 		// The ported speaker does the rest: it holds the queues, applies
 		// the gain and the ducking, runs the vendor's tuning, converts
@@ -2491,6 +2490,24 @@ func (a *deviceAudio) applySendspinConfig(cfg Config) {
 		// The two come from one reading of the card, so they always
 		// belong together: the frame that is going to the card next, and
 		// the moment it will be heard.
+		// The placement takes the speaker when a stream opens and gives
+		// it back when the stream ends.
+		player.SetAttach(
+			func() {
+				spk := speaker.Get()
+				if spk == nil {
+					return
+				}
+				spk.Attach(a.musicSourceFor(player))
+			},
+			func() {
+				spk := speaker.Get()
+				if spk == nil {
+					return
+				}
+				spk.Detach(a.musicSourceFor(player))
+			},
+		)
 		player.SetPlacement(
 			func() (uint64, time.Duration) {
 				spk := speaker.Get()

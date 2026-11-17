@@ -210,6 +210,9 @@ func (s *session) dispatch(env envelope) error {
 	case "stream/end":
 		var r streamRoles
 		json.Unmarshal(env.Payload, &r)
+		if s.c.place.logRaw {
+			log.Printf("[sendspin] stream/end covers=%v", r.covers("player"))
+		}
 		if r.covers("player") {
 			s.endStream()
 		}
@@ -219,6 +222,10 @@ func (s *session) dispatch(env envelope) error {
 			s.mu.Lock()
 			s.group = g
 			s.mu.Unlock()
+			if s.c.place.logRaw {
+				log.Printf("[sendspin] group/update state=%q", g.PlaybackState)
+			}
+			s.onPlaybackState(g.PlaybackState)
 			s.c.changed()
 		}
 	case "server/state":
@@ -520,6 +527,46 @@ func (s *session) onServerState(st serverState) {
 	s.c.changed()
 }
 
+// onPlaybackState is what the server says it is doing.
+//
+// Music Assistant does not pause a Sendspin stream: it ends it, clears the
+// track and lets the output go. It resumes only a player it sees as
+// stopped — one it sees as paused is sent a plain "unpause" that nothing
+// here can act on, and the room says playing in silence.
+//
+// So the panel says what the server said. A pause stops the audio and
+// keeps the track, so that a play starts it again. A stop stops it and
+// lets go, so that a play starts the queue again where it was.
+//
+// A stop from the server while it was playing, that nobody here asked for,
+// is Music Assistant's own pause as often as it is a stop, and it is said
+// as a pause first: Music Assistant keeps the place in the track when a
+// player goes from playing to paused to stopped, as it does after a pause
+// from the screen, and starts the track over when it goes straight from
+// playing to stopped.
+func (s *session) onPlaybackState(state string) {
+	switch state {
+	case "paused", "stopped":
+		s.hold(true)
+	case "playing":
+		s.hold(false)
+	}
+}
+
+// hold stops or starts the audio without letting go of the track.
+//
+// The placement is flushed, so the audio that was queued is dropped and
+// the next chunk is placed afresh: a pause means the timeline is about to
+// change, and what was queued belongs to the timeline before it.
+//
+// The hold is released when the server says it is playing again, and not
+// only when a new stream starts: the server ends the stream on a pause and
+// resumes the same one, and it says it is playing before it says it has
+// started.
+func (s *session) hold(paused bool) {
+	s.c.place.hold(paused)
+}
+
 // Controller says what the transport can do.
 //
 // It is nil until the server says, and the panel only offers the
@@ -585,12 +632,17 @@ func (s *session) onStreamStart(f streamFormat) {
 		s.c.place.resetStats()
 	}
 	// The placement is opened for the stream: it is what the speaker pulls
-	// from, and what the server's audio is placed into.
+	// from, and what the server's audio is placed into. A stream that
+	// starts releases the hold a pause put on it.
 	if s.isAdmitted() {
-		s.c.place.open()
+		s.c.place.openAgain()
 	}
 	s.dec, s.streaming = d, true
-	log.Printf("[sendspin] stream: %s %dHz %dch", f.Codec, f.SampleRate, f.Channels)
+	if s.c.place.logRaw {
+		log.Printf("[sendspin] stream/start %s %dHz %dch", f.Codec, f.SampleRate, f.Channels)
+	} else {
+		log.Printf("[sendspin] stream: %s %dHz %dch", f.Codec, f.SampleRate, f.Channels)
+	}
 	s.c.changed()
 }
 
@@ -602,22 +654,50 @@ func (s *session) onStreamStart(f streamFormat) {
 func (s *session) playing() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.streaming && s.dec != nil
+	// The decoder is what says the server is sending audio, and it is
+	// kept across the end of a stream: the server ends a stream on a
+	// pause and resumes the same one.
+	return s.dec != nil
 }
 
+// endStream is the server saying the stream is over.
+//
+// The spec has stream/end stop the output and clear the buffers, and the
+// server sends it on a stop, a skip and a seek. A track running into the
+// next one keeps the stream and says nothing.
+//
+// So the placement is not closed here: it is held, and the audio that
+// arrives while it is held is dropped. Closing it would leave the
+// placement closed until a new stream started, and the server does not
+// necessarily start a new one — it may resume the stream it just ended,
+// which is what a pause and a play is. The audio would then never be
+// placed again, and the room would say playing in silence.
 func (s *session) endStream() {
 	if s.streaming && s.isAdmitted() {
-		s.c.place.flush()
-		s.c.place.close()
+		s.c.place.hold(true)
 	}
-	s.dec, s.streaming = nil, false
+	// The decoder is KEPT.
+	//
+	// The server ends the stream on a stop, a skip and a seek, and then
+	// resumes the same one: a pause and a play. A new stream/start comes
+	// with a new track, not with a resumed one. So the decoder is kept, or
+	// the audio that arrives after the resume would be discarded for
+	// want of one, and the room would say playing in silence.
+	s.streaming = false
 	s.c.changed()
 }
 
 func (s *session) onAudio(msg []byte) {
 	// Audio for a connection that is not the admitted one, or while HA has
 	// the music plane, is discarded — valid, and never a reason to close.
+	//
+	// A stream that was ended and is being resumed still has its decoder:
+	// the server ends a stream on a pause and resumes the same one.
 	if s.dec == nil || !s.isAdmitted() || s.c.external() {
+		return
+	}
+	// And it is not placed while the audio is held.
+	if s.c.place.Held() {
 		return
 	}
 	ts, payload, err := chunkPayload(msg, s.dec.f.Codec)
