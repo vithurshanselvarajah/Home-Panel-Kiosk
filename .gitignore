@@ -4,3 +4,23 @@ dist/
 .DS_Store
 npm-debug.log*
 pnpm-debug.log*
+
+# The device program and the ONNX Runtime are built, not kept. The
+# package is built from scratch in CI, so these are never committed.
+# The licence and the notice beside them are, because they are ours.
+vendor/home-panel-device-linux-*
+vendor/amd64/
+vendor/arm64/
+
+# Chromium downloads a spellcheck dictionary into the working directory
+# when it starts, and it is not ours to keep.
+*.bdic
+
+# The Go modules build their own output.
+audio/echomuse-device
+device/echomuse-device
+/device/device
+
+# A recording of somebody's voice, kept for testing the wake word. It is
+# not ours to keep.
+WakeWord*.mp3

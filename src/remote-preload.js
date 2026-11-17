@@ -1,12 +1,5 @@
 const { ipcRenderer } = require("electron");
 
-// Report only whether HA currently has a text editor focused. No kiosk command
-// API is exposed to the remote page.
-//
-// focusin is a composed event, so a single capture listener on the document
-// sees focus changes from any shadow root at any depth. That avoids walking
-// the Home Assistant DOM to discover shadow hosts, which was expensive because
-// the dashboard re-renders on every state change.
 let focusCheckQueued = false;
 
 function isEditableElement(node) {
@@ -39,17 +32,3 @@ function queueFocusCheck() {
 
 document.addEventListener("focusin", queueFocusCheck, true);
 document.addEventListener("focusout", queueFocusCheck, true);
-
-let edgeSwipeStart;
-document.addEventListener("pointerdown", (event) => {
-  edgeSwipeStart = { x: event.clientX, y: event.clientY };
-}, true);
-document.addEventListener("pointerup", (event) => {
-  if (!edgeSwipeStart) return;
-  const dx = event.clientX - edgeSwipeStart.x;
-  const dy = Math.abs(event.clientY - edgeSwipeStart.y);
-  const edge = document.documentElement.clientWidth - 45;
-  if (edgeSwipeStart.x > edge && dx < -55 && dy < 90) ipcRenderer.send("remote:open-side-panel");
-  edgeSwipeStart = undefined;
-}, true);
-document.addEventListener("pointercancel", () => { edgeSwipeStart = undefined; }, true);

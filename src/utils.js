@@ -9,9 +9,6 @@ function safeUrl(raw) {
 
 const NAMED_KEYS = new Set(["BACKSPACE", "SPACE", "ENTER", "SHIFT", "TAB", "LEFT", "RIGHT"]);
 
-// Applies an on-screen keyboard key to a text-like field descriptor and
-// returns the new value plus caret position. Pure so it can be unit tested
-// without a DOM, and safe to pass across the renderer bridge.
 function editFieldValue(field, key) {
   const current = typeof field?.value === "string" ? field.value : "";
   const type = field?.type || "text";
@@ -40,4 +37,36 @@ function insertText(field, current, text) {
   return { value: current.slice(0, start) + text + current.slice(end), caret: start + text.length };
 }
 
-module.exports = { safeUrl, editFieldValue };
+function settingNumber(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function settingBoolean(value) {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+const DISPLAY_MODES = ["fullscreen", "window"];
+
+function displayMode(value) {
+  return DISPLAY_MODES.includes(value) ? value : "fullscreen";
+}
+
+function hostIdentity(value) {
+  const hostname = String(value || "").trim();
+  return hostname || "home-panel";
+}
+
+function windowBounds(bounds) {
+  const width = Math.max(900, Math.min(1440, Math.round(bounds.width * 0.78)));
+  const height = Math.max(600, Math.min(900, Math.round(bounds.height * 0.78)));
+  return {
+    x: Math.round(bounds.x + (bounds.width - width) / 2),
+    y: Math.round(bounds.y + (bounds.height - height) / 2),
+    width,
+    height,
+  };
+}
+
+module.exports = { safeUrl, editFieldValue, settingNumber, settingBoolean, displayMode, windowBounds, hostIdentity, DISPLAY_MODES };

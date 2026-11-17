@@ -1,0 +1,60 @@
+The audio stack in this directory is derived from TECHO5
+(https://github.com/HuskerMinion/techo5), MIT licensed. Copyright (c) 2026
+TECHO5 contributors.
+
+The packages under alsa, asp, audio, aec, beat, denoise, echoref, fft, hook, i2c,
+mwwfront, oww, rate, safe, safename, spectrum, subband, tflite, unseen, vec,
+and the microphone and the speaker under mic and speaker, are TECHO5's,
+copied with only the import paths rewritten, the licence noted above, and
+the framework's own configuration, board description and service plumbing
+replaced by the shim under mic/framework. The wake word engine under
+third_party/microwakeword is TECHO5's too, with its import paths
+rewritten.
+
+The shim under mic/framework stands in for the parts of TECHO5's daemon
+framework that the audio code used: the configuration, the board the build
+is for, and the software mute. The audio code reads them where it expects
+them, so that the audio code itself stays as it was written and as it was
+tested.
+
+TECHO5's own tests came with the code, and they run here unchanged.
+
+Notices carried over from TECHO5's NOTICE, for the parts of it that are
+here:
+
+  microWakeWord's audio front end (TensorFlow Lite Micro's microfrontend),
+  in TECHO5's lib/mwwfront — Apache License 2.0. Here, in audio/mwwfront,
+  with the engine and its interpreter under audio/third_party/microwakeword
+  and audio/tflite.
+
+  The microWakeWord TFLite model files in
+  audio/third_party/microwakeword/testdata (all but add_pool.tflite) are
+  from the micro-wake-word-models project by Kevin Ahrendt and
+  contributors (https://github.com/kahrendt/micro-wake-word-models) —
+  Apache License 2.0. The notice is in testdata/NOTICE.
+
+  The openWakeWord mel and embedding models, in audio/oww/assets — the
+  shared front end every openWakeWord classifier is trained against, from
+  the openWakeWord project (https://github.com/dscripka/openWakeWord) —
+  Apache License 2.0.
+
+  KISS FFT's fixed point real FFT, in TECHO5's lib/fft — BSD 3-Clause
+  License. Here, in audio/fft.
+
+  The Home Assistant Voice sounds, in TECHO5's
+  echod/internal/hardware/speaker/sounds — Creative Commons Attribution 4.0
+  International (https://creativecommons.org/licenses/by/4.0/).
+  "Home Assistant Voice Preview Edition Sounds" © 2024 by Clayton Charles
+  Tapp (https://www.cctaudio.com/), from
+  https://github.com/esphome/home-assistant-voice-pe/tree/dev/sounds.
+  Here, in audio/speaker/sounds, with their licence note beside them.
+
+  The Echo 2nd gen's parametric EQ (TECHO5's lib/asp/peq.go) uses the
+  vendor's own filter designs as EchoMuse PR #687 read them out of the
+  vendor's library: Zölzer's shelf and peak, the shelf taking no Q and
+  root two written as 1.4142. Written there from those findings, not
+  copied.
+
+The vendor's own audio tuning is not here and is not shipped: it is read off
+the device at run time from the vendor partition, the way TECHO5 does it. The
+coefficients are the vendor's and are not ours to ship.

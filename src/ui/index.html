@@ -3,48 +3,203 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
+
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: http: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:*;" />
     <title>Home Panel</title>
     <link rel="stylesheet" href="./style.css" />
+    <script src="./dev-bridge.js"></script>
   </head>
   <body>
-    <button id="return-home" class="return-home" hidden>⌂ <span>Return to Home</span></button>
+
+    <div id="volume-popup" class="volume-popup" role="status" aria-live="polite" hidden>
+      <div class="volume-popup__bar">
+        <svg class="volume-popup__icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+          <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        </svg>
+        <div class="volume-popup__track"><i id="volume-popup-fill"></i></div>
+        <span id="volume-popup-value" class="volume-popup__value">0</span>
+      </div>
+    </div>
+
+    <div id="mute-indicator" class="mute-indicator" role="status" aria-live="polite" hidden>
+      <svg class="mute-indicator__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z" fill="currentColor" />
+        <path d="M6 11a6 6 0 0 0 12 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+        <path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" />
+      </svg>
+      <span>Microphone muted</span>
+    </div>
+    <button id="return-home" class="return-home" hidden><span class="return-home__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.2 12 4l8 7.2V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg></span> <span>Return to Home</span></button>
     <div id="side-panel-backdrop" class="side-panel-backdrop" hidden></div>
     <main id="notice" class="notice" aria-live="polite" hidden>
-      <div class="notice-icon">⌁</div><div class="notice-copy"><strong id="notice-title"></strong><span id="notice-message"></span></div>
+      <div class="notice-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a5.5 5.5 0 0 1 5.5 5.5v4l1.6 3.2H4.9L6.5 13V9A5.5 5.5 0 0 1 12 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 19a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div><div class="notice-copy"><strong id="notice-title"></strong><span id="notice-message"></span></div>
       <button class="notice-close" data-action="dismiss_notification" aria-label="Dismiss">×</button>
     </main>
     <aside id="side-panel" class="side-panel" aria-hidden="true">
-      <header class="drawer-heading"><div><span class="eyebrow">HOME PANEL</span><h2>Quick controls</h2></div></header>
+      <header class="drawer-heading"><div><h2>Quick controls</h2></div></header>
+
+      <section class="quick-controls" aria-label="Display and sound">
+        <div class="quick-control" id="brightness-control" hidden>
+          <div class="quick-control__head">
+            <span class="quick-control__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6M18.6 5.4l-1.6 1.6M7 17l-1.6 1.6M18.6 18.6 17 17M7 7 5.4 5.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>
+            <span class="quick-control__label">Brightness</span>
+            <span class="quick-control__value" id="brightness-value">—</span>
+          </div>
+
+          <input class="slider" id="brightness-slider" type="range" min="1" max="100" step="1" value="50" aria-label="Brightness" />
+        </div>
+        <div class="quick-control" id="volume-control" hidden>
+          <div class="quick-control__head">
+            <span class="quick-control__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18.5V6.2l10-2v12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="7" cy="18.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="17" cy="16.2" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/></svg></span>
+            <span class="quick-control__label">Volume</span>
+            <span class="quick-control__value" id="volume-value">—</span>
+          </div>
+          <input class="slider" id="volume-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Volume" />
+        </div>
+      </section>
+
+      <section class="media-panel" id="media-panel" aria-label="Now playing" hidden>
+
+        <div class="media-panel__sources" id="media-sources" role="group" aria-label="Music source">
+          <button class="media-source is-selected" id="media-source-server" data-source="server">Music server</button>
+          <button class="media-source" id="media-source-home" data-source="home">Home Assistant</button>
+        </div>
+        <div class="media-panel__art">
+          <img id="media-artwork" class="media-panel__image" alt="" hidden />
+          <span id="media-artwork-fallback" class="media-panel__fallback" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18.5V6.2l10-2v12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="7" cy="18.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="17" cy="16.2" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/></svg></span>
+        </div>
+        <div class="media-panel__details">
+          <span id="media-title" class="media-panel__title">Nothing playing</span>
+          <span id="media-artist" class="media-panel__artist"></span>
+        </div>
+        <div class="media-panel__scrub">
+          <input id="media-position" class="slider slider--slim" type="range" min="0" max="1000" step="1" value="0" aria-label="Position in track" disabled />
+          <div class="media-panel__times"><span id="media-elapsed">0:00</span><span id="media-duration">0:00</span></div>
+        </div>
+        <div class="media-panel__transport" role="group" aria-label="Playback">
+          <button class="media-button" id="media-previous" data-transport="previous" aria-label="Previous track"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6v12M19 6l-9 6 9 6V6z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" /></svg></button>
+          <button class="media-button media-button--play" id="media-play" data-transport="play" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5z" fill="currentColor" /></svg></button>
+          <button class="media-button" id="media-next" data-transport="next" aria-label="Next track"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 6v12M5 6l9 6-9 6V6z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" /></svg></button>
+        </div>
+      </section>
+      <div class="drawer-actions">
+        <button class="drawer-button" data-action="dashboard"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.2 12 4l8 7.2V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg></span><span id="dashboard-action-label" class="button-label">Dashboard</span></button>
+        <button class="drawer-button" data-action="slideshow" id="slideshow-action"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M4.5 17.5 10 12l3.5 3.5L16 13l4 4.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg></span>Photo slideshow</button>
+        <button id="settings-button" class="drawer-button"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 3.2v2.4M12 18.4v2.4M20.8 12h-2.4M5.6 12H3.2M18.2 5.8l-1.7 1.7M7.5 16.5l-1.7 1.7M18.2 18.2l-1.7-1.7M7.5 7.5 5.8 5.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>Settings</button>
+        <div class="drawer-divider"></div>
+        <button class="drawer-button" id="display-mode-button"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg></span><span id="display-mode-label" class="button-label">Window mode</span></button>
+        <button class="drawer-button drawer-button--exit" id="exit-button"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /><path d="M7 6.5a7 7 0 1 0 10 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span>Exit</button>
+      </div>
+
       <section class="service-status" aria-label="Service status">
-        <div class="service-row"><i class="service-led" data-service="mqtt"></i><span>MQTT</span><b id="mqtt-state">Checking</b></div>
+        <div class="service-row"><i class="service-led" data-service="control"></i><span>ESPHome</span><b id="control-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="immich"></i><span>Immich Kiosk</span><b id="immich-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="dashboard"></i><span>Dashboard</span><b id="dashboard-state">Checking</b></div>
       </section>
-      <div class="drawer-actions">
-        <button class="drawer-button" data-action="dashboard"><span>⌂</span><span id="dashboard-action-label" class="button-label">Dashboard</span></button>
-        <button class="drawer-button" data-action="slideshow" id="slideshow-action"><span>▧</span>Photo slideshow</button>
-        <button id="settings-button" class="drawer-button"><span>⚙</span>Settings</button>
-      </div>
-      <footer id="mode-label">Dashboard</footer>
+      <footer class="drawer-footer">
+        <span id="mode-label">Dashboard</span>
+        <span id="version-label" class="version-label"></span>
+      </footer>
     </aside>
     <section id="keyboard" class="keyboard" aria-label="Touch keyboard" hidden></section>
+
+    <div id="voice-overlay" class="voice-overlay" hidden>
+      <div class="voice-overlay__inner">
+        <div class="voice-overlay__orb" id="voice-overlay-orb" aria-hidden="true">
+          <div class="voice-overlay__ring"></div>
+          <div class="voice-overlay__core"></div>
+        </div>
+        <div class="voice-overlay__state" id="voice-overlay-state">Listening</div>
+
+        <div class="voice-overlay__text voice-overlay__text--heard" id="voice-overlay-heard" aria-live="polite"></div>
+
+        <div class="voice-overlay__text voice-overlay__text--said" id="voice-overlay-said" aria-live="polite"></div>
+      </div>
+    </div>
     <section id="settings-panel" class="settings-panel" hidden>
       <div class="panel-heading"><div><span class="eyebrow">DEVICE SETUP</span><h1>Home Panel</h1></div><button id="close-settings" class="close-button" aria-label="Close">×</button></div>
+      <nav class="settings-tabs" role="tablist">
+        <button class="settings-tab" id="tab-device" role="tab" aria-selected="true" aria-controls="settings-view-device">Device</button>
+        <button class="settings-tab" id="tab-voice" role="tab" aria-selected="false" aria-controls="settings-view-voice">Voice</button>
+      </nav>
+      <div class="settings-view" id="settings-view-device" role="tabpanel" aria-labelledby="tab-device">
       <p class="panel-intro">Connect your dashboard, Immich Kiosk, and Home Assistant controls.</p>
+      <div class="host-identity" aria-label="Device identity"><span>DEVICE IDENTITY</span><strong id="device-hostname">—</strong><small>Always taken from this machine’s hostname</small></div>
       <form id="settings-form">
         <label>Home Assistant dashboard URL<input name="dashboardUrl" type="url" placeholder="http://homeassistant.local:8123" required /></label>
         <label>Immich Kiosk URL <span class="optional">optional</span><input name="slideshowUrl" type="url" placeholder="http://immich-kiosk.local:3000" /></label>
-        <div class="two-col"><label>Idle before slideshow <span class="field-unit">minutes · 0 disables</span><input name="idleToSlideshowMinutes" type="number" min="0" max="1440" /></label><label>Slideshow before screen off <span class="field-unit">minutes · 0 disables</span><input name="slideshowToOffMinutes" type="number" min="0" max="1440" /></label></div>
-        <label class="setting-toggle"><input name="touchKeyboardEnabled" type="checkbox" /> Enable automatic touch keyboard</label>
         <div class="section-label"><span>HOME ASSISTANT COMMANDS</span><span class="line"></span></div>
-        <label>MQTT broker URL <span class="optional">optional</span><input name="mqttUrl" type="url" placeholder="mqtt://192.168.1.10:1883" /></label>
-        <div class="two-col"><label>MQTT username<input name="mqttUsername" autocomplete="username" /></label><label>MQTT password<input name="mqttPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current" /></label></div>
-        <div class="two-col"><label>Topic prefix<input name="mqttPrefix" placeholder="homepanel" /></label><label>Device name<input name="deviceName" placeholder="Kitchen Display" /></label></div>
+        <label class="setting-toggle"><input name="esphomeEncryptionEnabled" type="checkbox" /> Encrypt the connection to Home Assistant</label>
+        <div class="secret-heading"><label for="ha-encryption-key">Encryption key <span class="field-unit">for Home Assistant</span></label><button class="secondary-button secret-toggle" type="button" data-secret-toggle="ha" disabled>Show key + QR</button></div>
+        <input id="ha-encryption-key" name="esphomeEncryptionKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the key from Home Assistant" />
+        <div class="key-actions"><button class="secondary-button" type="button" data-action="new-encryption-key">Make a new key</button></div>
+        <div class="secret-reveal" id="ha-secret-reveal" hidden>
+          <img id="ha-secret-qr" alt="QR code containing the Home Assistant encryption key" />
+          <div class="secret-value"><code id="ha-secret-value"></code><button class="secondary-button" type="button" data-copy-secret="ha">Copy key</button></div>
+        </div>
+        <p class="field-note">Without a key the panel still connects and is still set up in one step, but the traffic is in plain text on the network. The key is the same one Home Assistant asks for when the panel is added.</p>
+        <div class="section-label"><span>CAMERA · RTSP VIDEO</span><span class="line"></span></div>
+        <label>Stream password <span class="optional" id="camera-password-status">not set</span><input name="cameraPassword" type="password" autocomplete="new-password" spellcheck="false" placeholder="Enter a new password to set or reset" /></label>
+        <p class="field-note">The saved password is never shown here. Enter a new password to replace it; leave this blank to keep it. Use at least 8 characters. Add this URL in Home Assistant with Generic Camera, username <code>homepanel</code>, and Digest authentication:</p>
+        <code class="camera-stream-url" id="camera-stream-url">rtsp://DEVICE.local:8554/homepanel</code>
+        <div class="section-label"><span>SENDSPIN · MUSIC ASSISTANT</span><span class="line"></span></div>
+        <label class="setting-toggle"><input name="sendspinRequirePairing" type="checkbox" /> Require a paired Music Assistant server</label>
+        <p class="field-note">Sendspin sessions are always encrypted. Requiring pairing also authenticates the server. Turn this off only to allow unpaired servers.</p>
+        <div class="secret-heading"><span class="secret-label">Sendspin pairing token</span><button class="secondary-button secret-toggle" type="button" data-secret-toggle="sendspin">Show token + QR</button></div>
+        <div class="secret-reveal" id="sendspin-secret-reveal" hidden>
+          <img id="sendspin-secret-qr" alt="QR code containing the Sendspin pairing token" />
+          <div class="secret-value"><code id="sendspin-secret-value"></code><button class="secondary-button" type="button" data-copy-secret="sendspin">Copy token</button></div>
+        </div>
         <div id="form-error" class="form-error" role="alert"></div>
         <div class="form-footer"><span>Settings are stored on this device.</span><button class="save-button" type="submit">Save settings <span>→</span></button></div>
       </form>
+      </div>
+      <div class="settings-view" id="settings-view-voice" role="tabpanel" aria-labelledby="tab-voice" hidden>
+        <div class="voice-status" id="voice-status">
+          <i class="service-led" data-service="voice-settings"></i>
+          <div>
+            <strong id="voice-status-label">Unknown</strong>
+            <span id="voice-status-reason">Not connected to Home Assistant.</span>
+          </div>
+        </div>
+        <p class="panel-intro">Choose the local audio hardware here. The wake word, its sensitivity and the music ducking are configured on the Home Panel device in Home Assistant.</p>
+        <form id="voice-form">
+          <div class="section-label"><span>MICROPHONE</span><span class="line"></span></div>
+          <label>Microphone<select name="voiceAudioInput" id="voice-audio-input"><option value="">System default</option></select></label>
+          <div class="audio-test">
+            <button type="button" class="audio-test__button" id="mic-test-button">Test microphone</button>
+            <div class="audio-meter" role="meter" aria-label="Microphone level" aria-valuemin="0" aria-valuemax="100" id="mic-meter"><i id="mic-meter-fill"></i></div>
+            <span class="audio-test__value" id="mic-level-value">—</span>
+          </div>
+          <div class="section-label"><span>SPEAKER</span><span class="line"></span></div>
+          <label>Speaker<select name="voiceAudioOutput" id="voice-audio-output"><option value="">System default</option></select></label>
+          <div class="audio-test">
+            <button type="button" class="audio-test__button" id="speaker-test-button">Test speaker</button>
+            <div class="audio-meter" role="meter" aria-label="Speaker level" aria-valuemin="0" aria-valuemax="100" id="speaker-meter"><i id="speaker-meter-fill"></i></div>
+            <span class="audio-test__value" id="speaker-level-value">—</span>
+          </div>
+          <div class="section-label"><span>THE SPEAKER'S OWN SOUND</span><span class="line"></span></div>
+          <p class="panel-intro">The amplifier's own filter and limiter, read off this device. With them on, the speaker plays the sound the vendor's firmware gives it.</p>
+          <label class="setting-toggle"><input type="checkbox" name="speakerTuning" id="speaker-tuning" /><span>Vendor tuning</span></label>
+          <label>Amplifier gain<input type="number" name="speakerGainDb" id="speaker-gain-db" min="0" max="6" step="1" /><span class="field-unit">dB</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="speakerStereo" id="speaker-stereo" /><span>Stereo</span></label>
+          <label>Bass<input type="number" name="speakerBassDb" id="speaker-bass-db" min="-6" max="6" step="0.5" /><span class="field-unit">dB</span></label>
+          <label>Treble<input type="number" name="speakerTrebleDb" id="speaker-treble-db" min="-6" max="6" step="0.5" /><span class="field-unit">dB</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="clearerSpeech" id="clearer-speech" /><span>Clearer speech</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="louderTop" id="louder-top" /><span>Louder top volume</span></label>
+          <div class="section-label"><span>THE MICROPHONE'S OWN SETTINGS</span><span class="line"></span></div>
+          <label class="setting-toggle"><input type="checkbox" name="micCancel" id="mic-cancel" /><span>Echo cancellation</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="micLeveling" id="mic-leveling" /><span>Automatic gain</span></label>
+          <label class="setting-toggle"><input type="checkbox" name="micDenoise" id="mic-denoise" /><span>Noise reduction</span></label>
+          <label>Sensitivity<input type="number" name="micSensitivityDb" id="mic-sensitivity-db" min="0" max="30" step="1" /><span class="field-unit">dB over the room</span></label>
+          <div class="section-label"><span>MUSIC</span><span class="line"></span></div>
+          <div id="voice-error" class="form-error" role="alert"></div>
+          <div class="form-footer"><span>Voice settings are stored on this device.</span><button class="save-button" type="submit">Save voice <span>→</span></button></div>
+        </form>
+      </div>
     </section>
+    <script src="./device-ui.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

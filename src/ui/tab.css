@@ -1,0 +1,59 @@
+
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  pointer-events: none;
+}
+
+.drawer-tab {
+  position: absolute;
+  top: 50%;
+  right: 0;
+
+  width: 46px;
+  height: 132px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-right: 0;
+  border-radius: 14px 0 0 14px;
+  background: rgba(16, 22, 31, 0.92);
+  box-shadow: -6px 0 24px rgba(0, 0, 0, 0.32);
+  color: #f5f7fa;
+  pointer-events: auto;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+
+.drawer-tab:active {
+  background: #24453b;
+  transform: translateY(-50%) translateX(-4px);
+}
+
+.drawer-tab:focus-visible {
+  outline: 3px solid #8fe3c2;
+  outline-offset: 2px;
+}
+
+.drawer-tab[hidden] {
+  display: none;
+}
+
+.drawer-tab__grip {
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  width: 4px;
+  height: 44px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.42);
+}

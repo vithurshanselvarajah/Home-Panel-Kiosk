@@ -1,0 +1,578 @@
+// Package mic owns the microphone array: one capture stream, held for the life of the process,
+// with 16 kHz mono frames fanned out to whoever is listening.
+package mic
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/alsa"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/audio"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/denoise"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/mic/framework"
+	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio/spectrum"
+)
+
+// The capture codec accepts one format only: 16 kHz, S24_3LE. Channels, Mics, CenterMic and the
+// loopback layout are the device's own — see device_dot.go and device_cronos.go.
+const (
+	Rate = 16000
+	Bits = 24
+
+	period  = FrameSamples
+	periods = 8
+)
+
+// Card is the sound card, the speaker's (speaker.Card): found by its id on a board that names one.
+var Card = alsa.CardByID(framework.SoundCard())
+
+// FrameSamples is the frame size handed to listeners, 20 ms at 16 kHz.
+const FrameSamples = Rate / 50
+
+const (
+	acquireRetry    = 250 * time.Millisecond
+	acquireAttempts = 8
+)
+
+// Source is the capture stream. Listeners receive mono frames; a listener that cannot keep up
+// misses frames rather than stalling the reader.
+type Source struct {
+	// The hardware, taken by Start and let go by Close. Nil in between: the handle outlives the
+	// device so that a restart can take it again without every listener being rebuilt.
+	devMu sync.Mutex
+	pcm   capture
+
+	mu sync.Mutex
+
+	listeners map[int]*listener
+	raw       map[int]chan []byte
+	next      int
+
+	// dropped counts frames a listener was too slow to take. It matters more than it looks: the
+	// wake model is streaming, so a missing frame corrupts its state rather than just losing audio.
+	dropped atomic.Uint64
+
+	// rewiring says the next read failure is the handover in Rewire rather than a fault, so Run can
+	// ask for a restart instead of reporting a crash. See the comment on service.ErrRestart.
+	rewiring atomic.Bool
+
+	history history
+
+	// mixer is read by the reader and replaced from Home Assistant, both under mu.
+	mixer  Mixer
+	mixing framework.Mixing
+
+	// cancel belongs to the reader alone. canceling is the switch, which anything may set, and is read
+	// under mu with the mixer.
+	cancel    *canceller
+	canceling bool
+
+	// leveler and wasLeveling belong to the reader alone; leveling is the switch, which anything may
+	// set.
+	leveler     *leveler
+	wasLeveling bool
+	leveling    atomic.Bool
+
+	// The same shape for the noise estimator, which also has state to throw away when it is turned off.
+	denoiser     *denoise.Stream
+	wasDenoising bool
+	denoising    atomic.Bool
+
+	// noise measures the room for the ambient noise sensor, while that is on.
+	noise noiseMeter
+	// standout measures how far speech stands out from the room, while something has asked for it.
+	standout standout
+
+	// Which way the loudest sound is, as a beam, or -1 until something asks. finder belongs to the
+	// reader; wantFacing is how anything else asks it to look.
+	finder     *Beamformer
+	facing     atomic.Int32
+	wantFacing atomic.Bool
+}
+
+// SetMixing chooses how the microphones are combined. It takes effect on the next frame, and reports
+// what it settled on, which differs from the request only when this build cannot do it.
+func (s *Source) SetMixing(m framework.Mixing) framework.Mixing {
+	mixer, settled := NewMixer(m)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mixer, s.mixing = mixer, settled
+	return settled
+}
+
+// Mixing is the combination in use.
+func (s *Source) Mixing() framework.Mixing {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mixing
+}
+
+// New makes the array without taking the hardware, so listeners can subscribe before there is
+// anything to hear. Listen, Recent and the mixing setting work throughout; frames start at Start.
+func New() *Source {
+	mixer, mixing := NewMixer(framework.Get().Microphone.Mixing)
+	s := &Source{
+		listeners: map[int]*listener{},
+		raw:       map[int]chan []byte{},
+		mixer:     mixer,
+		mixing:    mixing,
+		leveler:   newLeveler(),
+		finder:    NewBeamformer(),
+		cancel:    newCanceller(),
+		canceling: framework.Get().Microphone.Cancel,
+		denoiser:  denoise.NewStream(Rate),
+	}
+	s.finder.hold = 1
+	s.facing.Store(-1)
+	s.leveling.Store(framework.Get().Microphone.Leveling)
+	s.denoising.Store(framework.Get().Microphone.Denoise)
+	return s
+}
+
+var (
+	once   sync.Once
+	shared *Source
+)
+
+// Get is the array. There is one, and everything that wants frames subscribes to it.
+func Get() *Source {
+	once.Do(func() { shared = New() })
+	return shared
+}
+
+func (s *Source) Name() string { return "capture" }
+
+// Start takes the capture device, off Android if it got there first, the same way the speaker does.
+func (s *Source) Start(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// Before the device is opened, so that a unit whose mute is the daemon's own is already cutting
+	// when the first frame arrives. The mute feature restores the same value later in the Device
+	// phase; this is only about the frames captured before it gets there. See framework.Seed.
+	framework.Seed(framework.Get().Microphone.Muted)
+
+	err := s.open()
+	if err == nil || !errors.Is(err, alsa.ErrBusy) {
+		return err
+	}
+
+	for range acquireAttempts {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		time.Sleep(acquireRetry)
+
+		err = s.open()
+		if err == nil {
+			slog.Info("capture device acquired")
+			return nil
+		}
+		if !errors.Is(err, alsa.ErrBusy) {
+			return err
+		}
+	}
+	return err
+}
+
+// Acquire is New and Start together, for a tool that wants the array for the length of one command.
+func Acquire() (*Source, error) {
+	s := New()
+	if err := s.Start(context.Background()); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// capture is the hardware as the reader sees it: whole frames of Channels at Rate in S24_3LE, the
+// microphones and then the loopback. On every board but one that is a single capture device as it
+// comes (openPlain); see openDevice in the device files.
+type capture interface {
+	Read(buf []byte) (int, error)
+	Close() error
+}
+
+func (s *Source) open() error {
+	// An external capture is used instead of the card: the device program
+	// owns the card through its own backend, so that a recording can
+	// stand in for it.
+	if ext := externalCapture(); ext != nil {
+		s.mu.Lock()
+		s.devMu.Lock()
+		s.pcm = ext
+		s.devMu.Unlock()
+		s.mu.Unlock()
+		afterOpen()
+		return nil
+	}
+
+	pcm, err := openDevice()
+	if err != nil {
+		return fmt.Errorf("mic: opening capture: %w", err)
+	}
+
+	s.mu.Lock()
+	s.devMu.Lock()
+	s.pcm = pcm
+	s.devMu.Unlock()
+	s.mu.Unlock()
+
+	afterOpen()
+	return nil
+}
+
+// device is the hardware, or nil when it is not held.
+func (s *Source) device() capture {
+	s.devMu.Lock()
+	defer s.devMu.Unlock()
+	return s.pcm
+}
+
+type listener struct {
+	name    string
+	ch      chan []int16
+	dropped uint64
+	told    uint64
+}
+
+// Listen returns a channel of mono frames and a function that stops the subscription. The name is
+// what a dropped frame is reported against.
+func (s *Source) Listen(name string) (<-chan []int16, func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listenLocked(name)
+}
+
+// listenLocked registers a listener with mu held, including while history is copied.
+func (s *Source) listenLocked(name string) (<-chan []int16, func()) {
+	l := &listener{name: name, ch: make(chan []int16, 8)}
+	id := s.next
+	s.next++
+	s.listeners[id] = l
+
+	return l.ch, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if was, ok := s.listeners[id]; ok {
+			delete(s.listeners, id)
+			close(was.ch)
+			// A turn lasts seconds, so anything it lost would otherwise go unsaid.
+			if lost := was.dropped - was.told; lost > 0 {
+				slog.Warn("listener behind", "who", was.name, "frames", lost, "total", was.dropped)
+			}
+		}
+	}
+}
+
+// ListenRaw returns a channel of interleaved frames, all nine channels as the hardware gives them.
+// For characterising the array; the mono path is what detection and the pipeline use.
+func (s *Source) ListenRaw() (<-chan []byte, func()) {
+	ch := make(chan []byte, 8)
+
+	s.mu.Lock()
+	id := s.next
+	s.next++
+	s.raw[id] = ch
+	s.mu.Unlock()
+
+	return ch, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if c, ok := s.raw[id]; ok {
+			delete(s.raw, id)
+			close(c)
+		}
+	}
+}
+
+// Decode splits an interleaved frame into one slice per microphone, narrowed to 16 bits.
+func Decode(raw []byte) [][]int16 { return decode(raw, 0, Mics) }
+
+// Reference is the playback loopback, left and right. It is what was sent to the DAC rather than
+// anything the microphones heard: bit exact, and decimated by the same hardware that decimates them,
+// so it arrives already aligned with the microphones at their rate.
+func Reference(raw []byte) [][]int16 { return decode(raw, RefFirst, Refs) }
+
+func decode(raw []byte, first, n int) [][]int16 {
+	frameBytes := Channels * Bits / 8
+
+	frames := len(raw) / frameBytes
+	out := make([][]int16, n)
+	for c := range out {
+		out[c] = make([]int16, frames)
+	}
+	for f := range frames {
+		off := f * frameBytes
+		for c := range out {
+			at := off + (first+c)*3
+			out[c][f] = int16(audio.DecodeS24LE3(raw[at:at+3]) >> 8)
+		}
+	}
+	return out
+}
+
+// Run reads until ctx is canceled. It reads whether or not anyone is listening, because a stream
+// left unread overruns and the hardware ring is only 160 ms deep.
+func (s *Source) Run(ctx context.Context) error {
+	// The reader needs the card, and it waits for it rather than giving
+	// up: a reader that starts before the device is taken returns at once
+	// and never comes back, so the level meter stays at nothing and the
+	// wake word hears nothing for the rest of the run.
+	pcm := s.waitForDevice(ctx)
+	if pcm == nil {
+		return ctx.Err()
+	}
+	raw := make([]byte, FrameSamples*Channels*Bits/8)
+
+	var overruns uint64
+	report := time.NewTicker(dropReport)
+	defer report.Stop()
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil
+		}
+
+		select {
+		case <-report.C:
+			s.reportDrops()
+		default:
+		}
+
+		// One SoftwareCut policy decision, taken once for the block.
+		n, cut, err := readCaptured(pcm, raw, framework.SoftwareCut, nil)
+		if err != nil {
+			if errors.Is(err, alsa.ErrOverrun) {
+				if overruns++; overruns == 1 || overruns%100 == 0 {
+					slog.Warn("capture overrun", "times", overruns)
+				}
+				continue
+			}
+			// The device was handed back on purpose and this read died with it, so ask to be
+			// started again rather than reporting the handover as a failure.
+			if s.rewiring.Swap(false) {
+				return fmt.Errorf("%w: the capture device was handed back after the mute came off", ErrRestart)
+			}
+			return err
+		}
+		s.broadcastSelected(raw[:n], cut)
+	}
+}
+
+// waitForDevice is the capture once the device is held.
+//
+// It waits for it, because the reader and the opener are two different
+// goroutines and either may win: the reader that gives up instead of
+// waiting is a reader that never runs.
+func (s *Source) waitForDevice(ctx context.Context) capture {
+	for {
+		if pcm := s.device(); pcm != nil {
+			return pcm
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+// dropReport is how often a listener losing frames is said out loud. Nothing is logged while nothing
+// is being lost.
+const dropReport = 30 * time.Second
+
+func (s *Source) reportDrops() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, l := range s.listeners {
+		since := l.dropped - l.told
+		if since == 0 {
+			continue
+		}
+		l.told = l.dropped
+		slog.Warn("listener behind", "who", l.name, "frames", since,
+			"per_second", float64(since)/dropReport.Seconds(), "total", l.dropped)
+	}
+}
+
+// broadcast hands the frame to every listener, dropping it for any that is behind. The mono mix is
+// only computed when something wants it.
+func (s *Source) broadcast(raw []byte) {
+	s.broadcastWithCut(raw, framework.SoftwareCut())
+}
+
+// broadcastWithCut shares the capture block's single SoftwareCut decision.
+func (s *Source) broadcastWithCut(raw []byte, cut bool) {
+	s.broadcastSelected(raw, cut)
+}
+
+func (s *Source) broadcastSelected(raw []byte, cut bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// A software-only mute cuts here, before anything reads the frame: what is not handed on cannot
+	// be heard, kept or streamed.
+	if cut {
+		clear(raw)
+	}
+
+	// Everything downstream reads the same single channel, whichever way it was made: wake detection
+	// and what Home Assistant transcribes should never disagree about what was heard.
+	//
+	// The recent history is kept whether or not anyone is listening: a wake word is only recognized
+	// once it has been said, so by the time a turn starts, the words after it are already past.
+	mics := Decode(raw)
+	frame := s.mixer.Mix(mics)
+
+	// While something is playing, an echo canceled fixed path replaces the mix (cancelInput): the filter
+	// learns a single acoustic path, and the beamformer would steer at the loudest thing in the room,
+	// which during playback is the speaker being canceled. It runs whichever output is playing: the jack
+	// is as often a powered speaker in the same room (AUX) as headphones, and where nothing in the room
+	// hears the playback the filter finds no echo and passes the microphone through.
+	if s.canceling && s.cancel != nil {
+		if canceled := s.cancel.apply(raw, cancelInput(s.mixer, mics, frame)); canceled != nil {
+			frame = canceled
+		}
+	}
+
+	// From here the frame belongs to whoever is handed it, so it is copied out of whatever produced
+	// it. Both the canceller and the vendor beamformer return a buffer they overwrite on the next
+	// frame, and the denoiser and the leveler below work in place, so without this a listener holding
+	// a frame would find it turn into a later one: its channel is eight deep, and a wake engine a
+	// frame or two behind would score the newest frame twice over and never see what it missed. That
+	// is the wake word going unheard while music is playing, since canceling is on by default.
+	//
+	// One buffer a frame, shared by every listener, because listeners only read what they are given.
+	// It is 640 bytes every 20 ms, next to the one Decode already allocates per microphone, so
+	// a pool or a ring would save nothing worth measuring — and a ring would have to be sized against
+	// how far behind a listener may fall, which is the thing this is fixing.
+	frame = append([]int16(nil), frame...)
+
+	// Before the noise reduction and the leveling, which would take the room out and put gain back on.
+	s.noise.add(raw, frame)
+	// Before the noise reduction, which would lower the floor it is measured against.
+	s.standout.add(frame, s.leveler.leastNow())
+
+	s.findFacing(mics)
+
+	// After the echo canceller, so the estimator is not asked to learn the speaker as part of the
+	// room, and before leveling, so the gain is not put back on a floor that has just been removed.
+	if quiet := s.denoising.Load(); quiet {
+		s.denoiser.Apply(frame)
+		s.wasDenoising = true
+	} else if s.wasDenoising {
+		s.denoiser.Forget()
+		s.wasDenoising = false
+	}
+
+	// Turning leveling off throws away what it learned, so a room it has adapted badly to is
+	// recovered by switching it off and on rather than by restarting anything.
+	on := s.leveling.Load()
+	switch {
+	case on:
+		s.leveler.apply(frame)
+	default:
+		// Measured even with the gain switched off, because how loud the room is has watchers of its
+		// own: the ring can be set to react to it, and that should not depend on a setting about what
+		// Home Assistant hears.
+		if s.wasLeveling {
+			s.leveler.forget()
+		}
+		if len(frame) > 0 {
+			s.leveler.observe(frame)
+		}
+	}
+	s.wasLeveling = on
+	// Stock DSP and sensors above always process stock data; one final
+	// synchronized selection governs all history, wake, STT and mono listeners.
+	s.remember(frame)
+	spectrum.Mic.Push(frame)
+
+	for _, l := range s.listeners {
+		select {
+		case l.ch <- frame:
+		default:
+			l.dropped++
+			s.dropped.Add(1)
+		}
+	}
+
+	if len(s.raw) == 0 {
+		return
+	}
+
+	// The reader reuses its buffer, so raw listeners get their own copy.
+	interleaved := make([]byte, len(raw))
+	copy(interleaved, raw)
+	for _, ch := range s.raw {
+		select {
+		case ch <- interleaved:
+		default:
+		}
+	}
+}
+
+// Dropped is how many frames a listener has missed.
+func (s *Source) Dropped() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.dropped.Load()
+}
+
+// Close lets the device go. The Source stays usable and its listeners stay subscribed: Start can take
+// the hardware again, which is how a restart works.
+func (s *Source) Close() error {
+	s.devMu.Lock()
+	pcm := s.pcm
+	s.pcm = nil
+	s.devMu.Unlock()
+
+	if pcm == nil {
+		return nil
+	}
+	return pcm.Close()
+}
+
+// Mono takes the center microphone alone, narrowed from 24 bits to 16. The beamformed mix is what
+// listeners get; this is for tools that need one microphone as it comes off the hardware.
+func Mono(raw []byte) []int16 {
+	frameBytes := Channels * Bits / 8
+
+	out := make([]int16, len(raw)/frameBytes)
+	for i := range out {
+		o := i*frameBytes + CenterMic*3
+		out[i] = int16(audio.DecodeS24LE3(raw[o:o+3]) >> 8)
+	}
+	return out
+}
+
+func captureDevice() (int, int, alsa.Config, error) {
+	cfg := alsa.Config{Channels: Channels, Rate: Rate, Format: alsa.FormatS24_3LE,
+		Bits: Bits, PeriodSize: period, Periods: periods}
+	if framework.Board == "cronos" {
+		card, device, found, err := alsa.FindPCM("mt8163cronos", "Microphones", true)
+		if err != nil {
+			return 0, 0, cfg, fmt.Errorf("mic: selecting capture: %w", err)
+		}
+		if found {
+			// Match the FPGA's complete ring; application frames remain 20 ms.
+			cfg.PeriodSize, cfg.Periods = 257, 10
+			return card, device, cfg, nil
+		}
+	}
+	return Card, CaptureDevice, cfg, nil
+}
+
+// ErrRestart says the capture should be started again rather than reported as a failure.
+//
+// It is what the read loop returns when the device was handed back on purpose and the read died
+// with it, which is what happens when the mute comes off and the card is taken back.
+var ErrRestart = errors.New("mic: the capture device should be started again")

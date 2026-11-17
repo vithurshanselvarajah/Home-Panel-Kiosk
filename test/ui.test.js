@@ -1,0 +1,279 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const root = path.join(__dirname, "..");
+const html = fs.readFileSync(path.join(root, "src", "ui", "index.html"), "utf8");
+const renderer = fs.readFileSync(path.join(root, "src", "ui", "renderer.js"), "utf8");
+const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
+
+test("the interface page is a whole page", () => {
+  assert.ok(html.length < 100000, "the page is implausibly large, so it has probably been duplicated");
+  assert.ok(html.startsWith("<!doctype html>"), "the page does not start with a doctype");
+  assert.ok(html.includes("</html>"), "the page is not closed");
+});
+
+test("the drawer has its parts", () => {
+  for (const id of [
+    "side-panel",
+    "side-panel-backdrop",
+    "brightness-control",
+    "volume-control",
+    "control-state",
+    "immich-state",
+    "dashboard-state",
+    "settings-button",
+    "display-mode-button",
+    "exit-button",
+    "mode-label",
+    "version-label",
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `the drawer has no ${id}`);
+  }
+});
+
+test("the settings panel has its parts", () => {
+  for (const id of [
+    "settings-panel",
+    "settings-form",
+    "tab-device",
+    "tab-voice",
+    "settings-view-device",
+    "settings-view-voice",
+    "voice-form",
+    "form-error",
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `the settings panel has no ${id}`);
+  }
+});
+
+test("the device name is read-only and comes from the host", () => {
+  assert.ok(html.includes('id="device-hostname"'), "the current host name is not shown");
+  for (const name of ["deviceName", "esphomeDeviceName", "voiceDeviceId", "musicName"]) {
+    assert.ok(!html.includes(`name="${name}"`), `${name} can still be changed on the device`);
+  }
+  for (const name of ["idleToSlideshowMinutes", "slideshowToOffMinutes", "touchKeyboardEnabled", "displayMode", "voiceDuckDb", "voiceVolume"]) {
+    assert.ok(!html.includes(`name="${name}"`), `${name} is still duplicated in on-device settings`);
+  }
+});
+
+test("the page loads the scripts it needs", () => {
+  for (const source of ["./dev-bridge.js", "./device-ui.js", "./renderer.js", "./style.css"]) {
+    assert.ok(html.includes(source), `the page does not load ${source}`);
+  }
+});
+
+test("the drawer and the script name the same things", () => {
+
+  const ids = [...renderer.matchAll(/\$\("#([A-Za-z0-9_-]+)"\)/g)].map((match) => match[1]);
+  assert.ok(ids.length > 10, "the script does not look up enough of the page");
+  for (const id of ids) {
+    assert.ok(html.includes(`id="${id}"`), `the script looks up ${id}, which the page does not have`);
+  }
+});
+
+test("the drawer has one row for the device's link", () => {
+
+  const drawer = html.slice(html.indexOf('id="side-panel"'), html.indexOf('id="settings-panel"'));
+  assert.ok(!drawer.includes('id="voice-row"'), "the drawer still has a voice assistant row");
+  assert.ok(drawer.includes('id="control-state"'), "the drawer has no row for the device's link");
+  assert.ok(!drawer.includes('id="voice-form"'), "the voice form is in the drawer");
+});
+
+test("the music panel has its parts", () => {
+  for (const id of [
+    "media-panel",
+    "media-artwork",
+    "media-title",
+    "media-artist",
+    "media-position",
+    "media-elapsed",
+    "media-duration",
+    "media-play",
+    "media-previous",
+    "media-next",
+  ]) {
+    assert.ok(html.includes(`id="${id}"`), `the drawer has no ${id}`);
+  }
+});
+
+test("the music panel is in the drawer", () => {
+
+  const drawer = html.slice(html.indexOf('id="side-panel"'), html.indexOf('id="settings-panel"'));
+  assert.ok(drawer.includes('id="media-panel"'), "the music panel is not in the drawer");
+});
+
+test("the status is below the actions in the drawer", () => {
+
+  const drawer = html.slice(html.indexOf('id="side-panel"'), html.indexOf('id="settings-panel"'));
+  const status = drawer.indexOf('class="service-status"');
+  const actions = drawer.indexOf('class="drawer-actions"');
+  assert.ok(status > 0, "the drawer has no status block");
+  assert.ok(actions > 0, "the drawer has no actions");
+  assert.ok(status > actions, "the status is above the actions in the drawer");
+});
+
+test("the transport buttons say what they are for", () => {
+
+  for (const action of ["previous", "play", "next"]) {
+    assert.ok(html.includes(`data-transport="${action}"`), `there is no ${action} button`);
+  }
+  assert.ok(renderer.includes('data-transport'), "the script does not read the transport buttons");
+});
+
+test("a press in the drawer is not a drag", () => {
+
+  assert.ok(
+    renderer.includes("dragState.moved"),
+    "the drawer does not tell a press from a drag",
+  );
+  assert.ok(
+    renderer.includes("if (!dragState.moved)"),
+    "the drawer starts dragging on a press",
+  );
+});
+
+test("the drawer is only told about a change of state", () => {
+
+  assert.ok(
+    renderer.includes("if (wasOpen !== Boolean(open))"),
+    "the drawer tells the main process about a press",
+  );
+});
+
+test("the position is carried on between the server's updates", () => {
+
+  assert.ok(
+    renderer.includes("function currentPosition()"),
+    "the position is not carried on",
+  );
+  assert.ok(
+    renderer.includes("setInterval"),
+    "the position is not redrawn as the music plays",
+  );
+});
+
+test("the drawer shows the music's transport without closing", () => {
+
+  assert.ok(
+    renderer.includes("if (button.dataset.transport"),
+    "the drawer closes when the music's buttons are pressed",
+  );
+});
+
+test("the drawer can show either music", () => {
+
+  assert.ok(html.includes('id="media-source-server"'), "there is no music server source");
+  assert.ok(html.includes('id="media-source-home"'), "there is no Home Assistant source");
+  assert.ok(renderer.includes("mediaSources"), "the two musics are not kept apart");
+  assert.ok(
+    renderer.includes("source: mediaSource"),
+    "the transport command does not say which music it is for",
+  );
+});
+
+test("there is a wake word overlay", () => {
+
+  assert.ok(html.includes('id="voice-overlay"'), "there is no wake word overlay");
+  assert.ok(html.includes('id="voice-overlay-heard"'), "the overlay has nowhere to show what was heard");
+  assert.ok(html.includes('id="voice-overlay-said"'), "the overlay has nowhere to show what is being said");
+  assert.ok(renderer.includes("overlay:"), "the overlay is not wired up");
+});
+
+test("the wake word settings are Home Assistant's to set", () => {
+
+  assert.ok(
+    !renderer.includes("voiceWakeThreshold"),
+    "the panel still writes the wake word threshold",
+  );
+  assert.ok(
+    !renderer.includes("voiceWakeWordEnabled"),
+    "the panel still writes the wake word switch",
+  );
+});
+
+test("the audio stack's own settings are on the settings page", () => {
+
+  for (const name of ["speakerTuning", "speakerGainDb", "speakerStereo",
+    "speakerBassDb", "speakerTrebleDb", "clearerSpeech", "louderTop",
+    "micCancel", "micLeveling", "micDenoise", "micSensitivityDb"]) {
+    assert.match(html, new RegExp(`name="${name}"`), `the settings page has no ${name}`);
+    assert.match(main, new RegExp(`${name}:`), `the configuration does not carry ${name}`);
+  }
+});
+
+test("the audio stack's settings reach the device program", () => {
+
+  for (const name of ["speakerTuning", "speakerGainDb", "speakerStereo",
+    "speakerBassDb", "speakerTrebleDb", "clearerSpeech", "louderTop",
+    "micCancel", "micLeveling", "micDenoise", "micSensitivityDb"]) {
+    assert.match(main, new RegExp(`${name}:`), `the configuration does not carry ${name}`);
+  }
+});
+
+test("Music Assistant settings are Home Assistant's to set", () => {
+  assert.doesNotMatch(html, /name="musicEnabled"|name="musicUnpaired"/);
+  assert.match(main, /music_enabled: "musicEnabled"/);
+  assert.match(main, /music_unpaired: "musicUnpaired"/);
+});
+
+test("the wake word overlay covers the whole screen", () => {
+
+  assert.ok(
+    renderer.includes("window.homePanel.voiceOverlay(overlayUp)"),
+    "the main process is not told when the overlay comes and goes",
+  );
+  assert.ok(
+    fs.readFileSync(path.join(root, "src", "main.js"), "utf8").includes("voiceOverlayFull"),
+    "the main process does not size the view for the overlay",
+  );
+});
+
+test("the wake word overlay stays up and can be swiped away", () => {
+
+  assert.ok(
+    renderer.includes("OVERLAY_HOLD_MS") || fs.readFileSync(path.join(root, "src", "ui", "device-ui.js"), "utf8").includes("OVERLAY_HOLD_MS"),
+    "the overlay is not held open after the assistant finishes",
+  );
+  const ui = fs.readFileSync(path.join(root, "src", "ui", "device-ui.js"), "utf8");
+  assert.ok(ui.includes("installGesture"), "the overlay cannot be swiped away");
+  assert.ok(ui.includes("is-dismissing"), "the overlay does not follow the finger");
+});
+
+test("the overlay shows what was heard and what is being said", () => {
+
+  assert.ok(html.includes('id="voice-overlay-heard"'), "there is nowhere for what was heard");
+  assert.ok(html.includes('id="voice-overlay-said"'), "there is nowhere for what is being said");
+});
+
+test("the overlay says listening while it thinks", () => {
+
+  const ui = fs.readFileSync(path.join(root, "src", "ui", "device-ui.js"), "utf8");
+  assert.ok(
+    ui.includes('thinking: "Listening"'),
+    "the overlay says thinking",
+  );
+});
+
+test("the overlay dismisses itself after the hold", () => {
+
+  const ui = fs.readFileSync(path.join(root, "src", "ui", "device-ui.js"), "utf8");
+  assert.ok(ui.includes("OVERLAY_HOLD_MS = 5000"), "the hold is not five seconds");
+  assert.ok(
+    ui.includes("if (this.holding && this.holdUntil"),
+    "the overlay is not dismissed when the hold is over",
+  );
+
+  assert.ok(
+    ui.includes("this.holding = false;"),
+    "the hold runs while there is work",
+  );
+});
+
+test("the answer's words are revealed with the reply", () => {
+
+  const ui = fs.readFileSync(path.join(root, "src", "ui", "device-ui.js"), "utf8");
+  assert.ok(ui.includes("revealSaid"), "the answer is not revealed");
+  assert.ok(ui.includes("setProgress"), "the progress of the reply is not used");
+});
