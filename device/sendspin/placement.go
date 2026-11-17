@@ -101,6 +101,9 @@ type placement struct {
 	suspended bool
 	// joined is whether the placement is in the arbiter's stack.
 	joined bool
+	// attached is whether the placement is the speaker's source. It is
+	// what it took, and it is what it gives back.
+	attached bool
 
 	// pcm holds frames from base onward. played is where the card has got
 	// to, which is what decides whether a chunk is late — base only says
@@ -239,13 +242,19 @@ func (o *placement) close() {
 	detach := o.detach
 	backgrounds := o.backgrounds
 	joined := o.joined
+	// The speaker is given back only if this placement took it. A
+	// placement that was closed before any stream opened has nothing to
+	// give back, and giving it back would take the speaker away from
+	// whoever has it.
+	attached := o.attached
 	o.joined = false
+	o.attached = false
 	o.mu.Unlock()
 
 	if joined && backgrounds != nil {
 		backgrounds.Gave(o)
 	}
-	if detach != nil {
+	if attached && detach != nil {
 		detach()
 	}
 }
@@ -264,6 +273,7 @@ func (o *placement) openAgain() {
 	o.reset()
 	attach := o.attach
 	backgrounds := o.backgrounds
+	o.attached = true
 	o.mu.Unlock()
 
 	if first && backgrounds != nil {
