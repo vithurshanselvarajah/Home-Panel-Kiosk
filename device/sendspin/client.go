@@ -112,6 +112,7 @@ func New(cfg Config) (*Client, error) {
 		requiredLeadMs:   int(cfg.RequiredLeadTime.Milliseconds()),
 	}
 	c.place = newPlacement(newTimeFilter())
+
 	set := st.settings()
 	c.place.setGain(c.gainVolume(set.Volume), set.Muted)
 	c.place.setDelay(set.StaticDelayMs)
@@ -735,13 +736,16 @@ type playerStats struct {
 	// OffsetUs is the time filter's offset and DriftPpm its drift.
 	OffsetUs int64   `json:"offsetUs"`
 	DriftPpm float64 `json:"driftPpm"`
+	// RMS is how loud the last period handed to the speaker was. Zero
+	// means the period was silence, whatever the counts say.
+	RMS float64 `json:"rms"`
 	// Underruns, LateDrops, Snaps, Corrections, Overruns and LastErrorUs
 	// are kept so the panel's own fields still read something.
-	Underruns   int   `json:"underruns"`
-	Snaps       int   `json:"snaps"`
-	Corrections int   `json:"corrections"`
-	Overruns    int   `json:"overruns"`
-	LastErrorUs int   `json:"lastErrUs"`
+	Underruns      int `json:"underruns"`
+	Snaps          int `json:"snaps"`
+	Corrections    int `json:"corrections"`
+	Overruns       int `json:"overruns"`
+	LastErrorUs    int `json:"lastErrUs"`
 	BufferOverruns int `json:"bufferOverruns"`
 }
 

@@ -54,6 +54,15 @@ const holdMax = 60 * outRate
 //
 // maxSnap is the largest correction that can be one, above which the anchor
 // predates a change of clock rather than having drifted.
+// reanchorFrames is how far a chunk may be from the anchor before the
+// placement lays a new one.
+//
+// It is a minute's worth of frames: a chunk that far from where the last
+// one was is not a piece of the same timeline. A skip of a few seconds
+// within a track does not move it, because the server keeps the timeline
+// going across a skip within a track.
+const reanchorFrames = 60 * outRate
+
 const (
 	driftGain  = 0.02
 	driftBand  = outRate / 500
@@ -75,7 +84,7 @@ type placement struct {
 	// pcm holds frames from base onward. played is where the card has got
 	// to, which is what decides whether a chunk is late — base only says
 	// what we happen to be holding.
-	base   uint64
+	base   int64
 	played uint64
 	pcm    []int16
 
@@ -84,8 +93,15 @@ type placement struct {
 	// playing now" straight back into where audio lands. Drift
 	// correction nudges frame by whole frames instead, in step with the
 	// audio it moves.
+	//
+	// It is signed, because the audio the server sends may already be
+	// late: the frame it belongs at is then before the speaker started
+	// writing, which is a negative frame index. Holding it unsigned and
+	// clamping it at zero threw the whole offset away, and the drift
+	// correction then drove the anchor below zero and the placement was
+	// a long way from where the audio belonged.
 	anchored bool
-	frame    uint64
+	frame    int64
 	at       int64
 
 	// delay is the room's static playback delay in frames: audio is placed
@@ -123,6 +139,8 @@ type placement struct {
 	// they carried.
 	chunks  int
 	samples int64
+	// rms is how loud the last period handed over was.
+	rms float64
 	// playedPeriods is how many periods were filled and playedFrames how
 	// many frames of audio they carried.
 	playedPeriods int
@@ -173,8 +191,29 @@ func (o *placement) write(at int64, samples []int16) {
 		return
 	}
 
-	frame := o.frameFor(at) + uint64(o.delay)
-	if frame > o.played && frame-o.played > holdMax {
+	// The frame is signed, and the queue's own base is signed too: the
+	// audio the server sends may already be late, and the frame it belongs
+	// at is then before the speaker started writing.
+	// A chunk that arrives a long way from where the anchor says it
+	// belongs is a new timeline, not a piece of the old one: the server
+	// skipped, or paused, or the track ended and another began.
+	//
+	// The anchor is then laid again against the card, so the audio lands
+	// where the speaker is rather than where the old track would have put
+	// it. Without this the chunk is placed millions of frames ahead of the
+	// card, dropped as too far ahead, and the music stops while the server
+	// thinks it is playing.
+	if o.anchored {
+		if drift := (at - o.at) * outRate / 1e6; drift > reanchorFrames || drift < -reanchorFrames {
+			o.anchored = false
+			o.drift = 0
+			o.pcm = o.pcm[:0]
+			o.base = 0
+		}
+	}
+
+	frame := o.frameFor(at) + o.delay
+	if frame > int64(o.played) && frame-int64(o.played) > holdMax {
 		o.dropped++
 		return
 	}
@@ -183,14 +222,14 @@ func (o *placement) write(at int64, samples []int16) {
 	// whatever is left of it still belongs where it was meant to go, and
 	// the rest is gone. Playing it anyway is what leaves a room behind for
 	// good.
-	span := uint64(len(samples) / outChannels)
-	if frame+span <= o.played {
+	span := int64(len(samples) / outChannels)
+	if frame+span <= int64(o.played) {
 		o.late++
 		return
 	}
-	if frame < o.played {
-		samples = samples[(o.played-frame)*outChannels:]
-		frame = o.played
+	if frame < int64(o.played) {
+		samples = samples[(int64(o.played)-frame)*outChannels:]
+		frame = int64(o.played)
 	}
 
 	o.chunks++
@@ -212,9 +251,9 @@ func (o *placement) write(at int64, samples []int16) {
 }
 
 // frameFor converts a server timestamp to an output frame. Wants mu.
-func (o *placement) frameFor(at int64) uint64 {
+func (o *placement) frameFor(at int64) int64 {
 	if o.anchored {
-		return uint64(int64(o.frame) + (at-o.at)*outRate/1e6)
+		return o.frame + (at-o.at)*outRate/1e6
 	}
 
 	// The frame the speaker is writing is going to the card next and is
@@ -224,14 +263,24 @@ func (o *placement) frameFor(at int64) uint64 {
 	// both mean the same moment by "play at".
 	written, latency := o.position()
 	ahead := time.Until(o.serverToLocal(at)) - latency
-	o.frame = written + uint64(max(0, ahead.Seconds()*outRate))
+	// The offset is not clamped at zero: the audio the server sends may
+	// already be late, and the frame it belongs at is then before the
+	// speaker started writing. Clamping it lost the whole offset, and the
+	// anchor was then nothing like the frame the audio belonged at.
+	o.frame = int64(written) + int64(ahead.Seconds()*outRate)
 	o.at = at
 	o.anchored = true
-	o.played = o.frame
+	if o.frame < 0 {
+		o.frame = 0
+	}
+	o.played = uint64(o.frame)
 	return o.frame
 }
 
 // serverToLocal turns the server's timestamp into ours.
+//
+// The filter maps the server's clock onto ours, so the result is a moment on
+// our own wall clock — the same domain the timestamps went out in.
 //
 // The filter has its own lock, so it is asked while this one's held: the
 // two are not the same lock and there is no cycle.
@@ -239,7 +288,7 @@ func (o *placement) serverToLocal(at int64) time.Time {
 	if o.filter == nil {
 		return time.Now()
 	}
-	return time.Now().Add(time.Duration(o.filter.clientTime(at)-nowUs()) * time.Microsecond)
+	return time.UnixMicro(o.filter.clientTime(at))
 }
 
 // Render is the speaker asking what this room plays next.
@@ -256,18 +305,19 @@ func (o *placement) Render(from uint64, buf []int16) {
 
 	// The card has passed these, and an underrun can ask for the same
 	// frames twice, so dropping has to be idempotent rather than a consume.
-	if from > o.base && len(o.pcm) > 0 {
-		if gone := int((from - o.base) * outChannels); gone >= len(o.pcm) {
+	at := int64(from)
+	if at > o.base && len(o.pcm) > 0 {
+		if gone := int((at - o.base) * outChannels); gone >= len(o.pcm) {
 			o.pcm = o.pcm[:0]
 		} else {
 			o.pcm = append(o.pcm[:0], o.pcm[gone:]...)
 		}
 	}
-	if from > o.base {
-		o.base = from
+	if at > o.base {
+		o.base = at
 	}
 
-	if o.held || !o.ready || from < o.base {
+	if o.held || !o.ready || at < o.base {
 		return
 	}
 	o.correct(from)
@@ -275,6 +325,15 @@ func (o *placement) Render(from uint64, buf []int16) {
 	if n > 0 {
 		o.playedPeriods++
 		o.playedFrames += int64(n / outChannels)
+		// How loud what was handed over is: a period of silence is
+		// counted as played, and the count says nothing about whether
+		// there was any sound in it.
+		var sum float64
+		for i := 0; i < n; i++ {
+			v := float64(o.pcm[i])
+			sum += v * v
+		}
+		o.rms = math.Sqrt(sum / float64(n))
 	}
 	if o.gain == o.target {
 		gain := o.gain
@@ -313,7 +372,7 @@ func (o *placement) correct(from uint64) {
 	// The frame the server clock says should be heard now, against the one
 	// that is: the frame being rendered less the ring it has yet to
 	// travel, which the card reported just before this render.
-	want := int64(o.frame) + (now-o.at)*outRate/1e6
+	want := o.frame + (now-o.at)*outRate/1e6
 	tail := o.tail()
 
 	// The loop has the hardware tail in it: frames already handed to the
@@ -344,7 +403,7 @@ func (o *placement) correct(from uint64) {
 	case o.drift > snapBand:
 		n := int(o.drift)
 		o.pcm = append(make([]int16, n*outChannels), o.pcm...)
-		o.frame += uint64(n)
+		o.frame += int64(n)
 		o.corrected += int64(n)
 		o.drift = 0
 	case o.drift < -snapBand:
@@ -359,7 +418,7 @@ func (o *placement) correct(from uint64) {
 		// is compared with, and the drift would then read as a whole
 		// second of error — which the correction would then correct, by
 		// putting a second of silence in front of the audio.
-		o.frame -= uint64(n)
+		o.frame -= int64(n)
 		o.corrected -= int64(n)
 		o.drift = 0
 	case o.drift > driftBand:
@@ -475,6 +534,7 @@ func (o *placement) stats() playerStats {
 		Samples:   o.samples,
 		Played:    o.playedPeriods,
 		Frames:    o.playedFrames,
+		RMS:       o.rms,
 	}
 	if o.filter != nil {
 		st.OffsetUs = pyRound(o.filter.cur.offset)

@@ -456,6 +456,15 @@ func (s *session) sendState() {
 	})
 }
 
+// onTime feeds the clock filter a time exchange.
+//
+// The four timestamps are all Unix microseconds: ours when we sent the
+// request, the server's when it received and when it replied, and ours when
+// the reply arrived. The offset is the middle of the two ways of measuring
+// how far apart the clocks are, and the uncertainty is half the round trip.
+//
+// Mixing the two domains here would put the offset out by decades, and the
+// filter would then place the audio that far from where it belongs.
 func (s *session) onTime(t serverTime) {
 	now := nowUs()
 	offset := float64((t.ServerReceived-t.ClientTransmitted)+(t.ServerTransmitted-now)) / 2
