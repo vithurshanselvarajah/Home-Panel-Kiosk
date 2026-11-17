@@ -1,15 +1,4 @@
-// Builds the app and runs the packaged build.
-//
-//   npm run packaged
-//
-// The packaged build is what the .deb installs, so it is what a device
-// actually runs. Running it means the device program is found beside the binary
-// the way it is on a device, rather than in the repository's vendor
-// directory, and the Electron binary is the one that was packaged rather
-// than the one in node_modules.
-//
-// The build is made if it is not already there, and the device program is put
-// beside it, because the packaging step is what does that.
+
 
 const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -18,7 +7,6 @@ const path = require("node:path");
 const root = path.join(__dirname, "..");
 const outDir = path.join(root, "out");
 
-// The architecture the build is made for.
 const arch = process.arch === "arm64" ? "arm64" : "x64";
 const packagedDir = path.join(outDir, `homepanel-kiosk-linux-${arch}`);
 const binary = path.join(packagedDir, "homepanel-kiosk");
@@ -28,8 +16,6 @@ function fail(message) {
   process.exit(1);
 }
 
-// The build is made when it is not there, or when the source is newer than
-// the build.
 function needsBuild() {
   if (!fs.existsSync(binary)) return true;
   const built = fs.statSync(binary).mtimeMs;
@@ -57,14 +43,6 @@ if (needsBuild()) {
 
 if (!fs.existsSync(binary)) fail(`there is no build at ${binary}`);
 
-// The sidecar has to be executable, and the packaging step puts it beside
-// the binary. It is copied there again when it is missing, and when the
-// one in the package is older than the one that was built.
-//
-// Copying only when it is missing would run an old device program: the
-// package keeps whatever was copied the first time, and a rebuild of the
-// device program would never reach the packaged build. The bug looks like
-// a fix that did not take.
 const device = path.join(packagedDir, "home-panel-device");
 const source = path.join(root, "vendor", `home-panel-device-linux-${arch === "x64" ? "amd64" : arch}`);
 if (!fs.existsSync(source)) fail(`there is no device program at ${source}`);
@@ -77,8 +55,6 @@ if (needsCopy) {
 }
 fs.chmodSync(device, 0o755);
 
-// The packaged app keeps its settings in the same place a device does, so
-// a packaged run and a development run see the same configuration.
 console.log("run: starting the packaged app");
 const app = spawn(binary, process.argv.slice(2), {
   cwd: packagedDir,

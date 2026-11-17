@@ -16,25 +16,15 @@ import (
 
 const (
 	handshakeTimeout = 30 * time.Second
-	// A connection that has not declared its purpose in 30s is dropped.
+
 	activateTimeout = 30 * time.Second
-	// Past activation the device asks for the time every 3s at most, so a
-	// silent link for this long is a dead one.
+
 	idleTimeout = 30 * time.Second
 
 	rolePlayer = "player@v1"
-	// roleMetadata is the role that carries what is playing.
-	//
-	// A client that declares it is sent the metadata: the title, the
-	// artist, the album, the artwork and where the track has got to.
-	// Without it the server has no way of telling the device what it is
-	// playing, because the audio itself says nothing about that.
+
 	roleMetadata = "metadata@v1"
-	// roleController is the role that drives the transport.
-	//
-	// A client that declares it is sent the list of commands the server
-	// will accept, and may send commands of its own: play, pause, the
-	// next track and the one after it, and seeking.
+
 	roleController = "controller@v1"
 	actPlayback    = "playback"
 	actPairing     = "pairing"
@@ -42,9 +32,6 @@ const (
 	maxReadBytes   = 4 << 20
 )
 
-// session is one server's WebSocket. The read loop owns almost everything;
-// sends come from several goroutines and are serialised by sendMu, which
-// also covers the transport, since Noise nonces must go out in order.
 type session struct {
 	c      *Client
 	ws     *websocket.Conn
@@ -52,17 +39,12 @@ type session struct {
 
 	sendMu sync.Mutex
 	tr     *transport
-	// quiet holds back everything but the exchange itself: from the start
-	// of a pairing or re-handshake until the server/activate that ends it.
-	// The server reads that stretch as a strict sequence, and a client/time
-	// arriving inside it fails the pairing (9.1.1, measured by the interop
-	// test).
+
 	quiet  bool
 	closed bool
 
 	filter *timeFilter
 
-	// Read-loop state.
 	h            []byte
 	serverID     string
 	ra           reassembler
@@ -70,45 +52,29 @@ type session struct {
 	activities   map[string]bool
 	pairingIndex int
 	stagedPSK    []byte
-	awaitHello   bool // re-keyed; 9.1.1 re-sends server/hello next
+	awaitHello   bool
 	dec          *decoder
 	streaming    bool
 
-	// Written by the read loop, read from other goroutines too.
 	mu         sync.Mutex
 	serverName string
 	psk        resolvedPSK
 	roles      []string
-	stateSent  bool // a client/state has gone out on this connection
-	clockNoted bool // the clock has been reported good, once
-	// serverPlaying is what the server last said it was doing. It is one
-	// of the two inputs to the gate: the audio is heard only when the
-	// placement is ready and the server is playing.
+	stateSent  bool
+	clockNoted bool
+
 	serverPlaying bool
-	// serverSaid is whether the server has said anything yet. Before it
-	// has, the audio is held: a player that plays before the server has
-	// said it is playing is playing what nobody asked for.
+
 	serverSaid bool
-	// asked is the last transport the panel asked for, and it is how a
-	// pause asked for here is told from a pause the server did on its
-	// own. Music Assistant reports a pause as a stop, so a stop that
-	// nobody here asked for is the server's own pause.
-	asked atomic.Value // string
-	// settleGen counts the pauses, so a timer armed for one of them does
-	// nothing if the pause was taken back before it fired.
+
+	asked atomic.Value
+
 	settleGen atomic.Int64
 	group     groupUpdate
 	lastAudio time.Time
-	// metadata is what the server says is playing.
-	//
-	// It is separate from the group and the player: this is the music
-	// itself — the title, the artist, the album, the artwork and where
-	// the track has got to.
+
 	metadata streamMetadata
-	// controller is what the server says the transport can do.
-	//
-	// It is nil until the server says, and the panel only offers the
-	// controls it has been told are there.
+
 	controller *controllerState
 }
 
@@ -118,7 +84,6 @@ func newSession(c *Client, ws *websocket.Conn) *session {
 
 var errProtocol = errors.New("sendspin: protocol error")
 
-// run drives the connection to its end. Every exit path closes the socket.
 func (s *session) run() {
 	defer s.close()
 	s.ws.SetReadLimit(maxReadBytes)
@@ -128,7 +93,6 @@ func (s *session) run() {
 	}
 	log.Printf("[sendspin] %s: encrypted session with %q (%s)", s.remote, s.name(), s.psk.cat)
 
-	// server/hello, then ours.
 	s.ws.SetReadDeadline(time.Now().Add(handshakeTimeout))
 	typ, body, err := s.readJSON()
 	if err != nil || typ != "server/hello" {
@@ -168,7 +132,7 @@ func (s *session) run() {
 			continue
 		}
 		if msg[0] != msgJSON {
-			continue // a role we do not implement
+			continue
 		}
 		var env envelope
 		if err := json.Unmarshal(msg[1:], &env); err != nil {
@@ -188,14 +152,12 @@ func (s *session) run() {
 	}
 }
 
-// errGoodbye ends the connection after a client/goodbye already went out.
 var errGoodbye = errors.New("sendspin: goodbye sent")
 
 func (s *session) dispatch(env envelope) error {
 	if !s.activated && env.Type != "server/activate" && env.Type != "noise/handshake" &&
 		!(env.Type == "server/hello" && s.awaitHello) {
-		// A server may not send this yet. Ignored rather than fatal: the
-		// cost of tolerating it is nothing, of closing a working link a lot.
+
 		return nil
 	}
 	switch env.Type {
@@ -249,7 +211,7 @@ func (s *session) dispatch(env envelope) error {
 		}
 	case "server/unpair":
 		if s.psk.cat != catLongTerm {
-			return nil // unpaired session: nothing to drop
+			return nil
 		}
 		s.c.store.removeRecord(s.serverID)
 		log.Printf("[sendspin] %q unpaired this device", s.name())
@@ -270,8 +232,7 @@ func (s *session) dispatch(env envelope) error {
 	case "noise/handshake":
 		return s.rehandshake(env.Payload)
 	case "server/hello":
-		// 9.1.1 redoes the hello exchange after every re-handshake; the
-		// spec says neither hello is re-sent. Answer it when it comes.
+
 		if s.awaitHello {
 			s.awaitHello = false
 			return s.sendJSON("client/hello", s.c.hello(), true)
@@ -280,10 +241,6 @@ func (s *session) dispatch(env envelope) error {
 	return nil
 }
 
-// ── activation and admission ───────────────────────────────────────────────
-
-// allowedSets is which activity sets a server may declare under each PSK.
-// Playback on an unpaired session needs unpaired access enabled.
 func allowed(cat pskCategory, acts map[string]bool, unpaired bool) bool {
 	switch key := actKey(acts); cat {
 	case catLongTerm:
@@ -316,7 +273,6 @@ func withPlayback(acts map[string]bool) map[string]bool {
 	return m
 }
 
-// rank orders connections for admission: playback over pairing over nothing.
 func rank(acts map[string]bool) int {
 	switch {
 	case acts[actPlayback]:
@@ -330,8 +286,7 @@ func rank(acts map[string]bool) int {
 func (s *session) onActivate(a serverActivate) error {
 	acts := map[string]bool{}
 	for _, x := range a.Activities {
-		// 9.1.1 defines a "management" activity the device does not offer;
-		// an activity it does not know is ignored like any unknown value.
+
 		if x == actPlayback || x == actPairing {
 			acts[x] = true
 		}
@@ -348,7 +303,7 @@ func (s *session) onActivate(a serverActivate) error {
 	unpaired := s.c.unpairedAccess()
 	capable := allowed(s.psk.cat, withPlayback(acts), unpaired)
 	if !capable && a.ActiveRoles == nil {
-		roles = nil // persisted roles lapse when playback no longer could happen
+		roles = nil
 	}
 	if !allowed(s.psk.cat, acts, unpaired) || (len(roles) > 0 && !capable) {
 		if s.psk.cat != catLongTerm && !unpaired &&
@@ -390,13 +345,12 @@ func (s *session) onActivate(a serverActivate) error {
 		return s.onPairing(a.Pairing)
 	}
 	if s.setQuiet(false) && s.playerRole() {
-		s.sendState() // the exchange suppressed it; bring the server up to date
+		s.sendState()
 	}
 	s.c.changed()
 	return nil
 }
 
-// setQuiet sets the exchange state, reporting whether it changed.
 func (s *session) setQuiet(q bool) bool {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
@@ -405,9 +359,6 @@ func (s *session) setQuiet(q bool) bool {
 	return was != q
 }
 
-// onPairing runs the Pairing PSK flow, the one method the device offers: the
-// operator pasted the device's token into the server, so the handshake itself
-// authenticated both sides, and the device mints the long-term PSK.
 func (s *session) onPairing(p *activatePairing) error {
 	if p == nil || p.Method != methodPSK || s.psk.cat != catPairing {
 		return s.sendJSON("pair/abort", pairAbort{Reason: "method_not_supported"}, true)
@@ -418,9 +369,7 @@ func (s *session) onPairing(p *activatePairing) error {
 	}
 	s.stagedPSK = psk
 	s.setQuiet(true)
-	// 9.1.1: the Pairing PSK flow is client/pair-finalize alone. The current
-	// spec puts a client/pair-init before it, which 9.1.1 rejects as out of
-	// sequence and fails the pairing.
+
 	return s.sendJSON("client/pair-finalize", pairFinalize{LongTermPSK: b64u(psk)}, true)
 }
 
@@ -443,14 +392,6 @@ func (s *session) name() string {
 
 func (s *session) isAdmitted() bool { return s.c.isAdmitted(s) }
 
-// ── player ──────────────────────────────────────────────────────────────────
-
-// available is what client/state reports: the panel can play, and Home
-// Assistant has not taken the music plane.
-//
-// It is false until the clock filter has converged. A player that says it
-// can play before its clock is good would be scheduled against a wrong
-// offset, and the server would send the audio to the wrong moment.
 func (s *session) available() bool {
 	if s.c.external() {
 		return false
@@ -458,12 +399,8 @@ func (s *session) available() bool {
 	return s.filter.synchronized()
 }
 
-// synced says the clock is good, for the state field.
 func (s *session) synced() bool { return s.filter.synchronized() }
 
-// sendState reports availability and the player's state. It is sent as soon
-// as the role activates: Music Assistant waits for this state before it
-// starts the stream. Audio stays queued until the clock filter is ready.
 func (s *session) sendState() {
 	if !s.playerRole() {
 		return
@@ -472,7 +409,7 @@ func (s *session) sendState() {
 	s.mu.Lock()
 	s.stateSent = true
 	s.mu.Unlock()
-	// The state says whether the panel is in step with the server's clock.
+
 	state := "synchronized"
 	if !s.synced() {
 		state = "error"
@@ -487,23 +424,12 @@ func (s *session) sendState() {
 			OutputDelayMs:  0,
 			RequiredLeadMs: s.c.requiredLeadMs,
 			MinBufferMs:    s.c.minBufferMs(),
-			// The handlers for all three commands are implemented below.
-			// Omitting volume and mute here made Music Assistant treat the
-			// speaker as having no controllable volume and display 0%.
+
 			SupportedCommands: []string{"volume", "mute", "set_output_delay"},
 		},
 	})
 }
 
-// onTime feeds the clock filter a time exchange.
-//
-// The four timestamps are all Unix microseconds: ours when we sent the
-// request, the server's when it received and when it replied, and ours when
-// the reply arrived. The offset is the middle of the two ways of measuring
-// how far apart the clocks are, and the uncertainty is half the round trip.
-//
-// Mixing the two domains here would put the offset out by decades, and the
-// filter would then place the audio that far from where it belongs.
 func (s *session) onTime(t serverTime) {
 	now := nowUs()
 	offset := float64((t.ServerReceived-t.ClientTransmitted)+(t.ServerTransmitted-now)) / 2
@@ -511,16 +437,6 @@ func (s *session) onTime(t serverTime) {
 	s.filter.update(pyRound(offset), pyRound(delay), now)
 }
 
-// onServerState records what the server says is playing.
-//
-// The metadata is what the panel shows in its drawer: the title, the
-// artist, the album, the artwork and where the track has got to.
-//
-// It is separate from the player's own state, because the player is
-// about the sound and this is about the music.
-//
-// A null metadata means the music has stopped, and the panel is told
-// so by being told there is nothing.
 func (s *session) onServerState(st serverState) {
 	s.mu.Lock()
 	switch {
@@ -536,42 +452,22 @@ func (s *session) onServerState(st serverState) {
 	s.c.changed()
 }
 
-// onPlaybackState is what the server says it is doing.
-//
-// Music Assistant does not pause a Sendspin stream: it ends it, clears the
-// track and lets the output go. It resumes only a player it sees as
-// stopped — one it sees as paused is sent a plain "unpause" that nothing
-// here can act on, and the room says playing in silence.
-//
-// So the panel says what the server said. A pause stops the audio and
-// keeps the track, so that a play starts it again. A stop stops it and
-// lets go, so that a play starts the queue again where it was.
-//
-// A stop from the server while it was playing, that nobody here asked for,
-// is Music Assistant's own pause as often as it is a stop, and it is said
-// as a pause first: Music Assistant keeps the place in the track when a
-// player goes from playing to paused to stopped, as it does after a pause
-// from the screen, and starts the track over when it goes straight from
-// playing to stopped.
 func (s *session) onPlaybackState(state string) {
 	s.mu.Lock()
 	s.serverSaid = true
 	switch state {
 	case "playing":
-		// The server is playing, so nothing is held any more.
+
 		s.serverPlaying = true
 		s.asked.Store("")
 	case "paused":
 		s.serverPlaying = false
 		s.asked.Store("")
-		// A pause left this way is a stop.
+
 		s.settleStop()
 	case "stopped":
 		s.serverPlaying = false
-		// A stop that nobody here asked for is the server's own pause:
-		// Music Assistant does not pause a Sendspin stream, it ends it,
-		// and a stop that arrives straight after a pause asked for here
-		// is that pause coming back as a stop.
+
 		if s.askedFor() != "pause" {
 			s.serverPlaying = true
 		}
@@ -581,26 +477,10 @@ func (s *session) onPlaybackState(state string) {
 	s.regate()
 }
 
-// The settling of a pause and a stop.
-//
-// A pause that the server never takes back is a stop: the server reports
-// a pause as a stop, and it sends only what changes, so a pause that is
-// never followed by a play would leave the panel holding the audio for
-// ever, with nothing to show for it.
-//
-// A stop is only counted as one once it has stayed stopped for a moment:
-// the server ends one track and starts the next in whichever order it
-// likes, and that gap is not somebody stopping the music.
 const (
-	// stoppedFor is how long a paused track stays paused before it is
-	// ended.
 	stoppedFor = 30 * time.Minute
 )
 
-// settleStop ends a pause that the server never takes back.
-//
-// The timer is armed with a generation, so a pause that is taken back
-// before the timer fires does nothing: the generation has moved on.
 func (s *session) settleStop() {
 	s.mu.Lock()
 	generation := s.settleGen.Add(1)
@@ -617,24 +497,11 @@ func (s *session) settleStop() {
 	})
 }
 
-// askedFor is the last transport the panel asked for, empty when it has
-// not asked for anything.
 func (s *session) askedFor() string {
 	v, _ := s.asked.Load().(string)
 	return v
 }
 
-// regate works out whether the audio should be heard.
-//
-// It is two inputs anded: the placement has to be ready, and the server
-// has to say it is playing. Both are needed, and either can change at any
-// moment — the server sends its state and the stream lifecycle separately,
-// and they do not always arrive in the same order.
-//
-// Working it out here, rather than setting the hold from one of them, is
-// what keeps the two from racing: a "playing" that arrives before the
-// stream ends would otherwise un-hold and then be held again, and the
-// audio would be silent in between.
 func (s *session) regate() {
 	s.mu.Lock()
 	playing := s.serverPlaying
@@ -642,15 +509,10 @@ func (s *session) regate() {
 	s.mu.Unlock()
 
 	ready := s.c.place.Ready()
-	// The audio is held until the server has said it is playing, and
-	// whenever the placement is not ready.
+
 	s.c.place.hold(!said || !playing || !ready)
 }
 
-// Controller says what the transport can do.
-//
-// It is nil until the server says, and the panel only offers the
-// controls that have been told to it.
 func (s *session) Controller() *controllerState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -662,14 +524,6 @@ func (s *session) Controller() *controllerState {
 	return &out
 }
 
-// timeSync keeps the filter fed for as long as the session lives.
-//
-// It also tells the server when the clock has become good, because the
-// player says it is unavailable until then. The state is sent once, when
-// the clock first converges, and not again: the filter's quality is read
-// as lost whenever five seconds pass without a round, and following that
-// would take the player away between every two rounds — which stops the
-// server streaming to it.
 func (s *session) timeSync(stop <-chan struct{}) {
 	for {
 		if err := s.send("client/time", clientTime{ClientTransmitted: nowUs()}); err != nil {
@@ -684,8 +538,6 @@ func (s *session) timeSync(stop <-chan struct{}) {
 	}
 }
 
-// noteClock tells the server the player is available, the first time the
-// clock filter is good.
 func (s *session) noteClock() {
 	if !s.filter.synchronized() {
 		return
@@ -711,9 +563,7 @@ func (s *session) onStreamStart(f streamFormat) {
 		s.c.place.flush()
 		s.c.place.resetStats()
 	}
-	// The placement is opened for the stream: it is what the speaker pulls
-	// from, and what the server's audio is placed into. A stream that
-	// starts releases the hold a pause put on it.
+
 	if s.isAdmitted() {
 		s.c.place.openAgain()
 		s.regate()
@@ -722,89 +572,40 @@ func (s *session) onStreamStart(f streamFormat) {
 	s.c.changed()
 }
 
-// playing says whether the server is playing and the audio is coming.
-//
-// It is not whether the queue happens to have audio in it: the queue is
-// empty between two chunks and after a clear, and the speaker's source is
-// attached on this answer.
 func (s *session) playing() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// The decoder is what says the server is sending audio, and it is
-	// kept across the end of a stream: the server ends a stream on a
-	// pause and resumes the same one.
+
 	return s.dec != nil
 }
 
-// playingMusic says whether the server is playing music right now.
-//
-// It is the server's own answer rather than the decoder's presence: a
-// server that is connected and paused still has a decoder, and a command
-// sent to it pauses nothing.
-//
-// The server says it is playing, and the panel is not holding it: a
-// pause asked for here is a pause the server has been told about, and
-// the server has to answer it.
 func (s *session) playingMusic() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.serverPlaying && s.serverSaid && !s.heldForPause()
 }
 
-// heldForPause says whether the panel has asked for a pause that the
-// server has not answered yet.
-//
-// A local pause is a request: the panel has asked the server to stop,
-// and the server will say so when it has done it. Until then the music
-// is still the server's to play.
 func (s *session) heldForPause() bool {
 	asked, _ := s.asked.Load().(string)
 	return asked == "pause"
 }
 
-// endStream is the server saying the stream is over.
-//
-// The spec has stream/end stop the output and clear the buffers, and the
-// server sends it on a stop, a skip and a seek. A track running into the
-// next one keeps the stream and says nothing.
-//
-// So the placement is not closed here: it is held, and the audio that
-// arrives while it is held is dropped. Closing it would leave the
-// placement closed until a new stream started, and the server does not
-// necessarily start a new one — it may resume the stream it just ended,
-// which is what a pause and a play is. The audio would then never be
-// placed again, and the room would say playing in silence.
 func (s *session) endStream() {
 	if s.streaming && s.isAdmitted() {
 		s.c.place.flush()
 		s.regate()
 	}
-	// The decoder is KEPT.
-	//
-	// The server ends the stream on a stop, a skip and a seek, and then
-	// resumes the same one: a pause and a play. A new stream/start comes
-	// with a new track, not with a resumed one. So the decoder is kept, or
-	// the audio that arrives after the resume would be discarded for
-	// want of one, and the room would say playing in silence.
+
 	s.streaming = false
 	s.c.changed()
 }
 
 func (s *session) onAudio(msg []byte) {
-	// Audio for a connection that is not the admitted one, or while HA has
-	// the music plane, is discarded — valid, and never a reason to close.
-	//
-	// A stream that was ended and is being resumed still has its decoder:
-	// the server ends a stream on a pause and resumes the same one.
+
 	if s.dec == nil || !s.isAdmitted() || s.c.external() {
 		return
 	}
-	// The audio is placed even while the audio is held: the hold gates
-	// the rendering, not the writing. What the server sends while the
-	// panel is paused is still placed, so the buffer is warm and the
-	// anchor is live, and a play starts at once. Dropping it instead
-	// would leave the placement with nothing to play and no anchor, and
-	// the audio would have to be laid again from scratch.
+
 	ts, payload, err := chunkPayload(msg, s.dec.f.Codec)
 	if err != nil {
 		return
@@ -814,10 +615,7 @@ func (s *session) onAudio(msg []byte) {
 		log.Printf("[sendspin] decode: %v", err)
 		return
 	}
-	// The audio is placed, not queued: the frame its timestamp asks for is
-	// where it goes, and the speaker takes it from there. A queue would
-	// have to be emptied by asking what is due, and that asks the clock
-	// rather than the frame counter, and the clock is what jitters.
+
 	s.c.place.write(ts, pcm)
 	s.mu.Lock()
 	s.lastAudio = time.Now()
@@ -841,9 +639,7 @@ func (s *session) onCommand(c playerCommand) {
 			v = c.OutputDelayMs
 		}
 		if v != nil {
-			// A second is the longest a room may be held back, as it is
-			// upstream. A delay beyond that would hold the audio so far
-			// back that it is late for ever.
+
 			set.StaticDelayMs = clamp(*v, 0, maxDelayMs)
 		}
 	default:
@@ -855,10 +651,6 @@ func (s *session) onCommand(c playerCommand) {
 
 func clamp(v, lo, hi int) int { return max(lo, min(hi, v)) }
 
-// ── transport ───────────────────────────────────────────────────────────────
-
-// send encrypts and writes one JSON message. Suppressed during a
-// re-handshake, when the spec allows nothing but the handshake itself.
 func (s *session) send(typ string, payload any) error {
 	return s.sendJSON(typ, payload, false)
 }
@@ -885,21 +677,19 @@ func (s *session) sendJSON(typ string, payload any, force bool) error {
 }
 
 func (s *session) goodbye(reason string) error {
-	// A goodbye goes out even mid-exchange: it precedes the close.
+
 	s.sendJSON("client/goodbye", clientGoodbye{Reason: reason}, true)
 	log.Printf("[sendspin] goodbye to %q: %s", s.name(), reason)
 	return errGoodbye
 }
 
-// readMsg returns the next complete decrypted message, or nil while a
-// fragmented one is being collected.
 func (s *session) readMsg() ([]byte, error) {
 	mt, data, err := s.ws.ReadMessage()
 	if err != nil {
 		return nil, err
 	}
 	if mt != websocket.BinaryMessage {
-		// Cleartext after transport mode is a silent failure.
+
 		return nil, fmt.Errorf("%w: cleartext frame after handshake", errProtocol)
 	}
 	pt, err := s.tr.decrypt(data)
@@ -936,8 +726,6 @@ func (s *session) close() {
 	s.ws.Close()
 	s.c.release(s)
 }
-
-// ── handshake ───────────────────────────────────────────────────────────────
 
 func (s *session) readText(what string) (envelope, []byte, error) {
 	s.ws.SetReadDeadline(time.Now().Add(handshakeTimeout))
@@ -988,8 +776,6 @@ func (s *session) handshake() error {
 	s.serverName = si.ServerID[:8]
 	s.mu.Unlock()
 
-	// The prologue binds the cleartext exchange: the exact bytes as they
-	// crossed the wire, never a re-encoding.
 	prologue := append(append([]byte(nil), initBytes...), srvInitBytes...)
 	env, _, err = s.readText("noise message 1")
 	if err != nil {
@@ -1010,7 +796,6 @@ func (s *session) handshake() error {
 	return nil
 }
 
-// respond runs the responder side of one handshake given message 1.
 func (s *session) respond(env envelope, serverPub, prologue []byte) (*transport, []byte, resolvedPSK, []byte, error) {
 	var hs noiseHandshake
 	if env.Type != "noise/handshake" || json.Unmarshal(env.Payload, &hs) != nil {
@@ -1039,7 +824,7 @@ func (s *session) respond(env envelope, serverPub, prologue []byte) (*transport,
 			psk = resolvedPSK{psk: sentinelPSK, cat: catSentinel}
 		}
 	}
-	// A long-term PSK is bound to the server it was made with.
+
 	if psk.cat == catLongTerm && psk.serverID != s.serverID {
 		return nil, nil, resolvedPSK{}, nil, errors.New("PSK is bound to a different server")
 	}
@@ -1050,9 +835,6 @@ func (s *session) respond(env envelope, serverPub, prologue []byte) (*transport,
 	return tr, h, psk, msg2, nil
 }
 
-// rehandshake answers an in-band handshake: the server moving the session to
-// a new PSK, as it does after pairing. Message 2 goes out under the OLD keys;
-// everything after it under the new ones.
 func (s *session) rehandshake(payload json.RawMessage) error {
 	serverPub, _ := peerKey(s.serverID)
 	s.setQuiet(true)
@@ -1065,7 +847,7 @@ func (s *session) rehandshake(payload json.RawMessage) error {
 		return err
 	}
 	s.sendMu.Lock()
-	s.tr = tr // stays quiet until the server/activate that follows
+	s.tr = tr
 	s.sendMu.Unlock()
 	s.awaitHello = true
 	s.mu.Lock()

@@ -32,9 +32,6 @@ const cameraStreamStartTimeout = 12 * time.Second
 
 var cameraModePattern = regexp.MustCompile(`([0-9]{2,5})x([0-9]{2,5})`)
 
-// cameraInput describes one usable Linux camera and the compressed modes it
-// reports. Prefer MJPEG input because it avoids moving uncompressed frames
-// over USB before the one H.264 encode.
 type cameraInput struct {
 	device     string
 	name       string
@@ -61,9 +58,7 @@ func discoverCamera(ffmpeg string) (*cameraInput, error) {
 		output, _ := exec.CommandContext(ctx, ffmpeg, "-hide_banner", "-f", "v4l2", "-list_formats", "all", "-i", device).CombinedOutput()
 		cancel()
 		text := string(output)
-		// The list-formats command exits with an error after printing the
-		// camera's capabilities. Use the format section rather than treating
-		// that expected probe exit as a failed camera.
+
 		modeInputs := make(map[string]string)
 		var modes []string
 		for _, line := range strings.Split(text, "\n") {
@@ -142,9 +137,6 @@ type cameraStreamHandler struct {
 	writePass    string
 }
 
-// CameraService owns the one camera stream exposed to Home Assistant. The RTSP
-// listener stays up while enabled, but capture/encoding runs only while an
-// authenticated viewer is starting or watching the stream.
 type CameraService struct {
 	mu            sync.Mutex
 	input         *cameraInput
@@ -184,9 +176,6 @@ func (b *cameraProcessOutput) Write(data []byte) (int, error) {
 	return length, nil
 }
 
-// NewCameraService discovers the machine's default V4L2 capture device and
-// starts an RTSP server. No service or settings entities are made when the
-// machine has no usable camera.
 func NewCameraService(log *slog.Logger, ffmpeg string) (*CameraService, error) {
 	input, err := discoverCamera(ffmpeg)
 	if err != nil {
@@ -212,9 +201,7 @@ func NewCameraService(log *slog.Logger, ffmpeg string) (*CameraService, error) {
 		Handler:     h,
 		RTSPAddress: fmt.Sprintf(":%d", cameraRTSPPort),
 		AuthMethods: []auth.VerifyMethod{auth.VerifyMethodDigestMD5},
-		// A 2560×1472 H.264 keyframe is a burst of a few hundred RTP
-		// packets. Leave room for that burst so a reader on a small display
-		// does not lose the entire keyframe while its socket drains.
+
 		WriteQueueSize: 1024,
 	}
 	h.server = s.server
@@ -226,8 +213,6 @@ func NewCameraService(log *slog.Logger, ffmpeg string) (*CameraService, error) {
 	return s, nil
 }
 
-// AddEntities adds the HA controls for this camera. They exist only when a
-// usable camera was discovered.
 func (s *CameraService) AddEntities(registry *esphome.Registry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -251,8 +236,6 @@ func (s *CameraService) AddEntities(registry *esphome.Registry) {
 	})
 }
 
-// SetPassword applies the stream password without returning or logging it.
-// Existing viewers are disconnected if their credentials change.
 func (s *CameraService) SetPassword(password string) error {
 	password = strings.TrimSpace(password)
 	if password != "" && (len(password) < 8 || len(password) > 128) {
@@ -402,9 +385,7 @@ func (s *CameraService) SetFPS(fps int) error {
 }
 
 func (s *CameraService) SetResolution(mode string) error {
-	// "Maximum" is what the entity says, and the mode it stands for is
-	// kept apart: a select that reports a value which is not one of its
-	// own options is one Home Assistant rejects.
+
 	chosen := mode
 	if mode == "Maximum" {
 		mode = s.input.maxMode
@@ -487,8 +468,7 @@ func (s *CameraService) startCapture() error {
 	args = append(args, "-f", "rtsp", "-rtsp_transport", "tcp", fmt.Sprintf("rtsp://%s:%s@127.0.0.1:%d/homepanel", s.handler.writeUser, s.handler.writePass, cameraRTSPPort))
 	cmd := exec.Command(s.input.ffmpegPath, args...)
 	cmd.Stdout = nil
-	// Keep bounded FFmpeg diagnostics, then redact its publisher credentials
-	// before anything reaches the app log.
+
 	diagnostics := &cameraProcessOutput{}
 	cmd.Stderr = diagnostics
 	if err := cmd.Start(); err != nil {
@@ -574,9 +554,7 @@ func (s *CameraService) Close() {
 }
 
 func (s *CameraService) selectEncoder() (string, string) {
-	// VAAPI is tried at runtime, not inferred from the presence of an
-	// encoder name in FFmpeg: builds list encoders even when the device has
-	// no usable driver or hardware.
+
 	if s.probeEncoder("h264_v4l2m2m", nil) {
 		return "h264_v4l2m2m", ""
 	}
@@ -619,8 +597,7 @@ func (s *CameraService) probeEncoder(encoder string, device *string) bool {
 }
 
 func cameraBitrate(width, height int) string {
-	// About 2 Mbit/s per 1080p, scaled by pixel count, with a practical
-	// floor so small views remain clear.
+
 	bitrate := width * height * 2 / (1920 * 1080)
 	if bitrate < 1 {
 		bitrate = 1
@@ -629,9 +606,7 @@ func cameraBitrate(width, height int) string {
 }
 
 func cameraGOP(fps int) int {
-	// Some cameras deliver fewer frames than requested at their largest
-	// mode. A one-second keyframe interval lets new RTSP readers recover
-	// quickly even when the capture rate is lower than the requested rate.
+
 	return max(1, fps/2)
 }
 

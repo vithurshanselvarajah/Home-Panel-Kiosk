@@ -15,7 +15,7 @@ import sys
 
 from aioesphomeapi import api_pb2
 
-# (message name, aioesphomeapi message, field values)
+
 VECTORS = [
     ("HelloRequest", api_pb2.HelloRequest,
      dict(client_info="Home Assistant", api_version_major=1, api_version_minor=16)),
@@ -65,13 +65,13 @@ VECTORS = [
      dict(entity_id="sensor.x", state="1", attribute="a")),
     ("PingRequest", api_pb2.PingRequest, {}),
     ("DisconnectRequest", api_pb2.DisconnectRequest, {}),
-    # ── The voice assistant ──────────────────────────────────────────────
-    #
-    # The wake word phrase is the field that matters most here, and the
-    # one that is easy to get wrong. Home Assistant's setup dialog reads
-    # it and refuses the run when it is missing, so a device that sends
-    # an empty phrase cannot complete the one flow that asks it to prove
-    # it heard a wake word.
+
+
+
+
+
+
+
     ("VoiceAssistantRequest", api_pb2.VoiceAssistantRequest,
      dict(start=True, conversation_id="c1", flags=0,
           wake_word_phrase="hey jarvis")),
@@ -95,10 +95,10 @@ VECTORS = [
      dict(active_wake_words=["hey_jarvis_v0.1"])),
     ("VoiceAssistantTimerEventResponse", api_pb2.VoiceAssistantTimerEventResponse,
      dict(event_type=api_pb2.VoiceAssistantTimerEvent.VOICE_ASSISTANT_TIMER_FINISHED)),
-    # ── The speaker ──────────────────────────────────────────────────────
-    #
-    # The name is empty on purpose. Home Assistant composes the device
-    # name and the entity name itself, so a name here is rendered twice.
+
+
+
+
     ("ListEntitiesMediaPlayerResponse", api_pb2.ListEntitiesMediaPlayerResponse,
      dict(key=50, name="", supports_pause=True,
           feature_flags=(1 << 0) | (1 << 2) | (1 << 3) | (1 << 9) | (1 << 12) | (1 << 14) | (1 << 20),
@@ -116,18 +116,18 @@ VECTORS = [
     ("MediaPlayerStateResponse", api_pb2.MediaPlayerStateResponse,
      dict(key=50, state=api_pb2.MediaPlayerState.MEDIA_PLAYER_STATE_PLAYING,
           volume=0.5, muted=False)),
-    # ── The camera ───────────────────────────────────────────────────────
+
     ("ListEntitiesCameraResponse", api_pb2.ListEntitiesCameraResponse,
      dict(key=51, name="Camera", object_id="camera")),
     ("CameraImageRequest", api_pb2.CameraImageRequest,
      dict(single=True, stream=False)),
     ("CameraImageResponse", api_pb2.CameraImageResponse,
      dict(key=51, data=b"\xff\xd8\xff", done=True)),
-    # ── Events ───────────────────────────────────────────────────────────
+
     ("ListEntitiesEventResponse", api_pb2.ListEntitiesEventResponse,
      dict(key=52, name="Action Button", object_id="action_button",
           device_class="button", event_types=["single"])),
-    # ── The music player's pairing token ─────────────────────────────────
+
     ("SendspinPairingTokenResponse", api_pb2.SendspinPairingTokenResponse,
      dict(status=api_pb2.SendspinPairingTokenStatus.SENDSPIN_PAIRING_TOKEN_STATUS_OK,
           token="tok")),

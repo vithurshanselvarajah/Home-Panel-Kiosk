@@ -5,28 +5,20 @@ import (
 	"time"
 )
 
-// The device must ask for the format the speaker takes.
-//
-// The speaker takes interleaved stereo frames. A player that advertised
-// mono and wrote each mono sample into both halves of a frame left the
-// reader with a frame whose two halves were the same sample, so the reader
-// heard it twice and played it at double speed.
 func TestTheAdvertisedFormatIsStereo(t *testing.T) {
 	if outChannels != 2 {
 		t.Fatalf("the device asks for %d channels, want 2", outChannels)
 	}
 }
 
-// The decoder must produce interleaved stereo, so the samples it hands on
-// are the ones the server sent, in the order they were sent.
 func TestTheDecoderKeepsBothChannels(t *testing.T) {
 	d, err := newDecoder(streamFormat{Codec: "pcm", SampleRate: outRate, Channels: 2, BitDepth: outBits})
 	if err != nil {
 		t.Fatalf("the decoder refused a stereo stream: %v", err)
 	}
 	payload := []byte{
-		0xe8, 0x03, 0x18, 0xfc, // 1000, -1000
-		0xd0, 0x07, 0x30, 0xf8, // 2000, -2000
+		0xe8, 0x03, 0x18, 0xfc,
+		0xd0, 0x07, 0x30, 0xf8,
 	}
 	got, err := d.decode(nil, payload)
 	if err != nil {
@@ -43,21 +35,13 @@ func TestTheDecoderKeepsBothChannels(t *testing.T) {
 	}
 }
 
-// The placement must hand the speaker the audio for the frames it asks for.
-//
-// The frame index is the timeline: the audio was placed on it when it
-// arrived, and the speaker takes it from there. So the frames the speaker
-// asks for are the frames it gets.
 func TestThePlacementGivesTheFramesAskedFor(t *testing.T) {
 	p := newPlacement(syncedFilter())
 	p.open()
 
-	// The placement's position: the speaker is at frame zero and the
-	// output has no latency, so a chunk stamped now lands at frame zero.
 	p.position = func() (uint64, time.Duration) { return 0, 0 }
 	p.latency = func() time.Duration { return 0 }
 
-	// A chunk of two frames: 1000,-1000 and 2000,-2000.
 	p.write(nowUs(), []int16{1000, -1000, 2000, -2000})
 
 	out := make([]int16, 4)
@@ -71,42 +55,24 @@ func TestThePlacementGivesTheFramesAskedFor(t *testing.T) {
 	}
 }
 
-// syncedFilter is a time filter that has converged, which is what the
-// placement needs before it will anchor.
 func syncedFilter() *timeFilter {
 	f := newTimeFilter()
-	// The filter takes a measurement at a time that moves forward; the
-	// first one cannot be at zero, which is where it starts.
+
 	f.update(0, 100, 1_000_000)
 	f.update(0, 100, 2_000_000)
 	return f
 }
 
-// The buffer the device advertises is thirty seconds.
-//
-// It is the stall the room can ride out, and it is what the server is
-// told it may send. A smaller buffer is a shorter ride: the server
-// sends what it has, the network takes its time, and the queue runs
-// dry while the music is waiting to be played.
 func TestTheAdvertisedBufferIsThirtySeconds(t *testing.T) {
 	if bufferSeconds != 30 {
 		t.Fatalf("the device advertises %d seconds of buffer, want 30", bufferSeconds)
 	}
 
-	// The capacity is in the bytes on the wire, sized for the widest
-	// format offered, so every codec gets the same cushion.
 	want := 30 * outRate * outChannels * outBits / 8
 	if bufferCapacity != want {
 		t.Errorf("the buffer capacity is %d bytes, want %d", bufferCapacity, want)
 	}
 
-	// The placement's own bound is above what the server may queue, so
-	// the server's cap always binds first. A queue that overruns the
-	// placement's bound is thrown away, and a thrown-away queue is a
-	// gap in the music.
-	//
-	// FLAC compresses roughly 2:1, so the server may hold twice the
-	// number of seconds the capacity says.
 	if holdMax < 2*bufferSeconds*outRate {
 		t.Errorf("the queue is bounded at %d seconds, but the server may queue %d", holdMax/outRate, 2*bufferSeconds)
 	}

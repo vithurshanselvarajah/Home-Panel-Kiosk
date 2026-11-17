@@ -4,11 +4,6 @@ import (
 	"testing"
 )
 
-// TestServiceArgumentsAreChecked checks that the arguments are checked
-// before the service runs.
-//
-// An argument of the wrong kind is a mistake, and passing it on is
-// passing the mistake on.
 func TestServiceArgumentsAreChecked(t *testing.T) {
 	called := false
 	service := &Service{
@@ -26,7 +21,6 @@ func TestServiceArgumentsAreChecked(t *testing.T) {
 		return nil
 	})
 
-	// A string where a number is wanted.
 	if err := service.Call(map[string]any{"message": "hello", "duration": "soon"}); err == nil {
 		t.Errorf("the service was called with a piece of text where a number belongs")
 	}
@@ -34,12 +28,10 @@ func TestServiceArgumentsAreChecked(t *testing.T) {
 		t.Errorf("the service ran despite the argument being wrong")
 	}
 
-	// The argument that is missing.
 	if err := service.Call(map[string]any{}); err == nil {
 		t.Errorf("the service was called without the argument it needs")
 	}
 
-	// A number where a number is wanted.
 	if err := service.Call(map[string]any{"message": "hello", "duration": 5000}); err != nil {
 		t.Errorf("the service was refused: %v", err)
 	}
@@ -48,8 +40,6 @@ func TestServiceArgumentsAreChecked(t *testing.T) {
 	}
 }
 
-// TestServiceOptionalArgumentsAreDefaulted checks that an argument
-// that is not given gets its default.
 func TestServiceOptionalArgumentsAreDefaulted(t *testing.T) {
 	service := &Service{
 		Name: "open_url",
@@ -71,8 +61,6 @@ func TestServiceOptionalArgumentsAreDefaulted(t *testing.T) {
 	}
 }
 
-// TestServerListsServices checks that the services are listed with the
-// entities.
 func TestServerListsServices(t *testing.T) {
 	services := NewServiceRegistry()
 	services.Add(&Service{
@@ -101,10 +89,6 @@ func TestServerListsServices(t *testing.T) {
 	}
 }
 
-// TestServiceNamesAreUnique checks that two services do not share a key.
-//
-// The key is what the service is called by, so two services with the
-// same key would mean one of them could never be called.
 func TestServiceNamesAreUnique(t *testing.T) {
 	registry := NewServiceRegistry()
 	first := registry.Add(&Service{Name: "send_notification"})

@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// startPeerPanel starts a panel that a peer can connect to.
-//
-// The port is counted up until one is free, because the tests may run at
-// the same time as something else on the machine.
 func startPeerPanel(t *testing.T) (*Client, string) {
 	t.Helper()
 
@@ -27,9 +23,7 @@ func startPeerPanel(t *testing.T) (*Client, string) {
 		Name:      "Test Panel",
 		Instance:  "test-panel",
 		Port:      port,
-		// The peer is not paired, so the panel has to let an unpaired
-		// server in for the test to be about the protocol rather than
-		// about pairing.
+
 		Unpaired: true,
 	})
 	if err != nil {
@@ -43,12 +37,6 @@ func startPeerPanel(t *testing.T) (*Client, string) {
 	return client, fmt.Sprintf("127.0.0.1:%d", port)
 }
 
-// TestTheRealServerTakesTheRoles checks that a real SendSpin server takes
-// the roles the panel offers.
-//
-// The roles are what the server decides on: a client that does not ask
-// for the metadata role is never told what is playing, and one that
-// does not ask for the controller role has no transport buttons.
 func TestTheRealServerTakesTheRoles(t *testing.T) {
 	client, address := startPeerPanel(t)
 
@@ -76,15 +64,6 @@ func TestTheRealServerTakesTheRoles(t *testing.T) {
 	}
 }
 
-// TestTheRealServerSaysWhatIsPlaying checks that the panel reads what a
-// real SendSpin server says is playing.
-//
-// The server is the one Music Assistant uses, so the metadata is read
-// off the wire exactly as it is sent.
-//
-// The peer is started rather than run to the end, because the music
-// stops partway through: the panel has to be watched while it is
-// playing.
 func TestTheRealServerSaysWhatIsPlaying(t *testing.T) {
 	client, address := startPeerPanel(t)
 
@@ -102,7 +81,6 @@ func TestTheRealServerSaysWhatIsPlaying(t *testing.T) {
 		}
 	}()
 
-	// The panel hears what is playing.
 	seen := ""
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
@@ -120,8 +98,6 @@ func TestTheRealServerSaysWhatIsPlaying(t *testing.T) {
 		t.Errorf("the title was %q, want %q", seen, "Suck the Blood")
 	}
 
-	// And the rest of it: the artist, the picture, the length and where
-	// the track has got to.
 	status := client.Status()
 	if status.Metadata.Artist != "The Sleepy Jackson" {
 		t.Errorf("the artist was %q, want %q", status.Metadata.Artist, "The Sleepy Jackson")
@@ -143,11 +119,6 @@ func TestTheRealServerSaysWhatIsPlaying(t *testing.T) {
 	}
 }
 
-// TestTheRealServerStoppingIsHeard checks that the panel is told when the
-// music stops.
-//
-// The server clears the metadata, and the panel has to take that as
-// "nothing is playing" rather than as "nothing changed".
 func TestTheRealServerStoppingIsHeard(t *testing.T) {
 	client, address := startPeerPanel(t)
 
@@ -165,7 +136,6 @@ func TestTheRealServerStoppingIsHeard(t *testing.T) {
 		}
 	}()
 
-	// The music plays and then stops.
 	played := false
 	stopped := false
 	deadline := time.Now().Add(30 * time.Second)

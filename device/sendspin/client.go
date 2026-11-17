@@ -15,8 +15,6 @@ import (
 	"github.com/grandcat/zeroconf"
 )
 
-// Port and path are the spec's recommendations, which is also where Music
-// Assistant looks if a user types the address by hand.
 const (
 	DefaultPort = 8928
 	Path        = "/sendspin"
@@ -24,36 +22,26 @@ const (
 	maxSessions = 4
 )
 
-// Config is what the device supplies. Everything else is Sendspin's own.
 type Config struct {
-	StorePath string // persisted identity, pairing records and player settings
-	Name      string // shown in Music Assistant
-	Instance  string // mDNS instance name; unique on the LAN
+	StorePath string
+	Name      string
+	Instance  string
 	Port      int
-	// Addresses are the addresses Music Assistant can reach. The mDNS
-	// announcement is limited to interfaces that own these addresses so
-	// Docker bridges cannot publish an unreachable address for the host.
+
 	Addresses []net.IP
 	Product   string
 	Version   string
-	// Unpaired lets a server play without pairing, once its operator has
-	// approved the device. Off by default: anyone on the LAN can claim to
-	// be a server, and pairing is one paste of the device's token.
+
 	Unpaired bool
-	// RequiredLeadTime and MinBuffer describe the output backend's startup
-	// and jitter-buffer needs. Zero selects conservative 2s defaults.
+
 	RequiredLeadTime time.Duration
 	MinBuffer        time.Duration
 }
 
-// Client is the device's Sendspin player. Servers connect to it (the spec's
-// recommended direction, and the one Music Assistant uses): it advertises
-// itself over mDNS and listens.
 type Client struct {
 	cfg   Config
 	store *store
-	// place is where the server's audio goes: the frames it asks for, held
-	// until the speaker pulls them.
+
 	place *placement
 
 	mu               sync.Mutex
@@ -61,38 +49,24 @@ type Client struct {
 	rankOf           map[*session]int
 	sessions         map[*session]bool
 	extBusy          bool
-	bufferMs         int // declared min_buffer_ms, above minBufferFloorMs when set
+	bufferMs         int
 	minBufferFloorMs int
 	requiredLeadMs   int
 	unpaired         bool
 	onChange         func()
 	onSettings       func(playerSettings)
-	// onVolume, when set, makes the server's volume the DEVICE's volume:
-	// commands go to it rather than to a gain on synced music alone, and the
-	// device reports its level back through SetVolume. One volume, whoever
-	// moves it (Wil, 2026-09-30).
+
 	onVolume func(v int)
 
 	srv  *http.Server
 	mdns *zeroconf.Server
 }
 
-// New loads (or creates) the device's Sendspin identity. It does not listen
-// until Start.
 func New(cfg Config) (*Client, error) {
 	if cfg.Port == 0 {
 		cfg.Port = DefaultPort
 	}
-	// The lead and the buffer are small, and that is deliberate.
-	//
-	// The server holds the audio back by the buffer before it sends it,
-	// so a big buffer is a big delay before anything is heard. And the
-	// player compares the audio's own time with the clock and plays it
-	// when it is due, so an audio that is a whole buffer in the future
-	// is an audio that is not played until the buffer has passed.
-	//
-	// A quarter of a second is enough for the network not to outrun
-	// the speaker.
+
 	if cfg.RequiredLeadTime <= 0 {
 		cfg.RequiredLeadTime = 300 * time.Millisecond
 	}
@@ -120,14 +94,10 @@ func New(cfg Config) (*Client, error) {
 	return c, nil
 }
 
-// ClientID is the device's Sendspin identity (its public key). Not secret.
 func (c *Client) ClientID() string { return c.store.id.clientID() }
 
-// PairingToken is what the user pastes into Music Assistant to pair. It
-// carries the pairing PSK, so it is a secret: never log it.
 func (c *Client) PairingToken() string { return c.store.token() }
 
-// OnChange is called (on its own goroutine) whenever the status moves.
 func (c *Client) OnChange(f func()) {
 	c.mu.Lock()
 	c.onChange = f
@@ -143,7 +113,6 @@ func (c *Client) changed() {
 	}
 }
 
-// Start listens and advertises. It returns once both are up.
 func (c *Client) Start() error {
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(c.cfg.Port))
 	if err != nil {
@@ -151,15 +120,11 @@ func (c *Client) Start() error {
 	}
 	mux := http.NewServeMux()
 	up := websocket.Upgrader{
-		// Not a browser endpoint: the Noise handshake authenticates, and a
-		// server has no Origin worth checking.
+
 		CheckOrigin: func(*http.Request) bool { return true },
 	}
 	mux.HandleFunc(Path, func(w http.ResponseWriter, r *http.Request) {
-		// A cap on open connections: anything on the LAN can open one and
-		// hold it for the 30s handshake window, and each costs a goroutine
-		// and buffers. The spec lets a client refuse past a cap. Four covers
-		// a playback server, a pairing one and a displacement in flight.
+
 		c.mu.Lock()
 		full := len(c.sessions) >= maxSessions
 		c.mu.Unlock()
@@ -195,9 +160,6 @@ func (c *Client) Start() error {
 	return nil
 }
 
-// announceInterfaces limits mDNS to the interfaces carrying reachable
-// addresses. Advertising on every interface lets Docker bridges win the
-// hostname's address record, making LAN clients connect to an unreachable IP.
 func announceInterfaces(addresses []net.IP) ([]net.Interface, error) {
 	if len(addresses) == 0 {
 		return nil, nil
@@ -235,7 +197,6 @@ func announceInterfaces(addresses []net.IP) ([]net.Interface, error) {
 	return chosen, nil
 }
 
-// Stop says goodbye to every server and stops listening.
 func (c *Client) Stop(reason string) {
 	c.mu.Lock()
 	var all []*session
@@ -258,9 +219,6 @@ func (c *Client) Stop(reason string) {
 	c.place.flush()
 }
 
-// SetUnpaired changes whether servers may play without pairing. A change
-// restarts every connection (goodbye "restart"), since client/hello
-// advertised the old value and is sent once per connection.
 func (c *Client) SetUnpaired(on bool) {
 	c.mu.Lock()
 	if c.unpaired == on {
@@ -285,11 +243,6 @@ func (c *Client) unpairedAccess() bool {
 	return c.unpaired
 }
 
-// SetExternal is set while something other than Sendspin owns the music
-// plane — Home Assistant's own media player. Decided 2026-08-22 (Wil): HA
-// wins, since it is the user's direct request. The device reports itself
-// unavailable, which moves it out of its group and stops the stream, and
-// the server does not rejoin it afterwards: someone restarts the group.
 func (c *Client) SetExternal(busy bool) {
 	c.mu.Lock()
 	if c.extBusy == busy {
@@ -308,9 +261,6 @@ func (c *Client) SetExternal(busy bool) {
 	c.changed()
 }
 
-// SetMinBuffer sets the minimum jitter buffer the player declares, never
-// below the configured floor. A change reaches the server at once; on a live
-// stream it costs one gap of the difference while the lead grows.
 func (c *Client) SetMinBuffer(d time.Duration) {
 	ms := max(int(d.Milliseconds()), c.minBufferFloorMs)
 	c.mu.Lock()
@@ -338,16 +288,12 @@ func (c *Client) external() bool {
 	return c.extBusy
 }
 
-// OnSettings is told when a server changes volume, mute or delay, so the
-// device can reflect it (they are also persisted here).
 func (c *Client) OnSettings(f func(volume int, muted bool, delayMs int)) {
 	c.mu.Lock()
 	c.onSettings = func(p playerSettings) { f(p.Volume, p.Muted, p.StaticDelayMs) }
 	c.mu.Unlock()
 }
 
-// OnVolume hands volume commands to the device (see onVolume). Set before
-// Start.
 func (c *Client) OnVolume(f func(v int)) {
 	c.mu.Lock()
 	c.onVolume = f
@@ -356,36 +302,15 @@ func (c *Client) OnVolume(f func(v int)) {
 	c.place.setGain(c.gainVolume(set.Volume), set.Muted)
 }
 
-// OnServerVolume is told the volume the server asked for.
-//
-// It is the same thing OnVolume is for — the server's volume becomes the
-// device's volume — but it is a separate hook, because the two answer
-// different questions. OnVolume is the command path: the server says
-// "set the volume to this" and the device does it. OnServerVolume is
-// the report path: the server says what it has settled on and the
-// device shows it.
-//
-// They are separate because a device that owns the volume has to report
-// its level back to the server, and a server that is told its own
-// volume back would answer with a command, and the two would talk for
-// ever.
-//
-// The player's own gain is dropped when this is set: the device applies
-// the level to everything it plays, in one place, and a second gain on
-// the music alone is a level applied in two places.
 func (c *Client) OnServerVolume(f func(v int)) {
 	c.mu.Lock()
 	c.onVolume = f
 	c.mu.Unlock()
 	set := c.store.settings()
-	// The player applies no gain of its own: the device's level is the
-	// level, and it is applied to the music with everything else.
+
 	c.place.setGain(100, set.Muted)
 }
 
-// SetVolume reports the device's volume (0-100) when it changes by any
-// route: its buttons, Home Assistant, or a command this client passed on.
-// Sent to the server only when it differs from what it last heard.
 func (c *Client) SetVolume(v int) {
 	set := c.store.settings()
 	if set.Volume == v {
@@ -402,8 +327,6 @@ func (c *Client) SetVolume(v int) {
 	c.changed()
 }
 
-// gainVolume is the volume the player itself applies: none when the device
-// owns the volume, since the device applies it to everything it plays.
 func (c *Client) gainVolume(v int) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -413,17 +336,6 @@ func (c *Client) gainVolume(v int) int {
 	return v
 }
 
-// ── transport ──────────────────────────────────────────────────────────────
-//
-// The commands are the controller role's. The panel's transport buttons
-// come through here, and so does anything else that wants to drive the
-// music.
-
-// TransportCommands says what the transport can do.
-//
-// It is empty when there is no server, or when the server has not said,
-// and the panel offers no buttons then. A control that does nothing is
-// worse than no control.
 func (c *Client) TransportCommands() []string {
 	c.mu.Lock()
 	s := c.admitted
@@ -435,15 +347,10 @@ func (c *Client) TransportCommands() []string {
 	if controller == nil {
 		return nil
 	}
-	// The list is copied, because the session owns it and the caller
-	// may keep it.
+
 	return append([]string(nil), controller.SupportedCommands...)
 }
 
-// CanTransport says whether the transport can do a command.
-//
-// The server decides which commands it will accept, so the panel is
-// told rather than guessing.
 func (c *Client) CanTransport(command string) bool {
 	for _, name := range c.TransportCommands() {
 		if name == command {
@@ -453,26 +360,18 @@ func (c *Client) CanTransport(command string) bool {
 	return false
 }
 
-// Transport sends a command to the transport.
-//
-// The commands are the ones the server says it supports, and it checks
-// them again, so a command it does not want is dropped there.
 func (c *Client) Transport(command string) bool {
 	return c.transport(&controllerCommand{Command: command})
 }
 
-// SeekTo moves the music to a position, in milliseconds.
 func (c *Client) SeekTo(positionMs int64) bool {
 	return c.transport(&controllerCommand{Command: "seek", PositionMs: &positionMs})
 }
 
-// SeekRelative moves the music by an offset, in milliseconds. The offset
-// is signed: negative goes back.
 func (c *Client) SeekRelative(offsetMs int64) bool {
 	return c.transport(&controllerCommand{Command: "seek_relative", OffsetMs: &offsetMs})
 }
 
-// transport sends one controller command to the admitted server.
 func (c *Client) transport(cmd *controllerCommand) bool {
 	c.mu.Lock()
 	s := c.admitted
@@ -480,8 +379,7 @@ func (c *Client) transport(cmd *controllerCommand) bool {
 	if s == nil {
 		return false
 	}
-	// What was asked for is remembered, so a stop that arrives from the
-	// server is told from a pause the panel asked for itself.
+
 	s.asked.Store(cmd.Command)
 	return s.send("client/command", clientCommand{Controller: cmd}) == nil
 }
@@ -506,24 +404,10 @@ func (c *Client) applySettings(p playerSettings) {
 	c.changed()
 }
 
-// Render is the speaker's pull: the frames it is about to send to the card,
-// starting at the frame index from.
-//
-// The placement is what answers, and it answers with the audio for those
-// frames. Nothing is compared against a clock here: the frame index is the
-// timeline, and the audio was placed on it when it arrived.
 func (c *Client) Render(from uint64, out []int16) {
 	c.place.Render(from, out)
 }
 
-// Active reports whether the music plane is taken: whether the server is
-// playing and there is audio coming.
-//
-// It is not whether the queue happens to have audio in it right now. The
-// queue is empty between two chunks, and after a clear, and the speaker's
-// source is attached and detached on this answer: a source detached because
-// the queue was momentarily empty is never attached again, because the
-// queue stays empty while nothing is pulling from it.
 func (c *Client) Active() bool {
 	c.mu.Lock()
 	s := c.admitted
@@ -534,16 +418,6 @@ func (c *Client) Active() bool {
 	return s.playing()
 }
 
-// Streaming says whether the music server is playing music.
-//
-// It is not the same as Active, which says whether the server has sent
-// anything at all: the decoder is kept across the end of a stream, so a
-// server that is connected but paused still has one.
-//
-// The distinction matters because the two have their own transports: a
-// command for the music Home Assistant is playing must not be sent to a
-// music server that is merely connected, or it pauses nothing and the
-// music Home Assistant is playing carries on.
 func (c *Client) Streaming() bool {
 	c.mu.Lock()
 	s := c.admitted
@@ -554,54 +428,27 @@ func (c *Client) Streaming() bool {
 	return s.playingMusic()
 }
 
-// Buffered is how much audio is queued and not yet played.
 func (c *Client) Buffered() time.Duration {
 	return time.Duration(c.place.queuedMs()) * time.Millisecond
 }
 
-// SetBackgrounds tells the placement which arbiter it belongs to.
-//
-// The arbiter is what stands the music down when a reply takes the speaker,
-// and what lets it carry on afterwards. Without it the music and the reply
-// fight for the card.
 func (c *Client) SetBackgrounds(arbiter *speaker.Arbiter) {
 	c.place.backgrounds = arbiter
 }
 
-// SetAttach tells the placement how to take the speaker and how to give it
-// back.
-//
-// The placement attaches itself when a stream opens and detaches when it
-// ends, so the source is never detached because the queue happened to be
-// empty at the moment a timer looked.
 func (c *Client) SetAttach(attach, detach func()) {
 	c.place.SetAttach(attach, detach)
 }
 
-// SetStarted tells the placement whether the speaker has started.
-//
-// The anchor is not laid before the speaker has written to the card: a
-// card that has written nothing has no position, and an anchor laid
-// against no position is the send-ahead alone — the audio a moment ahead
-// of a card that has not started, which the drift correction then spends
-// the first seconds of the track pulling back.
 func (c *Client) SetStarted(started func() bool) {
 	c.place.started = started
 }
 
-// SetPlacement tells the placement where the speaker is and how long it
-// takes to be heard.
-//
-// The frame counter and the latency come from one reading of the card, so
-// they always belong together: the frame that is going to the card and the
-// moment it will be heard.
 func (c *Client) SetPlacement(position func() (uint64, time.Duration), latency func() time.Duration) {
 	c.place.position = position
 	c.place.latency = latency
 }
 
-// SyncDiag takes the connected server's time-exchange summary since the last
-// call; false with no server connected.
 func (c *Client) SyncDiag() (SyncDiag, bool) {
 	c.mu.Lock()
 	s := c.admitted
@@ -612,12 +459,6 @@ func (c *Client) SyncDiag() (SyncDiag, bool) {
 	return s.filter.takeDiag(), true
 }
 
-// offeredFormats is what the device can play.
-//
-// The order matters: the server takes the first it can. FLAC leads because
-// it is the only lossless one this radio can afford; Opus is the fallback
-// that always arrives at 48 kHz whatever the source was; and PCM is the
-// plain one.
 func offeredFormats() []audioFormat {
 	return []audioFormat{
 		{Codec: "flac", Channels: outChannels, SampleRate: outRate, BitDepth: outBits},
@@ -636,11 +477,7 @@ func (c *Client) hello() clientHello {
 			SoftwareVersion: c.cfg.Version,
 		},
 		PlayerSupport: &playerSupport{
-			// FLAC leads because it is the only lossless one this radio can
-			// afford. Opus is the fallback that always arrives at 48 kHz
-			// whatever the source was, and PCM is the plain one.
-			//
-			// The order matters: the server takes the first it can.
+
 			SupportedFormats: []audioFormat{
 				{Codec: "flac", Channels: outChannels, SampleRate: outRate, BitDepth: outBits},
 				{Codec: "opus", Channels: outChannels, SampleRate: outRate, BitDepth: outBits},
@@ -655,29 +492,9 @@ func (c *Client) hello() clientHello {
 	}
 }
 
-// bufferCapacity caps how far ahead the server may send, which is the
-// stall the room can ride out.
-//
-// The spec counts bytes and carries one number for every format, so it is
-// sized for the widest we offer: every codec then gets the same cushion,
-// bounded by the server's own 30 second cap rather than by bytes.
-//
-// The cap is on the BYTES ON THE WIRE, not on the audio they decode to, but
-// it is sized as if they were PCM: FLAC compresses roughly 2:1, so a server
-// may hold twice as many seconds of FLAC as the number says. The queue is
-// bounded by the placement's own holdMax, which is above this, so the
-// server's cap always binds first. A queue that never overruns is never
-// thrown away, and a thrown-away queue is a gap in the music.
 const bufferSeconds = 30
 
 const bufferCapacity = bufferSeconds * outRate * outChannels * outBits / 8
-
-// ── admission ──────────────────────────────────────────────────────────────
-//
-// One admitted connection at a time, ranked by what it declares: playback
-// beats pairing beats nothing. An equal or higher newcomer displaces the
-// holder, except that a pairing in progress is never displaced, and between
-// two that declare nothing the last server to have played wins.
 
 func (c *Client) admit(s *session, r int) bool {
 	c.mu.Lock()
@@ -722,8 +539,6 @@ func (c *Client) isAdmitted(s *session) bool {
 	return c.admitted == s
 }
 
-// inUse says whether a pairing record backs a live connection, so eviction
-// never removes one.
 func (c *Client) inUse(serverID string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -745,24 +560,16 @@ func (c *Client) release(s *session) {
 	}
 	c.mu.Unlock()
 	if was {
-		// The placement is closed, not just flushed: the server has gone,
-		// so the speaker is given back and the source is detached.
-		//
-		// A flush alone leaves the source attached to the speaker for
-		// ever, and the speaker then says the panel is sounding whenever
-		// the source has been quiet for less than two seconds.
+
 		c.place.close()
 		log.Printf("[sendspin] %q disconnected", s.name())
 		c.changed()
 	}
 }
 
-// ── status ─────────────────────────────────────────────────────────────────
-
-// Status is what the controller shows. No secrets.
 type Status struct {
 	ClientID   string      `json:"clientId"`
-	State      string      `json:"state"` // listening | connected | playing | busy
+	State      string      `json:"state"`
 	Server     string      `json:"server,omitempty"`
 	Paired     bool        `json:"paired"`
 	PairedWith int         `json:"pairedWith"`
@@ -775,62 +582,42 @@ type Status struct {
 	DelayMs    int         `json:"delayMs"`
 	Unpaired   bool        `json:"unpairedAccess"`
 	Player     playerStats `json:"player"`
-	// Metadata is what is playing.
-	//
-	// It is empty when nothing is playing, and the panel shows nothing
-	// rather than an empty box.
+
 	Metadata Metadata `json:"metadata"`
-	// Transport is what the transport can do.
-	//
-	// It is empty when there is no server, and the panel shows no
-	// buttons rather than buttons that do nothing.
+
 	Transport []string `json:"transport,omitempty"`
 }
 
-// playerStats are the counts since the stream started, for the status
-// report.
-//
-// The names are the ones the panel already reads, so the panel does not
-// have to know that the placement replaced the player.
 type playerStats struct {
-	// Chunks is how many chunks have arrived and Samples how many frames
-	// they carried.
 	Chunks  int   `json:"chunks"`
 	Samples int64 `json:"samples"`
-	// MaxChunk is the largest chunk that has arrived, in frames.
+
 	MaxChunk int `json:"maxChunk"`
-	// LateDrops is how many chunks arrived after their frames had
-	// played, and Backwards how many times the server's timestamps went
-	// backwards.
+
 	LateDrops int `json:"lateDrops"`
 	Backwards int `json:"backwards"`
-	// NotDue is how many periods the player found the queue was not due
-	// to play yet, and TooLate how many found it already overdue.
+
 	NotDue  int `json:"notDue"`
 	TooLate int `json:"tooLate"`
-	// Empty is how many periods found nothing queued at all.
+
 	Empty int `json:"empty"`
-	// Played is how many periods were filled and Frames how many frames
-	// of audio they carried.
+
 	Played int   `json:"played"`
 	Frames int64 `json:"frames"`
-	// LeadUs is how far ahead of the play position the head of the queue
-	// is.
+
 	LeadUs int64 `json:"leadUs"`
-	// SpanUs is the time the queued audio covers, from head to tail.
+
 	SpanUs int64 `json:"spanUs"`
-	// HeadAgeUs is the server's now minus the head chunk's timestamp.
+
 	HeadAgeUs int64 `json:"headAgeUs"`
-	// TailAgeUs is the same for the newest chunk.
+
 	TailAgeUs int64 `json:"tailAgeUs"`
-	// OffsetUs is the time filter's offset and DriftPpm its drift.
+
 	OffsetUs int64   `json:"offsetUs"`
 	DriftPpm float64 `json:"driftPpm"`
-	// RMS is how loud the last period handed to the speaker was. Zero
-	// means the period was silence, whatever the counts say.
+
 	RMS float64 `json:"rms"`
-	// Underruns, LateDrops, Snaps, Corrections, Overruns and LastErrorUs
-	// are kept so the panel's own fields still read something.
+
 	Underruns      int `json:"underruns"`
 	Snaps          int `json:"snaps"`
 	Corrections    int `json:"corrections"`
@@ -839,10 +626,6 @@ type playerStats struct {
 	BufferOverruns int `json:"bufferOverruns"`
 }
 
-// Metadata is what the server says is playing.
-//
-// The progress is in milliseconds from the start of the track, and the
-// duration is zero for a live stream, which has no end.
 type Metadata struct {
 	Title       string `json:"title,omitempty"`
 	Artist      string `json:"artist,omitempty"`
@@ -851,27 +634,18 @@ type Metadata struct {
 	ArtworkURL  string `json:"artworkUrl,omitempty"`
 	Year        int    `json:"year,omitempty"`
 	Track       int    `json:"track,omitempty"`
-	// ProgressMs is how far into the track the music has got.
+
 	ProgressMs int64 `json:"progressMs,omitempty"`
-	// DurationMs is how long the track is, or zero for a live stream.
+
 	DurationMs int64 `json:"durationMs,omitempty"`
-	// Speed is the playback speed as a multiplier of a thousand. A
-	// thousand is normal and zero is paused.
+
 	Speed int `json:"speed,omitempty"`
 }
 
-// Empty says whether there is anything to show.
-//
-// A server that sends the metadata role's object with nothing in it is
-// saying that nothing is playing, and the panel shows nothing then.
 func (m Metadata) Empty() bool {
 	return m.Title == "" && m.Artist == "" && m.Album == "" && m.ArtworkURL == ""
 }
 
-// metadataOf turns what the wire carried into what the panel shows.
-//
-// The wire's names are the spec's, and the panel's are its own, so the
-// two are kept apart rather than sharing a type.
 func metadataOf(m streamMetadata) Metadata {
 	out := Metadata{
 		Title:       m.Title,
@@ -912,8 +686,7 @@ func (c *Client) Status() Status {
 		if st.Synced {
 			st.SyncErrUs = s.filter.errorUs()
 		}
-		// The filter's offset and drift, for the log: how the server's
-		// clock compares with ours.
+
 		d := s.filter.takeDiag()
 		st.Player.OffsetUs = d.OffsetUs
 		st.Player.DriftPpm = d.DriftPpm

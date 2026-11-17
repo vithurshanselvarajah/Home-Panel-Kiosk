@@ -13,7 +13,6 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
 )
 
-// recordingWriter keeps what was written to the speaker.
 type recordingWriter struct {
 	mu      sync.Mutex
 	written []byte
@@ -28,20 +27,8 @@ func (w *recordingWriter) Write(p []byte) (int, error) {
 
 func (w *recordingWriter) Close() error { return nil }
 
-// TestTheMusicHasNoGaps checks that the music the speaker is given has
-// no gaps in it.
-//
-// The proxy streams the audio as ffmpeg makes it, which is slower than
-// the speaker plays it. The fetch has to stay ahead of the speaker, or
-// the music arrives in bursts with silence between them, and that is a
-// tick rather than music.
-//
-// This is the bug that made the music from Home Assistant a tick: the
-// speaker was opened on the first chunk the network delivered and it
-// then took the music as fast as the network could give it, which is
-// slower than the speaker plays it.
 func TestTheMusicHasNoGaps(t *testing.T) {
-	// A second of music.
+
 	pcm := make([]byte, 48000*8)
 	for i := 0; i < len(pcm)/2; i++ {
 		pcm[i*2] = 0x40
@@ -49,7 +36,6 @@ func TestTheMusicHasNoGaps(t *testing.T) {
 	}
 	file := buildStreamingWAV(pcm)
 
-	// The server hands the audio over slowly, as the proxy does.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/wav")
 		w.Write(file[:12])
@@ -61,7 +47,7 @@ func TestTheMusicHasNoGaps(t *testing.T) {
 			}
 			w.Write(file[offset:end])
 			w.(http.Flusher).Flush()
-			// The network hands the audio over in bursts.
+
 			time.Sleep(20 * time.Millisecond)
 		}
 	}))
@@ -73,11 +59,9 @@ func TestTheMusicHasNoGaps(t *testing.T) {
 	audio.volume = 100
 
 	go audio.playMediaURL(context.Background(), server.URL, false)
-	// The speaker is one for the whole program, so the loop that
-	// has it is stopped: a test that leaves it running is a test that
-	// leaves the next one without a speaker.
+
 	defer audio.stopPortedSpeaker()
-	// Watch the queue depth while it plays.
+
 	for i := 0; i < 30; i++ {
 		time.Sleep(100 * time.Millisecond)
 		audio.mu.Lock()
@@ -89,14 +73,11 @@ func TestTheMusicHasNoGaps(t *testing.T) {
 	written := len(writer.written)
 	writer.mu.Unlock()
 
-	// The speaker takes a period every ten milliseconds. A second of
-	// music is a hundred periods, and every one of them has to have been
-	// written: a gap is a period of silence where there should be music.
 	t.Logf("%d bytes written to the speaker", written)
 	if written == 0 {
 		t.Fatal("nothing was written to the speaker at all")
 	}
-	// The music is a steady value, so a gap shows up as a run of zeros.
+
 	writer.mu.Lock()
 	zeros := 0
 	longest := 0
@@ -114,7 +95,7 @@ func TestTheMusicHasNoGaps(t *testing.T) {
 	}
 	writer.mu.Unlock()
 	t.Logf("%d zero samples, the longest run %d", zeros, longest)
-	// Where is the gap?
+
 	writer.mu.Lock()
 	first := -1
 	for i := 0; i+1 < len(writer.written); i += 2 {
@@ -130,7 +111,6 @@ func TestTheMusicHasNoGaps(t *testing.T) {
 	}
 }
 
-// fakeRecordingBackend is a sound card that writes down what it is given.
 type fakeRecordingBackend struct {
 	writer *recordingWriter
 }

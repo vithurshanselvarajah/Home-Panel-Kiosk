@@ -8,38 +8,9 @@ import (
 	"time"
 )
 
-// The live media player.
-//
-// The panel is a speaker to Home Assistant: Home Assistant plays
-// something on it and the panel plays it. This is the whole of that,
-// end to end.
-//
-// The thing played is a radio station, so the audio really is a stream
-// and never ends: a track that was a file would finish, and the
-// problems that matter are the ones that only show up on a stream that
-// does not end.
-
-// TestThePanelPlaysRadioFromHomeAssistant plays a radio station on the
-// panel and checks that the panel plays it.
-//
-// The station is Capital, through Home Assistant's radio browser
-// integration. The audio is checked by its length: a station that was
-// not played would leave the speaker's file short, and a station that
-// was played leaves it long.
-//
-// The panel is told to play it the way Home Assistant tells it to: a
-// media command over the Home Assistant connection.
 func TestThePanelPlaysRadioFromHomeAssistant(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
-	// The station is a radio browser entry, so the content is a media
-	// source address rather than the stream itself.
-	//
-	// Home Assistant plays the radio browser's own stream, which it has
-	// proxied and knows the format of. A raw address would be played as
-	// it came, and the panel would have to know every format a radio
-	// station uses.
-	//
 	content := liveStationContent(t)
 
 	d := startDevice(t, "")
@@ -47,14 +18,9 @@ func TestThePanelPlaysRadioFromHomeAssistant(t *testing.T) {
 		return s.Connection == "connected"
 	})
 
-	// The player has to be there before it can be played on.
-	//
-	// Home Assistant notices the device a moment after it connects, so
-	// the player is not there the instant the link is up.
 	player := livePlayer(t, d)
 	t.Logf("the player is %s", player)
 
-	// Home Assistant is told to play the station.
 	played := post(t, haURL()+"/api/services/media_player/play_media", haToken(), map[string]any{
 		"entity_id":          player,
 		"media_content_id":   content,
@@ -68,18 +34,11 @@ func TestThePanelPlaysRadioFromHomeAssistant(t *testing.T) {
 		}
 	}
 
-	// The panel says it is playing.
 	state := d.waitFor("playing the station", 60*time.Second, func(s deviceState) bool {
 		return s.MediaState == "playing"
 	})
 	t.Logf("the panel is %s", state.MediaState)
 
-	// The audio is really being played.
-	//
-	// A station never ends, so the speaker's file keeps growing. The
-	// first of it takes a moment: the proxy transcodes the station, and
-	// the speaker opens once there is enough music queued to play
-	// without a gap.
 	grown := d.waitFor("playing the station's audio", 90*time.Second, func(s deviceState) bool {
 		return d.speakerBytes() > 100000
 	})
@@ -87,24 +46,10 @@ func TestThePanelPlaysRadioFromHomeAssistant(t *testing.T) {
 	t.Logf("the panel has played %d bytes", d.speakerBytes())
 }
 
-// liveStation is the radio station that is played.
-//
-// It is a stream, so it never ends and the panel keeps playing it for
-// as long as it is told to.
-//
-// The station is looked up in Home Assistant's radio browser rather
-// than being named, because the radio browser's catalogue changes: a
-// station that was there yesterday has a different identifier today,
-// and a test that names an identifier fails for a reason that has
-// nothing to do with the panel.
-//
-// The name is the one the environment gives, and Capital is the
-// default because it is a station that is always there.
 func liveStation(t *testing.T) string {
 	t.Helper()
 	if station := os.Getenv("LIVE_STATION"); station != "" {
-		// The station may be named by its identifier already, in which
-		// case there is nothing to look up.
+
 		if strings.Contains(station, "-") && strings.Contains(station, "radio_browser") {
 			return station
 		}
@@ -120,11 +65,6 @@ func liveStation(t *testing.T) string {
 	return station
 }
 
-// liveStationContent is what Home Assistant is told to play.
-//
-// The station is a media source address, which is what Home Assistant's
-// radio browser gives out. A name is turned into an address by the
-// lookup, so the address is used as it is.
 func liveStationContent(t *testing.T) string {
 	t.Helper()
 	content := liveStation(t)
@@ -134,10 +74,6 @@ func liveStationContent(t *testing.T) string {
 	return content
 }
 
-// findRadioStation looks a station up in Home Assistant's radio browser.
-//
-// It is Home Assistant's copy of the catalogue that is searched, so the
-// identifier it gives is the one Home Assistant will accept.
 func findRadioStation(t *testing.T, name string) string {
 	t.Helper()
 	player := livePlayerEntity(t)
@@ -182,8 +118,7 @@ asyncio.run(main())
 		t.Logf("the radio browser could not be searched: %v (%s)", err, strings.TrimSpace(string(out)))
 		return ""
 	}
-	// The answer is the media source address, and the identifier is the
-	// last part of it.
+
 	answer := strings.TrimSpace(string(out))
 	if answer == "" {
 		return ""
@@ -191,11 +126,6 @@ asyncio.run(main())
 	return answer
 }
 
-// livePlayerEntity is any media player in Home Assistant.
-//
-// The radio browser is searched through a media player, and the panel
-// may not be connected when the station is looked up, so any player
-// will do.
 func livePlayerEntity(t *testing.T) string {
 	t.Helper()
 	for id := range haEntities(t, "media_player") {
@@ -205,30 +135,9 @@ func livePlayerEntity(t *testing.T) string {
 	return ""
 }
 
-// livePlayer is the panel's media player in Home Assistant.
-//
-// There may be more than one panel in Home Assistant — a device that
-// was here before and one that is here now — so the one that is
-// available is the one to play on.
-//
-// Home Assistant notices the device a moment after it connects, so the
-// player is waited for rather than looked for.
-// livePlayer is the panel's media player in Home Assistant.
-//
-// There may be more than one panel in Home Assistant — a device that
-// was here before and one that is here now — so the player is found by
-// the device it belongs to.
-//
-// The device is told which one it is by its address, and the address
-// is what Home Assistant knows the device by.
 func livePlayer(t *testing.T, d *device) string {
 	t.Helper()
-	// The player that is available is the panel's.
-	//
-	// Home Assistant adds an entity for every panel it has ever seen, so
-	// there may be more than one, and the ones that are not running are
-	// marked unavailable. The one that is available is the one that is
-	// here now.
+
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		for id, state := range haEntities(t, "media_player") {
@@ -245,12 +154,6 @@ func livePlayer(t *testing.T, d *device) string {
 	return ""
 }
 
-// TestThePanelSurvivesTheMediaPlaying checks that the panel stays
-// connected to Home Assistant while the music plays.
-//
-// The music goes through the panel's own proxy, and a panel that drops
-// its connection when the music starts is a panel that cannot be
-// controlled while the music is playing.
 func TestThePanelSurvivesTheMediaPlaying(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
@@ -261,8 +164,6 @@ func TestThePanelSurvivesTheMediaPlaying(t *testing.T) {
 
 	player := livePlayer(t, d)
 
-	// Whatever the test before it left playing is stopped, so the test
-	// starts from a known place.
 	post(t, haURL()+"/api/services/media_player/media_stop", haToken(), map[string]any{
 		"entity_id": player,
 	})
@@ -273,7 +174,6 @@ func TestThePanelSurvivesTheMediaPlaying(t *testing.T) {
 		"media_content_type": "music",
 	})
 
-	// The music plays for a while, and the panel stays connected.
 	d.waitFor("playing the station", 90*time.Second, func(s deviceState) bool {
 		return s.MediaState == "playing"
 	})

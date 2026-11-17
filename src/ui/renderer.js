@@ -11,13 +11,7 @@ const voiceUI = window.VoiceUI ? window.VoiceUI.create({
     overlayWasUp = false;
     window.homePanel.voiceOverlay(false);
   },
-  // The drawer has one row for the device's link to Home Assistant, so
-  // there is no separate row for the voice assistant: it is the same
-  // link and it says the same thing.
-  //
-  // The settings page has its own, because that is where the voice
-  // assistant's settings are and a person looking at them wants to
-  // know the assistant is there.
+
   statusLed: document.querySelector('[data-service="voice-settings"]'),
   statusLabel: $("#voice-status-label"),
   statusReason: $("#voice-status-reason"),
@@ -28,18 +22,11 @@ let dragState;
 let shiftOn = false;
 let symbolsOn = false;
 let settingsKeyboardActive = false;
-// The field the keyboard is typing into.
-//
-// It is remembered rather than read from the focus, because the keyboard
-// is a set of buttons and a button takes the focus when it is pressed.
-// Without this the key press would go to the button rather than to the
-// field being edited.
+
 let keyboardTarget = null;
-// The mode the device is in, kept here so the drawer can label the button
-// before the first state arrives.
+
 let displayMode = "fullscreen";
 
-// How much room the on-screen keyboard takes off the bottom of the view.
 function keyboardOffset() {
   let bottom = 0;
   if (keyboard && !keyboard.hidden) {
@@ -59,7 +46,6 @@ function syncSettingsLayout() {
   syncDrawerLayout();
 }
 
-// Keeps the slide-in drawer clear of the return home bar and the keyboard.
 function syncDrawerLayout() {
   if (!drawer) return;
   const homeBar = $("#return-home");
@@ -75,11 +61,9 @@ function syncDrawerLayout() {
 
 function setCaret(field, position) {
   if (typeof field.selectionStart !== "number") return;
-  try { field.setSelectionRange(position, position); } catch { /* number inputs do not expose a selection */ }
+  try { field.setSelectionRange(position, position); } catch {  }
 }
 
-// Types into the focused settings field when the panel is open, otherwise the
-// keystroke belongs to the Home Assistant page behind the overlay.
 function applyToSettingsField(value) {
   const field = settingsField();
   if (!field) return false;
@@ -97,12 +81,6 @@ function applyToSettingsField(value) {
   return true;
 }
 
-// The field being edited.
-//
-// It is not simply the field with the focus, because the keyboard is a set
-// of buttons and a button takes the focus when it is pressed. The buttons
-// are told not to take it, but the field is remembered as well, so that a
-// key press always goes to the field that was being edited.
 function settingsField() {
   const active = document.activeElement;
   if (active && form.contains(active) && "value" in active) return active;
@@ -115,11 +93,6 @@ function sendKey(value) {
   applyToSettingsField(value);
 }
 
-// syncEncryptionKeyField enables or disables the encryption key field.
-//
-// The key is only wanted when the connection is encrypted, so the field
-// is off when it is not. The key itself is shown: it is a setting that
-// is read and copied into Home Assistant, not a password that is typed.
 function syncEncryptionKeyField() {
   const key = form.elements.namedItem("esphomeEncryptionKey");
   const enabled = form.elements.namedItem("esphomeEncryptionEnabled");
@@ -150,8 +123,7 @@ function hideSecret(kind) {
 async function toggleSecret(kind) {
   const view = secretViews[kind];
   if (!view || view.open) { hideSecret(kind); return; }
-  // A previous text field may still hold focus while the reveal button is
-  // clicked. The token and QR are read-only, so dismiss the touch keyboard.
+
   if (!keyboard.hidden) setKeyboard(false);
   const button = document.querySelector(`[data-secret-toggle="${kind}"]`);
   if (button) button.disabled = true;
@@ -186,10 +158,6 @@ for (const button of document.querySelectorAll("[data-copy-secret]")) {
   });
 }
 
-// makeEncryptionKey puts a new key in the field.
-//
-// The key is made by the application, which is where the random source
-// is, so it is made properly rather than in the page.
 async function makeEncryptionKey() {
   const key = await window.homePanel.newEncryptionKey();
   const field = form.elements.namedItem("esphomeEncryptionKey");
@@ -211,7 +179,7 @@ function populate(settings) {
       if (input.type === "checkbox") input.checked = Boolean(value);
       else input.value = value;
     }
-    // The voice settings live in their own form.
+
     const voiceInput = voiceForm && voiceForm.elements.namedItem(key);
     if (voiceInput) {
       if (voiceInput.type === "checkbox") voiceInput.checked = Boolean(value);
@@ -220,9 +188,7 @@ function populate(settings) {
   }
   const cameraPasswordField = form.elements.namedItem("cameraPassword");
   if (cameraPasswordField) cameraPasswordField.value = "";
-  // The encryption key is shown, because it is a setting that is read
-  // and copied rather than a password that is typed. The toggle says
-  // whether it is wanted at all.
+
   const enabledToggle = form.elements.namedItem("esphomeEncryptionEnabled");
   if (enabledToggle) enabledToggle.checked = Boolean(settings.esphomeEncryptionEnabled);
   const sendspinPairing = form.elements.namedItem("sendspinRequirePairing");
@@ -231,9 +197,7 @@ function populate(settings) {
 }
 
 function setDrawer(open) {
-  // The drawer is only told about a change. A button press in the open
-  // drawer must not tell the main process that the drawer is open,
-  // because that resizes the overlay view and the drawer jumps.
+
   const wasOpen = drawer.classList.contains("open");
   drawer.classList.remove("dragging");
   drawer.style.transform = "";
@@ -249,9 +213,6 @@ function setDrawer(open) {
 
 const drawerWidth = () => drawer.getBoundingClientRect().width || 330;
 
-// Progress of the drawer between closed (0) and fully open (1). Following the
-// finger lets it be pushed in or pulled out instead of only snapping between
-// the two states.
 function dragDrawer(progress) {
   const width = drawerWidth();
   const clamped = Math.max(0, Math.min(1, progress));
@@ -300,16 +261,7 @@ function renderKeyboard() {
   const symbols = document.createElement("button"); symbols.className = "key key-wide"; symbols.textContent = symbolsOn ? "ABC" : "?123"; symbols.addEventListener("click", () => { symbolsOn = !symbolsOn; shiftOn = false; renderKeyboard(); }); bottom.append(symbols);
   addKey("space", "SPACE", "key-space"); addKey("↵", "ENTER", "key-wide key-enter");
   keyboard.append(bottom);
-  // The keys do not take the focus.
-  //
-  // A button takes the focus when it is pressed, and that takes the focus
-  // off the field being edited: the field is then blurred, the keyboard
-  // is closed, and the key press goes nowhere. So the keys are told to
-  // leave the focus where it is.
-  //
-  // It is done on the mouse event and not the pointer event on purpose:
-  // cancelling a pointer event for a touch stops the click as well, and
-  // the click is what types the letter.
+
   for (const button of keyboard.querySelectorAll("button")) {
     button.addEventListener("mousedown", (event) => event.preventDefault());
   }
@@ -329,9 +281,7 @@ function setKeyboard(visible, { settings = false } = {}) {
 function closeSettings() {
   panel.hidden = true;
   if (settingsKeyboardActive) setKeyboard(false);
-  // The microphone is released when the settings page closes, because a
-  // microphone left open holds the sound card for a dashboard that is
-  // showing the weather.
+
   stopMicMonitor();
   hideSecret("ha");
   hideSecret("sendspin");
@@ -339,7 +289,6 @@ function closeSettings() {
   syncSettingsLayout();
 }
 
-// stopMicMonitor stops the microphone level meter.
 function stopMicMonitor() {
   const button = $("#mic-test-button");
   if (!button || button.getAttribute("aria-pressed") !== "true") return;
@@ -350,8 +299,6 @@ function stopMicMonitor() {
 
 $("#close-settings").addEventListener("click", closeSettings);
 
-// Settings tabs. The voice tab is a separate view in the same panel so
-// the device setup form is not buried under it.
 const settingsTabs = [
   { tab: $("#tab-device"), view: $("#settings-view-device") },
   { tab: $("#tab-voice"), view: $("#settings-view-voice") },
@@ -370,14 +317,12 @@ settingsTabs.forEach((entry, position) => {
   entry.tab.addEventListener("click", () => selectSettingsTab(position));
 });
 selectSettingsTab(0);
-// Any button in the drawer dismisses it, so the panel never lingers over the
-// view once an action has been picked.
+
 drawer.addEventListener("click", (event) => {
   const button = event.target.closest("button");
   if (!button) return;
   if (button.id === "exit-button") {
-    // The drawer is closed before the app goes, so the panel is not left
-    // hanging over a window that is closing.
+
     setDrawer(false);
     window.homePanel.quit();
     return;
@@ -387,22 +332,11 @@ drawer.addEventListener("click", (event) => {
     window.homePanel.setDisplayMode(displayMode === "fullscreen" ? "window" : "fullscreen");
     return;
   }
-  // The media panel's controls are theirs: the drawer stays open while
-  // the music is being driven, because closing it on every press makes
-  // the music impossible to control.
-  //
-  // The sliders do not come here at all — they are inputs rather than
-  // buttons — so the volume and the brightness have always left the
-  // drawer open. The media panel has buttons, so it has to say that its
-  // buttons are not drawer actions.
+
   if (button.dataset.transport || button.dataset.source) return;
-  // A control inside the media panel is not a drawer action, whatever
-  // it is.
+
   if (button.closest(".media-panel")) return;
-  // Nor is a control inside the quick controls. The sliders are
-  // inputs rather than buttons, so the handler does not see them as
-  // buttons at all, but the mute is a button and it would close the
-  // drawer.
+
   if (button.closest(".quick-controls")) return;
   const action = button.dataset.action;
   if (action) window.homePanel.command({ action });
@@ -416,12 +350,9 @@ $("#notice").addEventListener("click", (event) => {
 form.addEventListener("focusin", (event) => {
   const field = event.target;
   if (!field?.matches?.('input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]), textarea')) return;
-  // The field is remembered, because the keyboard's buttons take the focus
-  // when they are pressed and the field would then be lost.
+
   keyboardTarget = field;
-  // The keyboard is only for the settings form, and only when the setting
-  // says it should appear. The main process vetoes it as well, but the
-  // keyboard is drawn here, so the check has to be here too.
+
   if (!loadedSettings?.touchKeyboardEnabled) return;
   if (keyboard.hidden) setKeyboard(true, { settings: true });
   else settingsKeyboardActive = true;
@@ -431,17 +362,11 @@ form.addEventListener("focusout", (event) => {
   if (!settingsKeyboardActive) return;
   const next = event.relatedTarget;
   if (next && form.contains(next)) return;
-  // The focus went to the keyboard rather than away from the settings, so
-  // the keyboard stays up: the person is still typing into the field.
+
   if (next && keyboard.contains(next)) return;
   setKeyboard(false);
 });
 
-// The toggle decides whether the key is wanted.
-//
-// Turning it on makes a key, so the panel is encrypted from the first
-// moment rather than being left in plain text until somebody thinks of
-// one.
 const encryptionToggle = form.elements.namedItem("esphomeEncryptionEnabled");
 if (encryptionToggle) {
   encryptionToggle.addEventListener("change", async () => {
@@ -453,7 +378,6 @@ if (encryptionToggle) {
   });
 }
 
-// The button makes a new key.
 const regenerateKeyButton = document.querySelector("[data-action='new-encryption-key']");
 if (regenerateKeyButton) {
   regenerateKeyButton.addEventListener("click", async (event) => {
@@ -466,12 +390,9 @@ if (regenerateKeyButton) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(form));
-  // An empty field means keep the existing camera password. The password
-  // itself is never sent back to the renderer after saving.
+
   if (!data.cameraPassword) delete data.cameraPassword;
-  // The key is only wanted when the connection is encrypted. The toggle
-  // says so, and the key follows it: no key when the connection is in
-  // plain text.
+
   data.esphomeEncryptionEnabled = form.elements.namedItem("esphomeEncryptionEnabled").checked;
   data.musicUnpaired = !form.elements.namedItem("sendspinRequirePairing").checked;
   if (!data.esphomeEncryptionEnabled) {
@@ -484,15 +405,11 @@ form.addEventListener("submit", async (event) => {
   } catch (error) { $("#form-error").textContent = error.message || "Could not save settings."; }
 });
 
-// The voice settings are saved with the rest of the device settings, so
-// there is one place the configuration lives.
 if (voiceForm) {
   voiceForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(voiceForm));
-    // A form only submits the checkboxes that are ticked, so unticking one
-    // would leave the old value behind. The state of every checkbox is
-    // sent instead, so a tick can be undone.
+
     for (const element of voiceForm.elements) {
       if (element.type === "checkbox") data[element.name] = element.checked;
     }
@@ -506,11 +423,6 @@ if (voiceForm) {
   });
 }
 
-// ── The quick controls ────────────────────────────────────────────────
-//
-// Brightness and volume are the two things a person reaches for most
-// often, so they are in the drawer rather than in the settings.
-
 const brightnessSlider = $("#brightness-slider");
 const volumeSlider = $("#volume-slider");
 const brightnessValue = $("#brightness-value");
@@ -522,10 +434,6 @@ const volumePopupFill = $("#volume-popup-fill");
 const volumePopupValue = $("#volume-popup-value");
 const muteIndicator = $("#mute-indicator");
 
-// paintSlider draws a slider at a value.
-//
-// The filled part of the track is a gradient that stops where the thumb
-// is, and the gradient is set from the value, so it moves with the thumb.
 function paintSlider(slider, percent) {
   if (!slider) return;
   slider.value = String(percent);
@@ -544,63 +452,23 @@ function paintVolume(value) {
   if (volumeValue) volumeValue.textContent = `${percent}%`;
 }
 
-// paintMute shows whether the microphone is muted.
-//
-// The microphone and not the speaker: a person who mutes the panel wants
-// the room to stop hearing them, and they still want to hear the music.
-//
-// It is an indicator and not a control. The mute is a hardware latch on
-// this board, and the button on top of the unit is the only thing that
-// moves it — the latch is one-way from software — so the screen says
-// where the latch is and nothing more.
-//
-// It is shown without the drawer being open, because a muted device that
-// only says so inside a drawer is a device that looks live.
 function paintMute(muted) {
   if (!muteIndicator) return;
   const on = Boolean(muted);
   muteIndicator.hidden = !on;
-  // The transition needs a frame between showing it and sliding it in,
-  // or the slide is not seen.
+
   if (on) requestAnimationFrame(() => muteIndicator.classList.add("is-visible"));
   else muteIndicator.classList.remove("is-visible");
 }
 
-// The main process tells the renderer that the latch has moved.
-//
-// The indicator is drawn in the overlay view, and the overlay view is
-// only on the screen when something needs it — so a renderer that is
-// not on the screen never hears that the button on top of the unit was
-// pressed. The main process hears it and says so.
 if (window.homePanel.onMuteIndicator) {
   window.homePanel.onMuteIndicator((on) => paintMute(on));
 }
 
-// The volume popup.
-//
-// It comes down from the top when the level changes and goes away again
-// on its own. The level is changed with the buttons on the unit, and a
-// person holding the device cannot see the drawer, so this is where the
-// change is said out loud.
-//
-// The timer is restarted on every change rather than set once, so a run
-// of presses keeps the popup up for as long as the presses go on.
 let volumePopupTimer = null;
-// lastPopupVolume is the level the popup is showing.
-//
-// It is what tells a new level from the one already on the screen: the
-// popup is raised again when the level is not the one it is showing,
-// and left alone when it is. So pressing the button for the same level
-// twice does not make it flicker.
+
 let lastPopupVolume = null;
 
-// showVolumePopup puts the popup up at a level.
-//
-// It is called from the main process, which is what knows that the
-// level changed: the popup is drawn in the overlay view, and the
-// overlay view is only on the screen when something needs it — so a
-// renderer that was not on the screen never hears that the buttons were
-// pressed.
 function showVolumePopup(value) {
   if (!volumePopup) return;
   const percent = Math.max(0, Math.min(100, Math.round(value)));
@@ -610,18 +478,15 @@ function showVolumePopup(value) {
   volumePopup.hidden = false;
   requestAnimationFrame(() => volumePopup.classList.add("is-visible"));
   clearTimeout(volumePopupTimer);
-  // The timer is here as well as in the main process, so the popup goes
-  // away even if the main process's message does not arrive.
+
   volumePopupTimer = setTimeout(hideVolumePopup, 2200);
 }
 
-// hideVolumePopup takes the popup down.
 function hideVolumePopup() {
   if (!volumePopup) return;
   volumePopup.classList.remove("is-visible");
   clearTimeout(volumePopupTimer);
-  // The element is hidden after the slide, or the next change would
-  // have nothing to animate from.
+
   volumePopupTimer = setTimeout(() => {
     if (!volumePopup.classList.contains("is-visible")) {
       volumePopup.hidden = true;
@@ -629,8 +494,6 @@ function hideVolumePopup() {
   }, 220);
 }
 
-// The main process raises the popup, because it is the one that knows
-// the level changed.
 if (window.homePanel.onVolumePopup) {
   window.homePanel.onVolumePopup((payload) => {
     if (payload && typeof payload.percent === "number") showVolumePopup(payload.percent);
@@ -638,11 +501,6 @@ if (window.homePanel.onVolumePopup) {
   });
 }
 
-
-
-// The slider is set on release rather than on every movement, because a
-// backlight is written to for every value and a drag would write it
-// dozens of times.
 function bindSlider(slider, onChange) {
   if (!slider) return;
   slider.addEventListener("input", () => {
@@ -660,20 +518,9 @@ bindSlider(brightnessSlider, (value) => {
 bindSlider(volumeSlider, (value) => {
   paintVolume(value);
   window.homePanel.setVolume(value);
-  // The popup is for the buttons on the unit, but a person moving the
-  // slider wants to see the level too, and it is the same thing.
+
   showVolumePopup(value);
 });
-
-// ── The music ─────────────────────────────────────────────────────────────
-//
-// What is playing, and the buttons for it.
-//
-// The transport belongs to the music server and the panel has the
-// buttons, so a press is passed to the device program, which passes it
-// on. The server decides which commands it will take, and says so, and
-// a control it does not support is not offered: a button that does
-// nothing is worse than no button.
 
 const mediaPanel = $("#media-panel");
 const mediaSourceServer = $("#media-source-server");
@@ -686,22 +533,11 @@ const mediaElapsed = $("#media-elapsed");
 const mediaDuration = $("#media-duration");
 const mediaPlay = $("#media-play");
 
-// The play and pause signs.
-//
-// They are drawn rather than typed. The device has DejaVu's fonts and
-// nothing else, and DejaVu has no pause sign (U+23F8) and no transport
-// arrows (U+23ED, U+23EE): a character it does not have is a blank box,
-// or nothing at all.
 const playIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5z" fill="currentColor" /></svg>';
 const pauseIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5h3.2v13H8zM12.8 5.5H16v13h-3.2z" fill="currentColor" /></svg>';
 const mediaPrevious = $("#media-previous");
 const mediaNext = $("#media-next");
 
-// What is playing, as the last state said.
-//
-// It is kept so the scrubber can be dragged without the state arriving
-// again for every pixel, and so a state that has not changed does not
-// redraw the panel.
 let media = {
   title: "",
   artist: "",
@@ -710,39 +546,19 @@ let media = {
   duration: 0,
   playing: false,
   commands: [],
-  // at is when the position was last heard from the server.
+
   at: 0,
 };
 
-// mediaLoading is whether something is on its way.
-//
-// Pressing play does not start the music there and then: the command
-// goes to the server, the server gets the music, and the music starts.
-// That takes a moment, and a button that does nothing when it is
-// pressed looks broken.
-//
-// So the button waits and says that it is waiting. The wait ends when
-// the state says what is playing, and it ends by itself if the state
-// never comes, so a button cannot be left spinning for ever.
 let mediaLoading = false;
 
-// mediaLoadingTimer is how long the wait is allowed to last.
 const mediaLoadingTimeout = 8000;
 
-// The position the panel shows.
-//
-// The server says where the track has got to, but only when it says so,
-// so the position is carried on from there. A scrubber that jumps from
-// one update to the next is a scrubber that does not look like music.
 function currentPosition() {
   if (!media.playing || !media.at) return media.position;
   return Math.min(media.duration || Number.MAX_SAFE_INTEGER, media.position + (Date.now() - media.at));
 }
 
-// repaintMedia draws the position and the scrubber.
-//
-// It is called on a timer while the music is playing, because the
-// position moves on its own and the server does not say so often.
 function repaintMedia() {
   if (!mediaPanel || mediaPanel.hidden) return;
   const position = currentPosition();
@@ -755,10 +571,6 @@ function repaintMedia() {
   }
 }
 
-// formatTime is a length of time as minutes and seconds.
-//
-// A length that is not known is shown as a dash rather than as zero,
-// because zero is a length and a dash is the absence of one.
 function formatTime(ms) {
   if (!Number.isFinite(ms) || ms < 0) return "—";
   const total = Math.floor(ms / 1000);
@@ -767,11 +579,6 @@ function formatTime(ms) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-// setArtwork shows the album art, or the fallback when there is none.
-//
-// The picture is only fetched when it is a new one: the artwork does not
-// change while a track plays, and fetching it on every state would pull
-// the same picture over and over.
 function setArtwork(url) {
   if (!mediaArtwork) return;
   if (!url) {
@@ -782,45 +589,25 @@ function setArtwork(url) {
   if (mediaArtwork.getAttribute("src") === url) return;
   mediaArtwork.src = url;
   mediaArtwork.hidden = false;
-  // A picture that cannot be fetched leaves the fallback showing, which
-  // is what the stylesheet does when the image fails to load.
+
   mediaArtwork.onerror = () => { mediaArtwork.hidden = true; };
 }
 
-// paintMedia draws what is playing.
-// The two music sources, as the last state said.
-//
-// The music server knows what it is playing and the panel's own music
-// does not, so the music server is the default and the other is a tap
-// away.
 let mediaSources = {
   server: { title: "", artist: "", artwork: "", position: 0, duration: 0, playing: false, commands: [] },
   home: { title: "", artist: "", artwork: "", position: 0, duration: 0, playing: false, commands: [] },
 };
 
-// The last state the device reported, so a change of source can be
-// drawn without waiting for the next one.
 let lastMediaState = null;
 
-// Whether the wake word overlay was up the last time the device's state
-// was looked at.
-//
-// The main process has to be told when the overlay comes and goes,
-// because the view it is drawn in is sized by the main process.
 let overlayWasUp = false;
 
-// Which source the panel is showing.
-//
-// It is kept between states, so the person can look at the panel's own
-// music while the music server is playing and it does not jump back.
 let mediaSource = "server";
 
-// paintMedia draws what is playing.
 function paintMedia(state) {
   if (!mediaPanel) return;
   lastMediaState = state;
 
-  // The music server's music.
   mediaSources.server = {
     title: state.music_title || "",
     artist: state.music_artist || "",
@@ -831,16 +618,9 @@ function paintMedia(state) {
     commands: Array.isArray(state.music_transport) ? state.music_transport : [],
   };
 
-  // The music Home Assistant is playing.
-  //
-  // The panel does not know what it is: Home Assistant hands over a URL
-  // and not the name of the track, so there is no title to show. What
-  // it knows is whether something is playing.
   const mediaState = state.media_state || "idle";
   const homePlaying = mediaState === "playing" || mediaState === "announcing";
-  // A music that has started is the end of the wait. The wait is also
-  // ended by the timer, so a music that never starts does not leave the
-  // button spinning.
+
   if (mediaLoading && (mediaSources.server.playing || homePlaying)) {
     mediaLoading = false;
     if (mediaLoadingTimer) {
@@ -858,8 +638,6 @@ function paintMedia(state) {
     commands: ["play", "pause", "stop"],
   };
 
-  // The panel is only there when there is something to show. A drawer
-  // with an empty music card in it is worse than no music card.
   const serverHas = Boolean(mediaSources.server.title || mediaSources.server.artist || mediaSources.server.artwork);
   const homeHas = mediaSources.home.playing;
   mediaPanel.hidden = !serverHas && !homeHas;
@@ -868,14 +646,11 @@ function paintMedia(state) {
     return;
   }
 
-  // The music server's music takes priority, because it is the one that
-  // knows what it is playing. The person can still ask for the other.
   if (mediaSource === "home" && !homeHas && serverHas) mediaSource = "server";
   if (mediaSource === "server" && !serverHas && homeHas) mediaSource = "home";
 
   const shown = mediaSources[mediaSource];
 
-  // The source buttons say which is showing and which is available.
   if (mediaSourceServer) {
     mediaSourceServer.classList.toggle("is-selected", mediaSource === "server");
     mediaSourceServer.disabled = !serverHas;
@@ -889,8 +664,6 @@ function paintMedia(state) {
   if (mediaArtist) mediaArtist.textContent = shown.artist;
   setArtwork(shown.artwork);
 
-  // The scrubber is only usable when the track has a length and the
-  // server will take a seek.
   const canSeek = shown.duration > 0 && shown.commands.includes("seek");
   if (mediaPosition) {
     mediaPosition.disabled = !canSeek;
@@ -900,36 +673,26 @@ function paintMedia(state) {
   repaintMedia();
   if (mediaDuration) mediaDuration.textContent = shown.duration > 0 ? formatTime(shown.duration) : "—";
 
-  // The transport buttons are only there for the commands the server
-  // says it will take.
   if (mediaPlay) {
     mediaPlay.disabled = !shown.commands.includes(shown.playing ? "pause" : "play");
-    // The button shows what it will do, unless something is on its way
-    // in which case it waits and says so.
+
     if (mediaLoading) {
       mediaPlay.textContent = "";
       mediaPlay.classList.add("is-loading");
       mediaPlay.setAttribute("aria-label", "Loading");
     } else {
       mediaPlay.classList.remove("is-loading");
-      // The sign is drawn rather than typed, because the device's fonts
-      // do not have the pause sign — a character it does not have is a
-      // blank box, or nothing at all.
+
       mediaPlay.innerHTML = shown.playing ? pauseIcon : playIcon;
       mediaPlay.setAttribute("aria-label", shown.playing ? "Pause" : "Play");
     }
-    // The button has to send what it shows. A button that shows the
-    // pause sign and sends "play" is a button that pauses nothing.
+
     mediaPlay.dataset.transport = shown.playing ? "pause" : "play";
   }
   if (mediaPrevious) mediaPrevious.disabled = !shown.commands.includes("previous");
   if (mediaNext) mediaNext.disabled = !shown.commands.includes("next");
 }
 
-// The source buttons choose which music is shown.
-//
-// The person chooses, and the choice is kept until there is no longer
-// anything to show.
 for (const button of document.querySelectorAll("[data-source]")) {
   button.addEventListener("click", () => {
     const source = button.dataset.source;
@@ -939,36 +702,21 @@ for (const button of document.querySelectorAll("[data-source]")) {
   });
 }
 
-// The position moves on its own while the music plays, so it is
-// redrawn on a timer.
-//
-// The timer only runs while the music is playing: a drawer that is
-// showing a paused track does not need to be redrawn.
 setInterval(() => {
   if (media.playing) repaintMedia();
 }, 500);
 
-// The transport buttons. The panel does not decide what the commands
-// are called on the wire: it says what the button means and the device
-// program translates it.
 for (const button of document.querySelectorAll("[data-transport]")) {
   button.addEventListener("click", () => {
     const action = button.dataset.transport;
     if (!action) return;
-    // The command goes to whichever music is being shown, so the button
-    // does what the panel says it does.
+
     window.homePanel.transport({ action, source: mediaSource });
-    // Starting the music takes a moment, and the button shows that it
-    // is waiting for it.
+
     if (action === "play") startMediaLoading();
   });
 }
 
-// startMediaLoading shows that the music is on its way.
-//
-// The wait ends when the state says the music is playing, and it ends
-// by itself if that never happens, so a button cannot be left spinning
-// for ever.
 function startMediaLoading() {
   mediaLoading = true;
   paintMedia(lastMediaState || {});
@@ -979,13 +727,8 @@ function startMediaLoading() {
   }, mediaLoadingTimeout);
 }
 
-// mediaLoadingTimer is the wait that ends the spinner by itself.
 let mediaLoadingTimer = null;
 
-// The scrubber seeks when it is let go.
-//
-// The position is sent on release rather than on every movement, because
-// a seek that is sent for every pixel would make the music jump.
 if (mediaPosition) {
   mediaPosition.addEventListener("input", () => {
     const value = Number(mediaPosition.value);
@@ -1001,52 +744,32 @@ if (mediaPosition) {
 
 const statusLabels = { online: "Online", connecting: "Connecting", offline: "Offline", unknown: "Unknown" };
 window.homePanel.onState((state) => {
-  // A screen that is off takes the touch that wakes it.
-  //
-  // The page is transparent either way, so the dashboard is not hidden
-  // by this. What it does is stop the touch falling through to the
-  // dashboard underneath, which is a remote page that has no way of
-  // telling the panel it was tapped.
+
   document.body.classList.toggle("screen-off", Boolean(state.displayIsOff));
   $("#mode-label").textContent = state.displayIsOff ? "Screen off" : ({ dashboard: "Dashboard", slideshow: "Slideshow" }[state.mode] || state.mode);
-  // The version is at the bottom of the drawer. It is the thing a person
-  // is asked for when something goes wrong.
+
   if (state.version) $("#version-label").textContent = `Home Panel - v${state.version}`;
-  // The brightness and the volume are drawn from the state, so they are
-  // right the moment the drawer opens.
+
   if (typeof state.brightness === "number") paintBrightness(state.brightness);
   if (typeof state.volume === "number") {
     paintVolume(state.volume);
-    // A level that came from the device program — the buttons on the
-    // unit — is raised as a popup.
-    //
-    // It is raised when the level is one the popup does not already
-    // show, so that a person pressing the button again sees the number
-    // move. A state that arrives with the same level raises nothing:
-    // the mute button changes the state, and the state carries the
-    // level with it, so a mute would otherwise bring the volume popup
-    // up as well.
+
     if (volumePopup && state.volume !== lastPopupVolume) {
-      // The level is not the one the popup is showing, so it is raised.
-      // A level that is the one it is showing raises nothing: the state
-      // arrives many times a second, and with the mute among it.
+
       showVolumePopup(state.volume);
     } else if (volumePopup) {
-      // The level is the one the popup is showing, so the popup
-      // remembers it without raising anything.
+
       lastPopupVolume = state.volume;
     }
   }
   if (typeof state.muted === "boolean") paintMute(state.muted);
-  // A control that cannot change anything is hidden rather than shown at
-  // a value that would do nothing.
+
   if (brightnessControl) brightnessControl.hidden = typeof state.brightness !== "number";
   if (volumeControl) volumeControl.hidden = typeof state.volume !== "number";
   $("#dashboard-action-label").textContent = state.mode === "dashboard" ? "Dashboard" : "Exit to dashboard";
   $("#return-home").hidden = state.mode !== "url";
   $("#slideshow-action").hidden = !loadedSettings?.slideshowUrl;
-  // The button offers the mode the device is not in, so tapping it does
-  // what the label says.
+
   if (state.displayMode) {
     displayMode = state.displayMode;
     $("#display-mode-label").textContent = displayMode === "fullscreen" ? "Window mode" : "Fullscreen";
@@ -1057,22 +780,14 @@ window.homePanel.onState((state) => {
     led.dataset.status = value;
     $(`#${service}-state`).textContent = statusLabels[value] || "Unknown";
   }
-  // The ESPHome row says when the microphone is muted.
-  //
-  // The mute is the microphone's, and the microphone belongs to the
-  // device, so it is the device's row that says so. A row that said
-  // "online" while the microphone was muted would be saying the device
-  // was working while it could not hear.
+
   const controlState = $("#control-state");
   if (controlState) {
     const online = state.serviceStatus?.control === "online";
     const muted = state.muted === true;
     controlState.textContent = muted ? (online ? "Muted" : "Muted (offline)") : (statusLabels[state.serviceStatus?.control] || "Unknown");
   }
-  // The keyboard follows what the main process says, because that is where
-  // the setting is applied. A keyboard the main process has vetoed is
-  // hidden here, so turning the setting off takes the keyboard away even
-  // when it was already up.
+
   if (!settingsKeyboardActive && Boolean(state.keyboardVisible) !== !keyboard.hidden) {
     keyboard.hidden = !state.keyboardVisible;
     if (state.keyboardVisible) renderKeyboard();
@@ -1113,19 +828,13 @@ window.addEventListener("pointerdown", (event) => {
   }
   const drawerOpen = drawer.classList.contains("open");
   const onDrawer = Boolean(event.target.closest?.("#side-panel"));
-  // A control is not a drag of the drawer.
-  //
-  // The sliders are inside the drawer and near its edge, so a drag of
-  // one was taken for a drag of the drawer: the drawer moved under the
-  // pointer and then closed, and the volume was changed on the way.
+
   const onControl = Boolean(event.target.closest?.("input, textarea, select, button, [role='slider']"));
   touchStart = { x: event.clientX, y: event.clientY };
   if (onControl) {
     dragState = null;
   } else if (drawerOpen && onDrawer) {
-    // The drawer is dragged shut by dragging it. It is not dragged open:
-    // the tab opens it, because a gesture that has to be found is a
-    // gesture that is missed.
+
     dragState = { start: 1, active: true };
   } else {
     dragState = null;
@@ -1136,12 +845,9 @@ window.addEventListener("pointermove", (event) => {
   if (!dragState?.active) return;
   const dx = event.clientX - touchStart.x;
   const dy = Math.abs(event.clientY - touchStart.y);
-  // Let vertical scrolls inside the drawer win over the horizontal drag.
+
   if (dy > Math.abs(dx)) { dragState.active = false; return; }
-  // The drag only starts once the pointer has moved far enough to be a
-  // drag and not a press. A press on a button in the open drawer is not
-  // a drag, and treating it as one moves the drawer and then puts it
-  // back, which is the bouncing.
+
   if (!dragState.moved) {
     if (Math.abs(dx) < 6) return;
     dragState.moved = true;
@@ -1151,8 +857,7 @@ window.addEventListener("pointermove", (event) => {
 window.addEventListener("pointerup", (event) => {
   if (!touchStart) return;
   const dx = event.clientX - touchStart.x; const dy = Math.abs(event.clientY - touchStart.y);
-  // A press that never moved is not a drag, so the drawer is left alone.
-  // The button under the pointer still gets its click.
+
   if (dragState?.active && dragState.moved && dy < 90) {
     const progress = dragState.start - dx / drawerWidth();
     dragState = null;
@@ -1183,32 +888,16 @@ window.homePanel.getSettings().then((settings) => {
   if (!settings.configured) openSettings();
 });
 
-// The microphone and speaker test controls.
-//
-// The microphone is monitored while the settings page is open, so a person
-// can see what the microphone hears before they commit to it. The speaker
-// is tested by a tone, because a person choosing a speaker needs to hear
-// it to know which one it is.
-//
-// They are found before the voice state handler is wired, because the
-// handler paints the button and the meter.
 const micTestButton = $("#mic-test-button");
 const speakerTestButton = $("#speaker-test-button");
 
-// The voice state comes from the device program, which owns the link to
-// controller and the audio. The main process pushes it whenever it changes.
 if (voiceUI && window.homePanel.onDeviceState) {
   window.homePanel.onDeviceState((state) => {
     voiceUI.apply(state);
     populateAudioDevices(state);
     paintAudioMeters(state);
     paintMedia(state);
-    // The overlay covers the screen, so anything that would sit on top
-    // of it or behind it is put away: the drawer, the keyboard and the
-    // settings page.
-    //
-    // The main process is told as well, because the view the overlay is
-    // drawn in is sized by it, and the overlay needs the whole screen.
+
     const overlayUp = Boolean(voiceUI.overlay && !voiceUI.overlay.container.hidden);
     if (overlayUp !== overlayWasUp) {
       overlayWasUp = overlayUp;
@@ -1219,60 +908,31 @@ if (voiceUI && window.homePanel.onDeviceState) {
       if (!keyboard.hidden) setKeyboard(false);
       if (!panel.hidden) closeSettings();
     }
-    // The watchdog is told what the state says, so it can put the
-    // overlay up if the state says it should be and it is not.
+
     lastDeviceState = state;
     checkOverlay();
   });
 }
 
-// The watchdog.
-//
-// The overlay is drawn from the device's state, and the state arrives
-// over a socket to a renderer that may have been built after the last
-// change. So the overlay is not guaranteed to appear: a state that
-// arrives at a renderer that is not listening yet is a state nobody
-// saw, and the panel sits there saying nothing while the assistant is
-// answering.
-//
-// The watchdog is the answer to that: it looks at the state it was last
-// given and at what is on the screen, and puts the overlay up if the
-// two disagree.
-//
-// It is deliberately not a timer that redraws everything. It only acts
-// when the state says the voice is happening and the overlay is not
-// there, which is the one case where something is wrong.
 const OVERLAY_WATCHDOG_MS = 250;
 
 let lastDeviceState = null;
 let overlayWatchdogTimer = null;
 
-// overlayShouldBeUp says whether the state says the overlay belongs on
-// the screen.
-//
-// It is the same rule the overlay is drawn by: the voice is happening
-// and the microphone is not muted.
 function overlayShouldBeUp(state) {
   if (!state || state.muted) return false;
   return Boolean(state.speaking || state.thinking || state.listening);
 }
 
-// checkOverlay puts the overlay up if the state says it should be there
-// and it is not.
 function checkOverlay() {
   if (!voiceUI || !voiceUI.overlay) return;
   const shouldBeUp = overlayShouldBeUp(lastDeviceState);
   const isUp = !voiceUI.overlay.container.hidden;
   if (!shouldBeUp || isUp) return;
-  // The overlay is not up and the state says it should be. The state is
-  // applied again, which is what puts it up.
+
   voiceUI.apply(lastDeviceState);
 }
 
-// startOverlayWatchdog watches for an overlay that did not appear.
-//
-// It runs while the panel is running and stops when the renderer goes
-// away, which it does with the rest of the page.
 function startOverlayWatchdog() {
   if (overlayWatchdogTimer) return;
   overlayWatchdogTimer = setInterval(() => {
@@ -1281,15 +941,11 @@ function startOverlayWatchdog() {
   }, OVERLAY_WATCHDOG_MS);
 }
 
-// The watchdog starts with the page. It is the last thing in the file
-// because it needs the voice overlay to exist, and the overlay is made
-// above.
 if (voiceUI) startOverlayWatchdog();
 
 if (micTestButton) {
   micTestButton.addEventListener("click", async () => {
-    // The button is a toggle, because the microphone has to be released
-    // again when the settings page is closed.
+
     const on = micTestButton.getAttribute("aria-pressed") !== "true";
     micTestButton.setAttribute("aria-pressed", String(on));
     micTestButton.textContent = on ? "Stop monitoring" : "Test microphone";
@@ -1297,12 +953,6 @@ if (micTestButton) {
   });
 }
 
-// The button follows the device rather than the other way round.
-//
-// The device is what holds the microphone, so it is what knows whether
-// the microphone is being monitored. A button that remembers what it was
-// asked for says "Stop monitoring" when the device is not monitoring, and
-// a person presses it and nothing happens.
 function paintMicMonitor(state) {
   if (!micTestButton) return;
   const monitoring = Boolean(state.monitoring);
@@ -1316,17 +966,6 @@ if (speakerTestButton) {
   });
 }
 
-// paintAudioMeters draws the levels.
-//
-// The microphone meter shows what the microphone is hearing, and the
-// speaker meter shows the volume that was asked for, which is what the
-// device will play at.
-//
-// The microphone meter is only shown while the microphone is being
-// monitored. The device reports a level whenever it has one — the
-// controller's capture has a level too — and a meter that moved without
-// anybody listening to the microphone was answering a question nobody
-// asked.
 function paintAudioMeters(state) {
   const monitoring = Boolean(state.monitoring);
   const micMeter = $("#mic-meter");
@@ -1345,12 +984,6 @@ function setMeter(fill, value, level) {
   if (value) value.textContent = level > 0 ? `${level}%` : "—";
 }
 
-// Fills the microphone and speaker pickers with the devices this machine
-// has.
-//
-// The list comes from the sidecar, because the sidecar is what opens the
-// audio. The pickers keep whatever was chosen, so a device that was
-// unplugged does not silently become the default.
 function populateAudioDevices(state) {
   fillDeviceSelect($("#voice-audio-input"), state.audio_inputs, loadedSettings?.voiceAudioInput, state.selected_audio_input);
   fillDeviceSelect($("#voice-audio-output"), state.audio_outputs, loadedSettings?.voiceAudioOutput, state.selected_audio_output);
@@ -1360,8 +993,7 @@ function fillDeviceSelect(select, devices, chosen, selected) {
   if (!select) return;
   const list = Array.isArray(devices) ? devices : [];
   const current = select.value || chosen || "";
-  // The list is rebuilt only when it changed, so the picker does not lose
-  // its place while the state is pushed every few hundred milliseconds.
+
   const signature = list.map((d) => d.name).join("|");
   if (select.dataset.signature === signature) {
     if (current && select.value !== current) select.value = current;
@@ -1382,8 +1014,6 @@ function fillDeviceSelect(select, devices, chosen, selected) {
     select.append(option);
   }
 
-  // The chosen device is preferred over the one in use, because the chosen
-  // one is the person's choice and the one in use may be the default.
   const wanted = current || selected || "";
   if (wanted && list.some((d) => d.name === wanted)) {
     select.value = wanted;

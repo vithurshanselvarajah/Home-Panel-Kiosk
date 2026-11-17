@@ -12,20 +12,13 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/internal/atomicfile"
 )
 
-// maxRecords is how many servers the device stays paired with at once. The
-// spec's floor is 5, and a pairing never fails for want of room: the least
-// recently used record goes.
 const maxRecords = 8
 
-// The persisted state: identity, pairing secrets, and the player settings the
-// spec asks to survive a reboot (static delay, volume, mute). Secrets live
-// here and nowhere else — never in logs, stats or the support bundle.
 type storeFile struct {
 	PrivateKey string       `json:"privateKey"`
 	PairingPSK string       `json:"pairingPsk"`
 	Records    []pairRecord `json:"records,omitempty"`
-	// LastPlayback is the server that last held a playback connection; it
-	// wins a tie between two connections that declare nothing.
+
 	LastPlayback  string `json:"lastPlayback,omitempty"`
 	StaticDelayMs int    `json:"staticDelayMs"`
 	Volume        int    `json:"volume"`
@@ -38,18 +31,14 @@ type pairRecord struct {
 	LastUsed int64  `json:"lastUsed"`
 }
 
-// store is the device's Sendspin state on disk.
 type store struct {
 	path string
 	mu   sync.Mutex
 	f    storeFile
 	id   identity
-	pp   []byte // pairing PSK
+	pp   []byte
 }
 
-// openStore loads the state, creating a fresh identity and pairing PSK the
-// first time. A corrupt file is an error rather than a silent reset: resetting
-// would change the client_id and unpair the device from every server.
 func openStore(path string) (*store, error) {
 	s := &store{path: path}
 	b, err := os.ReadFile(path)
@@ -108,8 +97,6 @@ func (s *store) saveLocked() error {
 	return atomicfile.Write(s.path, b, 0o600)
 }
 
-// pskCategory is which kind of PSK a handshake matched, which decides what
-// the server may do on the connection.
 type pskCategory int
 
 const (
@@ -118,16 +105,12 @@ const (
 	catLongTerm
 )
 
-// resolvedPSK is the answer to "which PSK does this psk_id name".
 type resolvedPSK struct {
 	psk      []byte
 	cat      pskCategory
-	serverID string // bound server, long-term only
+	serverID string
 }
 
-// resolve finds the PSK a server named in Noise message 1. A miss falls back
-// to the Sentinel: the server then sees a credential mismatch it can offer to
-// re-pair, which is better than a connection that silently never completes.
 func (s *store) resolve(id string) resolvedPSK {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -142,9 +125,6 @@ func (s *store) resolve(id string) resolvedPSK {
 	return resolvedPSK{psk: sentinelPSK, cat: catSentinel}
 }
 
-// addRecord persists a new long-term PSK for a server, replacing any it
-// already had and evicting the least recently used record past capacity —
-// never one a live connection is using.
 func (s *store) addRecord(serverID string, psk []byte, inUse func(string) bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -211,7 +191,6 @@ func (s *store) paired() []string {
 	return ids
 }
 
-// playerSettings are the three values the spec asks a player to persist.
 type playerSettings struct {
 	StaticDelayMs int
 	Volume        int
@@ -236,9 +215,6 @@ func (s *store) setSettings(p playerSettings) {
 
 func (s *store) token() string { return pairingToken(s.id.pub, s.pp) }
 
-// PairingToken reads (or creates) the device's persistent pairing token.
-// The caller should expose it only over a trusted local channel or an
-// encrypted ESPHome API connection.
 func PairingToken(path string) (string, error) {
 	s, err := openStore(path)
 	if err != nil {

@@ -15,8 +15,7 @@ func TestTrackerStartsUnknown(t *testing.T) {
 	if snapshot.Listen != ListenUnknown {
 		t.Errorf("the listen mode was %q, want %q", snapshot.Listen, ListenUnknown)
 	}
-	// The opposite of unknown is a lie. A panel that has just started is
-	// not muted and is not speaking.
+
 	if snapshot.Muted || snapshot.Speaking || snapshot.Thinking || snapshot.Listening {
 		t.Error("a new tracker claims to be doing something")
 	}
@@ -33,7 +32,6 @@ func TestTrackerNotifiesOnChange(t *testing.T) {
 		t.Errorf("the listener was called %d times, want 1", changes)
 	}
 
-	// The same value again is not a change.
 	tracker.SetSpeaking(true)
 	if changes != 1 {
 		t.Errorf("the listener was called %d times after an unchanged value, want 1", changes)
@@ -90,8 +88,7 @@ func TestLinkUpRecoversThePhase(t *testing.T) {
 }
 
 func TestOnlyTheStreamingModeStreams(t *testing.T) {
-	// This is the question a privacy statement has to answer, so it is
-	// worth being explicit about which mode answers it yes.
+
 	if ListenLocal.Streams() {
 		t.Error("the local mode streams")
 	}

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 gen_ort_fixture.py — regenerate testdata/ort_fixture.bin
 
@@ -60,16 +60,16 @@ import onnxruntime as ort
 RES = os.path.join(os.path.dirname(openwakeword.__file__), "resources", "models")
 CLS = os.environ.get("EM_CLASSIFIER", os.path.join(RES, "hey_mycroft_v0.1.onnx"))
 
-# Deterministic input, int16 scale. Speech peaks around -10dBFS on this
-# hardware; +/-8000 is the same order, so the melspectrogram sees plausible
-# magnitudes rather than a degenerate near-silent or clipped signal.
+
+
+
 rng = np.random.RandomState(20260730)
 audio = rng.randint(-8000, 8001, size=CHUNKS * CH).astype(np.int16)
 
-# AudioFeatures seeds its feature ring from random audio; fix the global seed
-# so this file is byte-reproducible. (The Go side starts clean instead, which
-# is why the classifier comparison below only starts once the ring holds real
-# audio -- see the test.)
+
+
+
+
 np.random.seed(0)
 af = AudioFeatures(ncpu=1)
 cls = ort.InferenceSession(CLS, providers=["CPUExecutionProvider"])
@@ -102,9 +102,9 @@ for i in range(0, len(audio), CH):
     recs.append(dict(mel_in_len=new_mel[0][0], mel=new_mel[0][1],
                      emb=new_emb[0].reshape(-1), score=score))
 
-# Probe tensors: deterministic, wide-range, and in the distribution each model
-# expects -- mel values after the /10+2 transform sit around 0..4, embeddings
-# span roughly -4..4.
+
+
+
 prng = np.random.RandomState(777)
 emb_probe_in = prng.uniform(0.0, 4.0, size=76 * 32).astype(np.float32)
 emb_probe_out = np.asarray(

@@ -4,26 +4,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-// The mute follows.
-//
-// The mute is the microphone's, and on the Echo Show 8 it is a hardware
-// latch that only the button on top of the unit moves. The latch is
-// one-way from software: the button is also the only thing that
-// releases it.
-//
-// So there is only one direction to follow. The device program watches
-// the latch and reports where it ended up, and the panel shows that.
-// Nothing is written, and so there is nothing to race with: the mute
-// that used to turn itself off was a mute that was being written and
-// read at the same time.
-
 const root = path.join(__dirname, "..");
 const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
 
-// The part of the main process that follows the mute.
 function muteSource() {
   const start = main.indexOf("let systemVolume = null;");
-  const end = main.indexOf("// handleCommand acts on a command.");
+  const end = main.indexOf("async function handleCommand(command) {");
   return main.slice(start, end);
 }
 
@@ -48,12 +34,11 @@ function run() {
     sandbox,
     sent,
     deviceState,
-    // What the panel shows is the panel's own state, which is what the
-    // indicator draws and what is published to Home Assistant.
+
     isMuted: () => sandbox.currentMute(),
-    // The device's state arrives.
+
     deviceSays: (muted) => { deviceState.muted = muted; sandbox.followDeviceMute(); },
-    // The watcher follows the device program's state.
+
     tick: async () => { await sandbox.watchTick(); },
   };
 }
@@ -70,7 +55,6 @@ test("the device's mute is shown", async () => {
 test("the panel never writes the mute", async () => {
   const { sent } = run();
 
-  // Nothing the panel does can switch the mute, so nothing is sent.
   assert.deepEqual(sent, [], "the panel tried to switch the mute");
 });
 
@@ -85,12 +69,7 @@ test("the watcher follows the latch", async () => {
 });
 
 test("the mute does not turn itself off", async () => {
-  // The mute that used to turn itself off was a mute that was written
-  // and read at the same time: the panel wrote the mixer, the watcher
-  // read the value from before the write, and took it for a change
-  // from outside.
-  //
-  // Nothing is written now, so there is nothing to undo.
+
   const { isMuted, deviceSays, tick } = run();
 
   deviceSays(true);

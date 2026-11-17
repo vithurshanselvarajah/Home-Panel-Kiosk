@@ -10,10 +10,6 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/audio"
 )
 
-// recordingBackend is a sound card whose microphone is a file.
-//
-// It is how the recordings are played into the real pipeline: the device
-// reads the microphone, and the microphone is the recording.
 type recordingBackend struct {
 	recording []byte
 	offset    int
@@ -41,14 +37,13 @@ type errNoClocked struct{}
 
 func (errNoClocked) Error() string { return "no clocked output" }
 
-// recordingReader plays the recording and then silence.
 type recordingReader struct {
 	backend *recordingBackend
 }
 
 func (r *recordingReader) Read(p []byte) (int, error) {
 	if r.backend.offset >= len(r.backend.recording) {
-		// Silence, so the device sees the end of the utterance.
+
 		for i := range p {
 			p[i] = 0
 		}
@@ -62,21 +57,6 @@ func (r *recordingReader) Read(p []byte) (int, error) {
 
 func (r *recordingReader) Close() error { return nil }
 
-// TestTheRecordingIsSentToHomeAssistant plays a recording into the
-// device's microphone and checks what is sent to Home Assistant.
-//
-// The device is a voice satellite: the microphone goes to Home Assistant
-// and Home Assistant sends back what it heard. A microphone that
-// changed the audio on the way would change what Home Assistant hears,
-// and the panel would answer the wrong thing.
-//
-// So the recording is played into the real microphone path and the audio
-// that goes on the wire is compared with the recording, byte for byte.
-//
-// The recording is named by the RECORDING environment variable, because
-// it is a large file that does not belong in the repository:
-//
-//	RECORDING=/tmp/rec/time.wav go test ./device/ -run TestTheRecording
 func TestTheRecordingIsSentToHomeAssistant(t *testing.T) {
 	path := os.Getenv("RECORDING")
 	if path == "" {
@@ -95,22 +75,15 @@ func TestTheRecordingIsSentToHomeAssistant(t *testing.T) {
 	backend := &recordingBackend{recording: pcm}
 	speaker := &deviceAudio{backend: backend, log: testLogger()}
 
-	// What goes to Home Assistant.
 	sent := make(chan []byte, 64)
 	speaker.onSendMicAudio = func(pcm []byte) {
 		sent <- append([]byte(nil), pcm...)
 	}
 
-	// The wake word is listening, so the microphone is open.
 	speaker.setListening(true)
-	// The turn is running, so the microphone goes to Home Assistant.
-	//
-	// The order matters: opening the microphone clears the streaming
-	// flag, because a microphone that was just opened has no turn on it
-	// yet.
+
 	speaker.setStreaming(true)
 
-	// The audio that goes on the wire.
 	var got []byte
 	deadline := time.After(5 * time.Second)
 	for len(got) < len(pcm) {
@@ -122,7 +95,6 @@ func TestTheRecordingIsSentToHomeAssistant(t *testing.T) {
 		}
 	}
 
-	// The audio that goes to Home Assistant is the recording, unchanged.
 	for i := range pcm {
 		if got[i] != pcm[i] {
 			t.Fatalf("byte %d was %d, it should be %d", i, got[i], pcm[i])

@@ -2,11 +2,6 @@ package sendspin
 
 import "testing"
 
-// The decoder must take the codecs the device offers.
-//
-// Opus is the fallback that always arrives at 48 kHz whatever the source
-// was, and PCM is the plain one. A server that cannot send FLAC has
-// somewhere to go.
 func TestTheDecoderTakesEveryCodecOffered(t *testing.T) {
 	for _, codec := range []string{"flac", "opus", "pcm"} {
 		d, err := newDecoder(streamFormat{
@@ -21,7 +16,6 @@ func TestTheDecoderTakesEveryCodecOffered(t *testing.T) {
 	}
 }
 
-// The device must offer the codecs it can decode.
 func TestTheOfferedCodecsAreTheOnesThatCanBeDecoded(t *testing.T) {
 	for _, f := range offeredFormats() {
 		_, err := newDecoder(streamFormat{

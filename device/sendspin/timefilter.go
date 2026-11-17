@@ -5,14 +5,6 @@ import (
 	"sync"
 )
 
-// timeFilter maps the server's clock onto ours: a 2-D Kalman filter over
-// offset and drift, fed NTP-style exchanges. The spec REQUIRES this exact
-// algorithm, so it is a line-for-line port of aiosendspin 9.1.1's
-// client/time_sync.py (itself a port of the ESPHome/C++ reference), and the
-// test replays the same inputs through both and compares.
-//
-// All times are microseconds. "Client time" is this process's monotonic
-// clock (see clock.go).
 type timeFilter struct {
 	mu sync.Mutex
 
@@ -30,14 +22,11 @@ type timeFilter struct {
 	diag SyncDiag
 }
 
-// SyncDiag summarises the time exchanges since it was last taken, for the
-// device log: whether correction bursts line up with jittery sync replies
-// (#707). Delay is the one-way estimate the filter is fed as maxError.
 type SyncDiag struct {
 	N                      int
 	DelayMinUs, DelayMaxUs int64
-	MeasMinUs, MeasMaxUs   int64 // raw offset measurements
-	OffsetUs               int64 // the filter's estimate when taken
+	MeasMinUs, MeasMaxUs   int64
+	OffsetUs               int64
 	DriftPpm               float64
 }
 
@@ -72,8 +61,6 @@ func (f *timeFilter) resetLocked() {
 	f.cur = timeElement{}
 }
 
-// update takes one measurement: offset = ((T2-T1)+(T3-T4))/2 and
-// maxError = ((T4-T1)-(T3-T2))/2, taken at client time timeAdded.
 func (f *timeFilter) update(measurement, maxError, timeAdded int64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -136,8 +123,6 @@ func (f *timeFilter) update(measurement, maxError, timeAdded int64) {
 	f.cur = timeElement{lastUpdate: f.lastUpdate, offset: f.offset, drift: f.drift, useDrift: useDrift}
 }
 
-// pyRound is Python's round(): half to even. The port has to round the same
-// way to agree with the reference to the microsecond.
 func pyRound(x float64) int64 { return int64(math.RoundToEven(x)) }
 
 func (f *timeFilter) serverTime(client int64) int64 {
@@ -169,16 +154,12 @@ func (f *timeFilter) synchronized() bool {
 	return f.count >= 2 && !math.IsInf(f.offsetCov, 1)
 }
 
-// errorUs is the filter's standard deviation estimate.
 func (f *timeFilter) errorUs() int64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return pyRound(math.Sqrt(f.offsetCov))
 }
 
-// syncInterval is how long to wait before the next client/time: fast while
-// converging, 3s once the estimate is inside a millisecond. Same ladder as
-// the reference client.
 func (f *timeFilter) syncIntervalMs() int {
 	if !f.synchronized() {
 		return 200
@@ -205,7 +186,6 @@ func (f *timeFilter) noteDiagLocked(measurement, maxError int64) {
 	d.MeasMinUs, d.MeasMaxUs = min(d.MeasMinUs, measurement), max(d.MeasMaxUs, measurement)
 }
 
-// takeDiag returns the exchanges since the last call and starts a new window.
 func (f *timeFilter) takeDiag() SyncDiag {
 	f.mu.Lock()
 	defer f.mu.Unlock()

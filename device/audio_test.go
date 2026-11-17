@@ -19,16 +19,11 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/state"
 )
 
-// fakeBackend is a sound card that is not there.
-//
-// It refuses to open the microphone twice, exactly as a real card does,
-// so a handover that is a race fails the test rather than passing it.
 type fakeBackend struct {
 	mu sync.Mutex
-	// open is whether the microphone is open.
+
 	open bool
-	// opens counts the opens, so a test can tell a handover from a
-	// reopen.
+
 	opens int
 }
 
@@ -57,21 +52,18 @@ func (b *fakeBackend) SelectAudioDevices(input, output string) error { return ni
 
 func (b *fakeBackend) ChooseDefaultInput() error { return nil }
 
-// isOpen says whether the microphone is open.
 func (b *fakeBackend) isOpen() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.open
 }
 
-// opensCount is how many times the microphone has been opened.
 func (b *fakeBackend) opensCount() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.opens
 }
 
-// fakeReader is a microphone that reads silence.
 type fakeReader struct {
 	backend *fakeBackend
 	done    chan struct{}
@@ -84,7 +76,7 @@ func (r *fakeReader) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	case <-time.After(100 * time.Millisecond):
 	}
-	// It blocks like a real one, for the length of a frame.
+
 	return len(p), nil
 }
 
@@ -98,58 +90,32 @@ func (r *fakeReader) Close() error {
 	return nil
 }
 
-// fakeWriter is a speaker that swallows what it is given.
 type fakeWriter struct{}
 
 func (w *fakeWriter) Write(p []byte) (int, error) { return len(p), nil }
 func (w *fakeWriter) Close() error                { return nil }
 
-// testLogger is a logger that writes to the test's output.
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
-// TestTheMonitorGivesUpTheMicrophone checks that the level meter and the
-// controller's capture share the microphone.
-//
-// Both read the same ported microphone: it is the one that knows which
-// capture device holds the microphones and which holds the playback
-// reference, and the one that measures the level against the room's own
-// floor.
-//
-// So the meter does not hold the card away from the turn. It did once: the
-// meter opened the card itself, and it opened the card's first capture,
-// which on this board is the playback reference — a device that reads
-// nothing unless the speaker is playing. The meter showed a silent room
-// however loud the room was, and a turn that wanted the microphone was told
-// the card was busy.
 func TestTheMonitorGivesUpTheMicrophone(t *testing.T) {
 	backend := &fakeBackend{}
 	a := &deviceAudio{backend: backend, log: testLogger()}
 
-	// The meter opens the microphone.
 	a.setMonitoring(true)
 	waitFor(t, func() bool { return backend.isOpen() }, "the meter did not open the microphone")
 
-	// A turn starts and asks for it. This must not fail with the card busy.
 	a.startCapture()
 	defer a.stopCapture()
 
-	// The capture opens the microphone on its own goroutine, so the wait
-	// is for it to be listening.
 	waitFor(t, func() bool { return a.capturing }, "the capture did not start")
 
-	// The microphone was opened once: the meter and the capture share it.
 	if opens := backend.opensCount(); opens != 1 {
 		t.Errorf("the microphone was opened %d times, want 1", opens)
 	}
 }
 
-// TestTheMeterTakesTheMicrophoneBack checks that the meter opens the
-// microphone when the controller is not using it.
-//
-// The meter is what a person looks at to see whether the microphone
-// works, so it has to work on its own.
 func TestTheMeterTakesTheMicrophoneBack(t *testing.T) {
 	backend := &fakeBackend{}
 	a := &deviceAudio{backend: backend, log: testLogger()}
@@ -157,17 +123,14 @@ func TestTheMeterTakesTheMicrophoneBack(t *testing.T) {
 	a.setMonitoring(true)
 	waitFor(t, func() bool { return backend.isOpen() }, "the meter did not open the microphone")
 
-	// The controller takes the microphone.
 	a.startCapture()
 	defer a.stopCapture()
 
-	// The controller gives it back.
 	a.stopCapture()
 	a.setMonitoring(true)
 	waitFor(t, func() bool { return backend.isOpen() }, "the meter did not take the microphone back")
 }
 
-// waitFor waits for a condition, up to a second.
 func waitFor(t *testing.T, ok func() bool, message string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -180,18 +143,8 @@ func waitFor(t *testing.T, ok func() bool, message string) {
 	t.Fatal(message)
 }
 
-// TestTheSendspinGainFollowsTheVolume checks that the music is scaled by
-// the panel's volume.
-//
-// It is the whole of the music's level, so a volume of zero is silence.
-// The panel reported zero for a long time, because the volume was never
-// copied into the reported state and Home Assistant sent back what it
-// was told.
-//
-// The scale is the curve's gain and not the percentage: half the dial is
-// a quiet conversation, not half the amplitude.
 func TestTheSendspinGainFollowsTheVolume(t *testing.T) {
-	full := []byte{0x00, 0x40, 0x00, 0x40} // 16384, 16384
+	full := []byte{0x00, 0x40, 0x00, 0x40}
 	half := append([]byte(nil), full...)
 	applySendspinGain(half, 50, false, false, 0)
 
@@ -201,8 +154,6 @@ func TestTheSendspinGainFollowsTheVolume(t *testing.T) {
 		t.Errorf("at half volume the sample was %d, want %d", got, want)
 	}
 
-	// Half the dial is quieter than half the amplitude, and louder than
-	// silence: that is the whole point of the curve.
 	if got == 0 {
 		t.Error("half volume was silence")
 	}
@@ -217,12 +168,6 @@ func TestTheSendspinGainFollowsTheVolume(t *testing.T) {
 	}
 }
 
-// TestTheReportedVolumeIsThePanelsVolume checks that the panel reports
-// the volume it is actually using.
-//
-// The volume is pushed to Home Assistant as the speaker's state, and Home
-// Assistant sends the volume back as a command. A panel that reported
-// zero would be told to be silent, and would then be silent.
 func TestTheReportedVolumeIsThePanelsVolume(t *testing.T) {
 	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	a.setVolume(42)
@@ -238,12 +183,6 @@ func TestTheReportedVolumeIsThePanelsVolume(t *testing.T) {
 	}
 }
 
-// TestTheServersMuteSilencesTheMusic checks that a mute from the music
-// server reaches the speaker.
-//
-// The server can mute the music, and that is not the panel's own switch.
-// The two are kept apart, so that unmuting on one does not unmute the
-// other, and both are honoured.
 func TestTheServersMuteSilencesTheMusic(t *testing.T) {
 	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 
@@ -261,8 +200,6 @@ func TestTheServersMuteSilencesTheMusic(t *testing.T) {
 	}
 }
 
-// TestTheMicrophoneMuteDoesNotMuteTheSpeaker checks that the panel's
-// microphone switch leaves Sendspin's independent speaker mute untouched.
 func TestTheMicrophoneMuteDoesNotMuteTheSpeaker(t *testing.T) {
 	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	a.setMuted(true)
@@ -276,31 +213,19 @@ func TestTheMicrophoneMuteDoesNotMuteTheSpeaker(t *testing.T) {
 
 	pcm := []byte{0x00, 0x40, 0x00, 0x40}
 	applySendspinGain(pcm, 100, serverMuted, false, 0)
-	// At full volume the curve's gain is not unity: its top sits below
-	// unity so the amplifier's own protection stays in front of the
-	// signal. What matters here is that the microphone mute did not
-	// silence the speaker at all.
+
 	if pcm[0] == 0x00 && pcm[1] == 0x00 {
 		t.Fatalf("the speaker was silenced by the microphone mute: %v", pcm)
 	}
 }
 
-// TestTheMicrophoneStaysOpenForTheWakeWord checks that the microphone is
-// still open after a turn has finished.
-//
-// The wake word is what decides whether the next turn happens, and it
-// decides it by hearing the room. A microphone that is closed when the
-// turn ends is a deaf panel: the wake word never fires again, and the
-// only way out is to restart the application.
 func TestTheMicrophoneStaysOpenForTheWakeWord(t *testing.T) {
 	backend := &fakeBackend{}
 	a := &deviceAudio{backend: backend, log: testLogger()}
 
-	// The wake word is listening, so the microphone is open.
 	a.setListening(true)
 	waitFor(t, func() bool { return backend.isOpen() }, "the microphone did not open for the wake word")
 
-	// A turn starts and finishes.
 	a.startCapture()
 	a.setStreaming(true)
 	a.setStreaming(false)
@@ -314,12 +239,6 @@ func TestTheMicrophoneStaysOpenForTheWakeWord(t *testing.T) {
 	}
 }
 
-// TestTheWakeWordIsForgottenWhenTheMicrophoneOpens checks that the wake
-// word is told when the microphone is opened.
-//
-// The detector's score is computed from the last two seconds of audio,
-// and the reply is the panel talking. Without a reset the panel can hear
-// itself and fire the wake word at its own voice.
 func TestTheWakeWordIsForgottenWhenTheMicrophoneOpens(t *testing.T) {
 	backend := &fakeBackend{}
 	a := &deviceAudio{backend: backend, log: testLogger()}
@@ -335,19 +254,9 @@ func TestTheWakeWordIsForgottenWhenTheMicrophoneOpens(t *testing.T) {
 	}
 }
 
-// TestTheReplyIsPlayedAtTheSpeakersRate checks that the reply is
-// converted to the rate the speaker plays at.
-//
-// Home Assistant speaks at 16 kHz and the speaker's voice path takes 16 kHz,
-// interpolating it up to the card's own rate itself.
-//
-// The reply used to be converted up to the card's rate here as well, and the
-// speaker converted it again: the reply was heard at three times the speed
-// it was spoken at, and at that speed it was not a voice at all.
 func TestTheReplyIsPlayedAtTheSpeakersRate(t *testing.T) {
 	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 
-	// One hundredth of a second of reply at 16 kHz: 160 samples.
 	pcm := make([]byte, 320)
 	for i := 0; i < 160; i++ {
 		pcm[i*2] = byte(i)
@@ -355,25 +264,16 @@ func TestTheReplyIsPlayedAtTheSpeakersRate(t *testing.T) {
 	}
 
 	converted := a.resampleVoice(pcm)
-	// The reply is kept at the rate it arrived at, because that is what the
-	// speaker's voice path takes.
+
 	if len(converted) != len(pcm) {
 		t.Errorf("the reply was %d bytes, want %d: it was converted", len(converted), len(pcm))
 	}
 
-	// And the voice path interpolates it up by its own factor, so a second
-	// of speech is a second of audio.
 	if up := speaker.VoiceUpsample; up != 3 {
 		t.Errorf("the voice path interpolates by %d, want 3", up)
 	}
 }
 
-// TestTheConnectionFollowsTheLink checks that the reported connection
-// follows the link to Home Assistant.
-//
-// The drawer says whether the panel can reach Home Assistant, and the
-// link is what says it. The link used to be recorded and never set, so
-// the drawer said "Disconnected" for ever.
 func TestTheConnectionFollowsTheLink(t *testing.T) {
 	tracker := state.NewTracker()
 	reporter := &stateReporter{
@@ -382,13 +282,11 @@ func TestTheConnectionFollowsTheLink(t *testing.T) {
 		audio: &deviceAudio{backend: &fakeBackend{}, log: testLogger()},
 	}
 
-	// The link is down to begin with.
 	conn, _ := connection(tracker.Snapshot())
 	if conn != "disconnected" {
 		t.Errorf("the connection was %q with the link down, want disconnected", conn)
 	}
 
-	// The link comes up.
 	reporter.setLink(true)
 	conn, reason := connection(tracker.Snapshot())
 	if conn != "connected" {
@@ -398,7 +296,6 @@ func TestTheConnectionFollowsTheLink(t *testing.T) {
 		t.Error("the connection had no reason to give")
 	}
 
-	// And it goes down again.
 	reporter.setLink(false)
 	conn, _ = connection(tracker.Snapshot())
 	if conn != "disconnected" {
@@ -406,13 +303,6 @@ func TestTheConnectionFollowsTheLink(t *testing.T) {
 	}
 }
 
-// TestTheMusicIsInTheState checks that what is playing is in the state
-// the panel reads.
-//
-// The drawer shows the title, the artist and the album, and the panel
-// has nothing but the state file to learn them from. The fields were
-// written and never filled in for a while, which is the trap this test
-// is for.
 func TestTheMusicIsInTheState(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	audio.setSendspinStatus(sendspin.Status{
@@ -458,11 +348,6 @@ func TestTheMusicIsInTheState(t *testing.T) {
 	}
 }
 
-// TestThePausedMusicIsNotPlaying checks that a paused track is said to
-// be paused.
-//
-// The speed is a multiplier of a thousand, and a paused track has a
-// speed of zero.
 func TestThePausedMusicIsNotPlaying(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	audio.setSendspinStatus(sendspin.Status{
@@ -481,25 +366,17 @@ func TestThePausedMusicIsNotPlaying(t *testing.T) {
 	}
 }
 
-// TestTheMusicDucksUnderAReply checks that the music is turned down
-// while somebody is speaking.
-//
-// The duck was set and never applied: the level was read from the
-// configuration and the music was never scaled by it, so a duck of
-// twenty decibels did nothing at all.
 func TestTheMusicDucksUnderAReply(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	audio.volume = 100
 	audio.setDuckDb(-20)
 
-	// A period of music at a steady level.
 	music := make([]byte, periodBytes)
 	for i := 0; i+1 < len(music); i += 2 {
 		music[i] = 0x00
-		music[i+1] = 0x40 // 16384
+		music[i+1] = 0x40
 	}
 
-	// Not ducked: the music is as it was.
 	before := make([]byte, len(music))
 	copy(before, music)
 	applyDuck(music, false, -20)
@@ -507,27 +384,23 @@ func TestTheMusicDucksUnderAReply(t *testing.T) {
 		t.Errorf("the music was changed without a duck: %d then %d", before[1], music[1])
 	}
 
-	// Ducked: it is quieter, by about twenty decibels.
 	applyDuck(music, true, -20)
 	quiet := int16(uint16(music[0]) | uint16(music[1])<<8)
 	if quiet >= 16384 {
 		t.Errorf("the music was not ducked: %d is not quieter than 16384", quiet)
 	}
-	// Twenty decibels is a tenth of the level, give or take.
+
 	if quiet < 1200 || quiet > 2000 {
 		t.Errorf("the music was ducked to %d, which is about %.1f decibels rather than twenty",
 			quiet, 20*math.Log10(float64(quiet)/16384))
 	}
 }
 
-// TestTheDuckingIsTurnedOnByTheReply checks that a reply ducks the
-// music and that the music comes back up afterwards.
 func TestTheDuckingIsTurnedOnByTheReply(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	audio.volume = 100
 	audio.setDuckDb(-20)
 
-	// The reply arrives.
 	audio.playReply(make([]byte, 320), false)
 	audio.mu.Lock()
 	ducked := audio.ducked
@@ -536,12 +409,8 @@ func TestTheDuckingIsTurnedOnByTheReply(t *testing.T) {
 		t.Error("the music was not ducked under the reply")
 	}
 
-	// The reply's audio has all arrived.
 	audio.finishReply()
 
-	// The music comes back up when the speaker has drained the reply,
-	// which is what the mixer does. The queue is emptied here, which is
-	// what the mixer would have done.
 	audio.mu.Lock()
 	audio.voice = nil
 	audio.mu.Unlock()
@@ -555,12 +424,6 @@ func TestTheDuckingIsTurnedOnByTheReply(t *testing.T) {
 	}
 }
 
-// TestTheWordsAreInTheState checks that the words reach the panel.
-//
-// The state is only written when it has changed, so the words have to be
-// part of that comparison. Without it the state is not rewritten when the
-// words change, and the panel is never told what was heard or what is
-// being said: the overlay sits there thinking for ever.
 func TestTheWordsAreInTheState(t *testing.T) {
 	first := State{
 		Connection: "connected",
@@ -574,7 +437,6 @@ func TestTheWordsAreInTheState(t *testing.T) {
 		t.Error("the state is the same when the words are different")
 	}
 
-	// The answer's words matter too.
 	third := State{
 		Connection: "connected",
 		Spoken:     "it is half past three",
@@ -587,7 +449,6 @@ func TestTheWordsAreInTheState(t *testing.T) {
 		t.Error("the state is the same when the answer is different")
 	}
 
-	// And the progress of the reply, which moves as it is spoken.
 	fifth := State{Connection: "connected", SpokenProgress: 0.25}
 	sixth := State{Connection: "connected", SpokenProgress: 0.5}
 	if same(fifth, sixth) {
@@ -595,15 +456,6 @@ func TestTheWordsAreInTheState(t *testing.T) {
 	}
 }
 
-// TestThePlayerIsIdleAfterTheReply checks that the speaker is idle once
-// the reply has been said.
-//
-// Home Assistant shows the speaker's state on the player card, and a
-// player left on "playing" is a player that looks busy for ever.
-//
-// The reply is over when the speaker has drained it, so that is where
-// the state goes back to idle. It is not where the last frame arrives:
-// the speaker still has the words in it then.
 func TestThePlayerIsIdleAfterTheReply(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	audio.volume = 100
@@ -613,20 +465,16 @@ func TestThePlayerIsIdleAfterTheReply(t *testing.T) {
 		states = append(states, state)
 	}
 
-	// The reply arrives.
 	audio.playReply(make([]byte, 320), false)
 	if len(states) == 0 || states[len(states)-1] != esphome.MediaPlayerState_MEDIA_PLAYER_STATE_PLAYING {
 		t.Fatalf("the player is not playing while the reply is: %v", states)
 	}
 
-	// The last frame arrives. The speaker still has the words in it, so
-	// the player is still playing.
 	audio.finishVoice()
 	if states[len(states)-1] != esphome.MediaPlayerState_MEDIA_PLAYER_STATE_PLAYING {
 		t.Errorf("the player went idle before the words were said: %v", states)
 	}
 
-	// The speaker has drained it. That is when the player goes idle.
 	audio.mu.Lock()
 	audio.voiceActive = true
 	audio.voiceStreaming = false
@@ -639,18 +487,10 @@ func TestThePlayerIsIdleAfterTheReply(t *testing.T) {
 	}
 }
 
-// TestTheSpokenProgressFollowsTheReply checks that the progress of the
-// reply is measured in the right units.
-//
-// The reply arrives at sixteen kilohertz and is played at forty-eight,
-// so the arrival and the queue are three times different sizes. Counting
-// the arrival and comparing it with the queue gave a progress that was
-// always nothing, and the answer's words never appeared.
 func TestTheSpokenProgressFollowsTheReply(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	audio.volume = 100
 
-	// A tenth of a second of reply, at the rate it arrives at.
 	reply := make([]byte, voiceRate/10*2)
 	for i := 0; i+1 < len(reply); i += 2 {
 		reply[i] = 0x10
@@ -659,28 +499,19 @@ func TestTheSpokenProgressFollowsTheReply(t *testing.T) {
 
 	audio.playReply(reply, false)
 
-	// It has arrived but none of it has been played.
 	if got := audio.spokenProgress(); got > 0.01 {
 		t.Errorf("the progress is %v before anything has been played", got)
 	}
 
-	// Half of it has been played: the speaker has taken half of the
-	// queue.
 	audio.mu.Lock()
 	half := len(audio.voice) / 2
 	audio.voice = audio.voice[half:]
 	audio.mu.Unlock()
 
-	// The progress is about half. It is measured against the audio that
-	// has arrived, so the two have to be counted in the same units: the
-	// reply arrives at sixteen kilohertz and is played at forty-eight,
-	// and counting the arrival against the queue gave a progress that
-	// was always nothing.
 	if got := audio.spokenProgress(); got < 0.4 || got > 0.6 {
 		t.Errorf("the progress is %v when half the reply has been played", got)
 	}
 
-	// All of it has been played.
 	audio.mu.Lock()
 	audio.voice = nil
 	audio.mu.Unlock()
@@ -690,40 +521,19 @@ func TestTheSpokenProgressFollowsTheReply(t *testing.T) {
 	}
 }
 
-// TestTheProgressReachesTheEndWithTheReplyTail checks that the progress
-// of the reply reaches the end when the reply is finished off.
-//
-// The last of the reply is held by the converter and released when the
-// reply ends. Those bytes are played, but they were not counted, so the
-// progress was measured against less audio than there was and never
-// reached the end. The panel shows the answer's words as the audio is
-// played, so the last of the words never appeared.
 func TestTheProgressReachesTheEndWithTheReplyTail(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	audio.volume = 100
 
-	// A tenth of a second of reply, at the rate it arrives at.
 	reply := make([]byte, voiceRate/10*2)
 	for i := 0; i+1 < len(reply); i += 2 {
 		reply[i] = 0x10
 		reply[i+1] = 0x00
 	}
 
-	// The reply, and the end of it. The end releases the tail of the
-	// conversion, which is part of the reply and has to be counted.
-	// The reply, and then the end of it. This is the way the reply
-	// really arrives: the audio in pieces with the end flag clear, and
-	// the end of it said separately.
 	audio.playReply(reply, false)
 	audio.finishReply()
 
-	// The tail is part of the reply and is counted as part of it.
-	//
-	// The progress is measured against the audio that has arrived, so
-	// everything that is played has to be counted. The tail was not, so
-	// the progress was measured against less audio than there was and
-	// could never reach the end: the panel showed the answer's words as
-	// the audio was played, and the last of the words never appeared.
 	audio.mu.Lock()
 	queued := len(audio.voice)
 	counted := audio.spokenTotal
@@ -732,7 +542,6 @@ func TestTheProgressReachesTheEndWithTheReplyTail(t *testing.T) {
 		t.Errorf("%d bytes are queued but only %d were counted", queued, counted)
 	}
 
-	// Everything that was queued has been played.
 	audio.mu.Lock()
 	audio.voice = nil
 	audio.mu.Unlock()
@@ -742,21 +551,10 @@ func TestTheProgressReachesTheEndWithTheReplyTail(t *testing.T) {
 	}
 }
 
-// TestTheProgressIsCompleteWhenTheReplyIsPlayedOut checks that the
-// progress of the reply reaches the end when the reply has been said.
-//
-// The progress is measured against the audio that arrived, and the last
-// of that is held by the converter until the reply ends. So the count
-// runs a little short and the progress never quite reaches the end.
-//
-// The panel shows the answer's words as the audio is played, so the last
-// of the words was never shown: the answer stopped at "Sorry, I am not
-// aware of any device called a jok".
 func TestTheProgressIsCompleteWhenTheReplyIsPlayedOut(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	audio.volume = 100
 
-	// A tenth of a second of reply, at the rate it arrives at.
 	reply := make([]byte, voiceRate/10*2)
 	for i := 0; i+1 < len(reply); i += 2 {
 		reply[i] = 0x10
@@ -766,7 +564,6 @@ func TestTheProgressIsCompleteWhenTheReplyIsPlayedOut(t *testing.T) {
 	audio.playReply(reply, false)
 	audio.finishReply()
 
-	// The reply has been played out: the speaker has drained it.
 	audio.markReplyPlayedOut()
 
 	if got := audio.spokenProgress(); got < 0.99 {
@@ -774,11 +571,6 @@ func TestTheProgressIsCompleteWhenTheReplyIsPlayedOut(t *testing.T) {
 	}
 }
 
-// TestTheProgressStartsAgainForTheNextReply checks that a new reply's
-// progress is measured from the start.
-//
-// The completion belongs to the reply that was played out, and the next
-// reply has to be measured from its own beginning.
 func TestTheProgressStartsAgainForTheNextReply(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 	audio.volume = 100
@@ -793,7 +585,6 @@ func TestTheProgressStartsAgainForTheNextReply(t *testing.T) {
 	audio.finishReply()
 	audio.markReplyPlayedOut()
 
-	// The next reply.
 	audio.playReply(reply, false)
 
 	if got := audio.spokenProgress(); got > 0.01 {
@@ -801,16 +592,6 @@ func TestTheProgressStartsAgainForTheNextReply(t *testing.T) {
 	}
 }
 
-// TestTheMuteSilencesTheMicrophone checks that a muted microphone
-// sends silence.
-//
-// The mute is the microphone's and not the speaker's: a person who
-// mutes the panel wants the room to stop hearing them, and they still
-// want to hear the music.
-//
-// So the audio is silenced before the wake word hears it and before
-// Home Assistant hears it. A muted microphone that still sent the room
-// would be a mute that did nothing.
 func TestTheMuteSilencesTheMicrophone(t *testing.T) {
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
 
@@ -819,13 +600,11 @@ func TestTheMuteSilencesTheMicrophone(t *testing.T) {
 		heard = append(heard, append([]byte(nil), pcm...))
 	}
 
-	// A block of sound.
 	frame := make([]byte, 320)
 	for i := range frame {
 		frame[i] = 0x40
 	}
 
-	// Unmuted, the wake word hears the room.
 	audio.pushFrame(frame)
 	if len(heard) != 1 {
 		t.Fatalf("the wake word heard %d blocks, it should have heard one", len(heard))
@@ -834,7 +613,6 @@ func TestTheMuteSilencesTheMicrophone(t *testing.T) {
 		t.Fatalf("the wake word heard silence, it should have heard the room")
 	}
 
-	// And muted, it hears nothing.
 	audio.setMuted(true)
 	audio.pushFrame(frame)
 	if len(heard) != 2 {

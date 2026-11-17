@@ -7,15 +7,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// The bytes here were produced by aioesphomeapi's own generated types.
-//
-// The protocol is shared with Home Assistant, and Home Assistant speaks it
-// with aioesphomeapi. A difference between the two encodings would be a
-// silent bug: the message would parse, the field would be wrong, and the
-// symptom would be an entity that never changes.
-//
-// The Python side of this check is tools/check_wire.py, which encodes the
-// same values with aioesphomeapi and compares them against the same list.
 var wireVectors = []struct {
 	name  string
 	msg   proto.Message
@@ -233,12 +224,6 @@ var wireVectors = []struct {
 	},
 }
 
-// TestWireVectorsMatchAioesphomeapi checks the encoding against the bytes
-// aioesphomeapi produces for the same values.
-//
-// The expected bytes were taken from the Python side of the check, which
-// encodes with aioesphomeapi's own generated types. Both sides speak the
-// same protocol, so both must produce the same bytes.
 func TestWireVectorsMatchAioesphomeapi(t *testing.T) {
 	for _, vector := range wireVectors {
 		encoded, err := proto.Marshal(vector.msg)

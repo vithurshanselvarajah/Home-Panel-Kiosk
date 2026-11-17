@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// The output loop's own cleanup must leave the speaker free.
 func TestTheOutputLoopLeavesTheSpeakerFree(t *testing.T) {
 	ctx := context.Background()
 	a := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
@@ -16,7 +15,7 @@ func TestTheOutputLoopLeavesTheSpeakerFree(t *testing.T) {
 	}
 	a.ensureOutput()
 	time.Sleep(300 * time.Millisecond)
-	// The loop is stopped the way it stops itself: the output is closed.
+
 	a.closeOutput()
 	time.Sleep(300 * time.Millisecond)
 

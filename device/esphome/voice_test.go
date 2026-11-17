@@ -15,9 +15,6 @@ import (
 func TestVoiceFlagsSayWhatTheDeviceCanDo(t *testing.T) {
 	server := NewServer(ServerOptions{Name: "panel", MAC: "AA:BB:CC:DD:EE:FF"})
 
-	// Without a wake word the panel cannot start a conversation by
-	// itself, so it must not carry the flag: a panel that carries it
-	// appears in the picker and answers every question with silence.
 	flags := server.voiceAssistantFlags()
 	if flags&startConversationFlag != 0 {
 		t.Error("the panel claims it can start conversations without a wake word")
@@ -168,8 +165,6 @@ func TestSpeakingFollowsTheReply(t *testing.T) {
 		t.Error("the panel is not speaking when the reply started")
 	}
 
-	// The end of the answer is not the end of the reply when the answer
-	// is streamed: the audio is still on its way.
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
 		EventType: VoiceAssistantEvent_VOICE_ASSISTANT_TTS_STREAM_START,
 	})
@@ -180,7 +175,6 @@ func TestSpeakingFollowsTheReply(t *testing.T) {
 		t.Error("the panel stopped speaking when the answer was written")
 	}
 
-	// The end of the audio stream is what ends the reply.
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
 		EventType: VoiceAssistantEvent_VOICE_ASSISTANT_TTS_STREAM_END,
 	})
@@ -189,11 +183,6 @@ func TestSpeakingFollowsTheReply(t *testing.T) {
 	}
 }
 
-// TestAnAnswerThatIsNotStreamedEnds checks that a reply that arrives
-// whole ends when the speaker has drained it.
-//
-// There is no stream to end when the answer is not streamed, so the
-// speaker is what ends the reply.
 func TestAnAnswerThatIsNotStreamedEnds(t *testing.T) {
 	voice := NewVoice(VoiceOptions{})
 
@@ -215,19 +204,12 @@ func TestAnAnswerThatIsNotStreamedEnds(t *testing.T) {
 		t.Error("the panel stopped speaking when the answer was written")
 	}
 
-	// The reply is over when the speaker has drained it.
 	voice.ReplyPlayedOut()
 	if speaking {
 		t.Error("the panel is still speaking after the reply was played out")
 	}
 }
 
-// TestTheRunEndDoesNotCutTheReply checks that the end of the run does not
-// end the reply.
-//
-// Home Assistant ends the run when the agent has written the answer, and
-// the answer is still being spoken after that. Ending the reply on the
-// run's end cuts it off in the middle.
 func TestTheRunEndDoesNotCutTheReply(t *testing.T) {
 	voice := NewVoice(VoiceOptions{})
 
@@ -242,7 +224,6 @@ func TestTheRunEndDoesNotCutTheReply(t *testing.T) {
 		EventType: VoiceAssistantEvent_VOICE_ASSISTANT_TTS_STREAM_START,
 	})
 
-	// The run ends and the reply is still going.
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
 		EventType: VoiceAssistantEvent_VOICE_ASSISTANT_RUN_END,
 	})
@@ -250,8 +231,6 @@ func TestTheRunEndDoesNotCutTheReply(t *testing.T) {
 		t.Error("the run's end cut the reply off")
 	}
 
-	// The audio arrives after the run has ended, which is what happens
-	// when the answer is streamed.
 	voice.handleReplyAudio([]byte{0, 0, 0, 0}, false)
 	if !speaking {
 		t.Error("the panel is not speaking while the reply is arriving")
@@ -294,8 +273,6 @@ func TestConfigurationRequestIsEmptyWhenTheWakeWordIsOff(t *testing.T) {
 
 	response := voice.handleConfigurationRequest()
 
-	// The model is still offered — home assistant has to be able to
-	// switch it back on — but it is not active.
 	if len(response.GetAvailableWakeWords()) != 1 {
 		t.Error("the panel does not offer the wake word it has")
 	}
@@ -345,7 +322,6 @@ func TestSetConfigurationRefusesAModelThePanelDoesNotHave(t *testing.T) {
 		t.Fatal("the panel accepted a wake word it does not have")
 	}
 
-	// It keeps what it had, rather than pretending it switched.
 	if !voice.canStartConversations() {
 		t.Error("the panel lost its wake word because of a request it could not satisfy")
 	}
@@ -469,14 +445,6 @@ func TestTheWakeWordCallbackIsNotCalledForAModelThePanelDoesNotHave(t *testing.T
 	}
 }
 
-// TestTheVoiceMessageNumbersMatchTheProtocol checks the message numbers.
-//
-// The numbers are the wire format, and getting one wrong is a silent bug:
-// home assistant sends the message, the device does not recognise it, and
-// the device sits there waiting for a reply that was never asked for.
-//
-// The numbers are read out of the upstream protocol file, so they cannot
-// drift from it.
 func TestTheVoiceMessageNumbersMatchTheProtocol(t *testing.T) {
 	upstream, err := os.ReadFile("api.proto.upstream")
 	if err != nil {
@@ -516,10 +484,6 @@ func TestTheVoiceMessageNumbersMatchTheProtocol(t *testing.T) {
 	}
 }
 
-// messageBlock returns the id of a message in the upstream protocol.
-//
-// The upstream file is the source of the wire format, so the numbers in it
-// are the numbers the device has to use.
 func messageBlock(t *testing.T, text, name string) map[string]string {
 	t.Helper()
 	pattern := regexp.MustCompile(`(?s)message ` + name + ` \{(.*?)\n\}`)
@@ -537,12 +501,6 @@ func messageBlock(t *testing.T, text, name string) map[string]string {
 	return fields
 }
 
-// TestTheReplyAudioReachesTheSpeaker checks that the reply's audio is
-// handed to whoever is playing it.
-//
-// The reply comes back on the connection as audio. It used to arrive and
-// be dropped, and the panel looked like it was answering while it was
-// silent.
 func TestTheReplyAudioReachesTheSpeaker(t *testing.T) {
 	server := NewServer(ServerOptions{Name: "panel", MAC: "AA:BB:CC:DD:EE:FF"})
 	voice := NewVoice(VoiceOptions{})
@@ -566,12 +524,6 @@ func TestTheReplyAudioReachesTheSpeaker(t *testing.T) {
 	}
 }
 
-// TestTheReplyIsEndedByTheEvent checks that the reply's end is said when
-// Home Assistant says the reply has streamed.
-//
-// Home Assistant sends the reply's audio with the end flag clear and
-// says the reply is over with an event. A device that waits for the flag
-// waits for ever, and the reply is never finished.
 func TestTheReplyIsEndedByTheEvent(t *testing.T) {
 	server := NewServer(ServerOptions{Name: "panel", MAC: "AA:BB:CC:DD:EE:FF"})
 	voice := NewVoice(VoiceOptions{})
@@ -591,8 +543,6 @@ func TestTheReplyIsEndedByTheEvent(t *testing.T) {
 	}
 }
 
-// TestTheAnnouncementIsAskedForByHomeAssistant checks that the request to
-// speak reaches the panel.
 func TestTheAnnouncementIsAskedForByHomeAssistant(t *testing.T) {
 	server := NewServer(ServerOptions{Name: "panel", MAC: "AA:BB:CC:DD:EE:FF"})
 	voice := NewVoice(VoiceOptions{})
@@ -618,14 +568,6 @@ func TestTheAnnouncementIsAskedForByHomeAssistant(t *testing.T) {
 	}
 }
 
-// TestTheCapabilitiesCarryTheVoiceFlags checks that the device's
-// capabilities say what the device can do.
-//
-// From API 1.15 onwards Home Assistant reads the voice assistant's flags
-// from the capabilities rather than from the device information. An empty
-// answer says the device has no voice assistant at all, and Home
-// Assistant then never sends the reply audio over the connection — which
-// is a panel that looks like it is answering while it is silent.
 func TestTheCapabilitiesCarryTheVoiceFlags(t *testing.T) {
 	server := NewServer(ServerOptions{Name: "panel", MAC: "AA:BB:CC:DD:EE:FF"})
 	voice := NewVoice(VoiceOptions{})
@@ -660,9 +602,6 @@ func TestTheCapabilitiesCarryTheVoiceFlags(t *testing.T) {
 		t.Fatalf("the capabilities said nothing about the voice assistant: %v", lines)
 	}
 
-	// The flags are the ones Home Assistant reads to decide how to talk
-	// to the device: the API audio flag is what makes it send the reply
-	// over the connection rather than over UDP.
 	for _, want := range []struct {
 		name string
 		flag uint32
@@ -679,13 +618,6 @@ func TestTheCapabilitiesCarryTheVoiceFlags(t *testing.T) {
 	}
 }
 
-// TestTheReplyComesOverTheConnection checks that the reply's audio
-// arrives on the connection and reaches the speaker.
-//
-// This is the whole round trip, driven by the library Home Assistant
-// uses: the audio goes over the wire the way Home Assistant sends it,
-// with the end flag clear, and the reply is ended with the event that
-// Home Assistant sends.
 func TestTheReplyComesOverTheConnection(t *testing.T) {
 	server := NewServer(ServerOptions{Name: "panel", MAC: "AA:BB:CC:DD:EE:FF"})
 	voice := NewVoice(VoiceOptions{})
@@ -730,22 +662,11 @@ func TestTheReplyComesOverTheConnection(t *testing.T) {
 	}
 }
 
-// TestTheUtteranceEndIsSent checks that the device tells Home Assistant
-// that the utterance is over.
-//
-// It is an empty block of audio with the end flag on it, and it is what
-// closes the pipeline on the device's side. Without it the pipeline is
-// left open, and a turn that ends badly sits there until something
-// times out.
-//
-// The peer is the real client, so the flag is checked where it is
-// actually read.
 func TestTheUtteranceEndIsSent(t *testing.T) {
 	server := NewServer(ServerOptions{Name: "panel", MAC: "AA:BB:CC:DD:EE:FF"})
 	voice := NewVoice(VoiceOptions{})
 	server.SetVoice(voice)
 
-	// The end is sent when the utterance is over.
 	sent := make(chan bool, 4)
 	voice.SetVoiceHooks(VoiceHooks{
 		OnUtteranceEnd: func() {
@@ -777,16 +698,6 @@ func TestTheUtteranceEndIsSent(t *testing.T) {
 	}
 }
 
-// TestTheBarrierDiscardsTheAbortedTurn checks that the tail of an
-// aborted turn is thrown away.
-//
-// Home Assistant acknowledges an abort with no wire message at all, so
-// the aborted run's tail lands on the new turn and Home Assistant reads
-// it as "Home Assistant ended a run it never started" and ends the
-// turn. Every barge-in would end with no audio captured.
-//
-// The barrier is armed when the new turn starts and every event is
-// discarded until the run start that belongs to it.
 func TestTheBarrierDiscardsTheAbortedTurn(t *testing.T) {
 	voice := NewVoice(VoiceOptions{})
 
@@ -795,15 +706,11 @@ func TestTheBarrierDiscardsTheAbortedTurn(t *testing.T) {
 		OnEnd: func(string, bool) { ended++ },
 	})
 
-	// A turn starts.
 	voice.startTurn("hey jarvis")
 
-	// A barge-in: the turn is interrupted, which arms the barrier, and
-	// the new turn starts.
 	voice.cutOff()
 	voice.startTurn("hey jarvis")
 
-	// The aborted run's tail arrives. It must be discarded.
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
 		EventType: VoiceAssistantEvent_VOICE_ASSISTANT_RUN_END,
 	})
@@ -811,7 +718,6 @@ func TestTheBarrierDiscardsTheAbortedTurn(t *testing.T) {
 		t.Errorf("the aborted turn's tail ended the new turn, %d times", ended)
 	}
 
-	// The error that comes with it must be discarded too.
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
 		EventType: VoiceAssistantEvent_VOICE_ASSISTANT_ERROR,
 		Data: []*VoiceAssistantEventData{
@@ -822,12 +728,10 @@ func TestTheBarrierDiscardsTheAbortedTurn(t *testing.T) {
 		t.Errorf("the aborted turn's error was taken: %q", voice.lastError)
 	}
 
-	// The new turn's run start ends the barrier.
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
 		EventType: VoiceAssistantEvent_VOICE_ASSISTANT_RUN_START,
 	})
 
-	// And the events after it are taken as they are.
 	voice.handleVoiceEvent(&VoiceAssistantEventResponse{
 		EventType: VoiceAssistantEvent_VOICE_ASSISTANT_RUN_END,
 	})
@@ -836,11 +740,6 @@ func TestTheBarrierDiscardsTheAbortedTurn(t *testing.T) {
 	}
 }
 
-// TestTheBarrierIsNotArmedWithoutABarge checks that an ordinary turn is
-// not behind a barrier.
-//
-// The barrier is for a barge-in: a turn that starts while another is
-// running. An ordinary turn must see every event.
 func TestTheBarrierIsNotArmedWithoutABarge(t *testing.T) {
 	voice := NewVoice(VoiceOptions{})
 

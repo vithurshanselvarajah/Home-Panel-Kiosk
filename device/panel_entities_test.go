@@ -6,16 +6,6 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 )
 
-// TestPanelEntitiesHaveNoDuplicates checks that no two entities say the
-// same thing.
-//
-// A control that says the same thing as another one is not offered:
-// the screen switch turns the screen off and on, so there is no separate
-// button for waking it or for turning it off, and the view select
-// chooses between the dashboard and the slideshow, so there is no
-// separate button for the slideshow.
-//
-// What is left is one control for each thing the panel can do.
 func TestPanelEntitiesHaveNoDuplicates(t *testing.T) {
 	registry := panelEntities(PanelCapabilities{
 		CanControlScreen: true,
@@ -31,12 +21,6 @@ func TestPanelEntitiesHaveNoDuplicates(t *testing.T) {
 		seen[entity.ObjectID] = true
 	}
 
-	// The controls that are wanted are there.
-	//
-	// There is no volume entity: the volume is the speaker's, and the
-	// speaker is a media player. A separate volume number would be a
-	// second control for the same setting, and the two would be able to
-	// disagree.
 	for _, want := range []string{
 		"screen", "brightness", "view", "dashboard", "display_mode", "exit",
 		"idle_slideshow_minutes", "slideshow_off_minutes", "touch_keyboard_enabled",
@@ -57,7 +41,6 @@ func TestPanelEntitiesHaveNoDuplicates(t *testing.T) {
 		}
 	}
 
-	// The ones that say the same thing as another are not.
 	for _, unwanted := range []string{"wake", "screen_off", "slideshow", "notification", "open_url", "volume"} {
 		if seen[unwanted] {
 			t.Errorf("the entity %q says the same thing as another one", unwanted)
@@ -74,13 +57,6 @@ func entityByID(registry *esphome.Registry, id string) *esphome.Entity {
 	return nil
 }
 
-// TestTheBinarySensorsSayOpenAndClosed checks what the sensors that
-// say whether something is open say.
-//
-// A device class of "problem" makes Home Assistant show a closed
-// thing as "OK" and an open one as "Problem", which is wrong: a
-// keyboard that is up is not a fault. The class that says "open" and
-// "closed" is the one for it.
 func TestTheBinarySensorsSayOpenAndClosed(t *testing.T) {
 	registry := panelEntities(PanelCapabilities{
 		CanControlScreen: true,
@@ -98,11 +74,6 @@ func TestTheBinarySensorsSayOpenAndClosed(t *testing.T) {
 	}
 }
 
-// TestPanelServicesAreOffered checks that the commands are services.
-//
-// A notification and an address are commands with something in them,
-// not values that sit there after they have been typed, so they are
-// services rather than text boxes.
 func TestPanelServicesAreOffered(t *testing.T) {
 	services := panelServices(func(ControlCommand) {})
 
@@ -120,8 +91,6 @@ func TestPanelServicesAreOffered(t *testing.T) {
 	}
 }
 
-// TestNotificationServiceTakesItsArguments checks that the notification
-// service carries everything a notification needs.
 func TestNotificationServiceTakesItsArguments(t *testing.T) {
 	var got ControlCommand
 	services := panelServices(func(command ControlCommand) { got = command })
@@ -150,8 +119,6 @@ func TestNotificationServiceTakesItsArguments(t *testing.T) {
 	}
 }
 
-// TestOpenURLServiceTakesItsArguments checks that the address service
-// carries the address.
 func TestOpenURLServiceTakesItsArguments(t *testing.T) {
 	var got ControlCommand
 	services := panelServices(func(command ControlCommand) { got = command })

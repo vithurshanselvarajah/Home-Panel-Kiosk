@@ -4,18 +4,6 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 )
 
-// The panel's services.
-//
-// A notification and an address are commands with something in them,
-// rather than values that sit there after they have been typed. The
-// protocol has a message for them, and Home Assistant turns each one
-// into a service of its own.
-//
-// So they are services and not text boxes. A text box is a value that
-// stays in the entity after it has been set, and a command is not a
-// value: it is done the moment it is asked for.
-
-// panelServices makes the services the panel offers.
 func panelServices(send func(ControlCommand)) *esphome.ServiceRegistry {
 	registry := esphome.NewServiceRegistry()
 
@@ -82,13 +70,11 @@ func panelServices(send func(ControlCommand)) *esphome.ServiceRegistry {
 	return registry
 }
 
-// stringArg reads a piece of text out of the arguments.
 func stringArg(args map[string]any, name string) string {
 	value, _ := args[name].(string)
 	return value
 }
 
-// intArg reads a whole number out of the arguments.
 func intArg(args map[string]any, name string) int {
 	switch number := args[name].(type) {
 	case int:

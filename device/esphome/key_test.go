@@ -7,11 +7,6 @@ import (
 	"testing"
 )
 
-// TestPlainTextIsAllowedWithoutAKey checks that a device with no key
-// speaks in plain text.
-//
-// A key is optional. The protocol allows a device without one, and
-// Home Assistant sets such a device up in one step.
 func TestPlainTextIsAllowedWithoutAKey(t *testing.T) {
 	server := NewServer(ServerOptions{
 		Name: "home-panel", FriendlyName: "Home Panel", MAC: "aabbccddeeff",
@@ -24,7 +19,6 @@ func TestPlainTextIsAllowedWithoutAKey(t *testing.T) {
 	defer listener.Close()
 	go server.Listen(listener)
 
-	// The client speaks in plain text and does not need a key.
 	lines, err := runPeer("list_entities", listener.Addr().String(), "")
 	if err != nil {
 		if errors.Is(err, errSkipPeer) {
@@ -38,11 +32,6 @@ func TestPlainTextIsAllowedWithoutAKey(t *testing.T) {
 	}
 }
 
-// TestAPlainTextClientIsRefusedWhenThereIsAKey checks the other side of
-// it.
-//
-// A device with a key does not speak in plain text, because the key is
-// there so that nothing is said in plain text.
 func TestAPlainTextClientIsRefusedWhenThereIsAKey(t *testing.T) {
 	server := NewServer(ServerOptions{
 		Name: "home-panel", FriendlyName: "Home Panel", MAC: "aabbccddeeff",
@@ -56,7 +45,6 @@ func TestAPlainTextClientIsRefusedWhenThereIsAKey(t *testing.T) {
 	defer listener.Close()
 	go server.Listen(listener)
 
-	// The client speaks in plain text and is refused.
 	lines, err := runPeer("list_entities", listener.Addr().String(), "")
 	if err == nil {
 		joined := strings.Join(lines, "\n")

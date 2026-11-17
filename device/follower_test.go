@@ -25,7 +25,6 @@ func TestAnUnknownVolumeIsNotFollowed(t *testing.T) {
 	server := NewControlServer(ControlOptions{Socket: t.TempDir() + "/c.sock"})
 	server.SetVolumeFollower(func(int) { called++ })
 
-	// A panel that has not read the mixer sends no volume.
 	server.SetState(ControlState{})
 
 	if called != 0 {

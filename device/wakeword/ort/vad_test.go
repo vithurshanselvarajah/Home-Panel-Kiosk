@@ -10,9 +10,6 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/wakeword/ort"
 )
 
-// Needs the runtime and openwakeword's silero_vad.onnx, so it skips without:
-//
-//	EM_ORT_LIB=... EM_VAD_MODEL=.../openwakeword/resources/models/silero_vad.onnx
 func TestVADMatchesPython(t *testing.T) {
 	lib, path := os.Getenv("EM_ORT_LIB"), os.Getenv("EM_VAD_MODEL")
 	if lib == "" || path == "" {
@@ -39,14 +36,12 @@ func TestVADMatchesPython(t *testing.T) {
 			t.Errorf("frame %d: %.4f, Python %.4f", i, got, w)
 		}
 	}
-	// A new stream starts from clean state and reproduces the first frame.
+
 	if got, _ := v.Stream().Prob(audio[:1280]); math.Abs(float64(got-want[0])) > 1e-3 {
 		t.Errorf("new stream: %.4f, want %.4f", got, want[0])
 	}
 }
 
-// LoadVADFixture reads testdata/vad_fixture.{pcm,json} as float samples and
-// Python's per-frame probabilities.
 func LoadVADFixture(t *testing.T, dir string) ([]float32, []float32) {
 	t.Helper()
 	raw, err := os.ReadFile(dir + "/vad_fixture.pcm")

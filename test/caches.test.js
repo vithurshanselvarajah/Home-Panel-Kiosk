@@ -6,10 +6,6 @@ const path = require("node:path");
 
 const { moveCachesToMemory, CACHE_DIRECTORIES } = require("../src/caches");
 
-// Chromium's caches are moved into memory so they do not wear the
-// flash out. The move is a link, and a link can outlive what it points
-// at: the memory is in /run, which is a fresh filesystem on every boot.
-
 function temporaryProfile() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "homepanel-caches-"));
   return {
@@ -37,15 +33,12 @@ test("the caches are linked into memory", () => {
 });
 
 test("a link to a directory that is gone is made again", () => {
-  // The memory is in /run, so a link made by an earlier run points at
-  // a directory that is gone after a boot. Chromium cannot make its
-  // cache directory when the link is in the way, and says so on every
-  // start: "Failed to create cache directory ... File exists".
+
   const { profile, memory, clean } = temporaryProfile();
   try {
     fs.mkdirSync(profile, { recursive: true });
     fs.mkdirSync(memory, { recursive: true });
-    // A link to a target that was never made.
+
     const name = CACHE_DIRECTORIES[0];
     fs.symlinkSync(path.join(memory, name), path.join(profile, name), "dir");
     assert.ok(!fs.existsSync(path.join(memory, name)), "the target should not be there");

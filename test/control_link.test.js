@@ -6,13 +6,6 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { ControlClient } = require("../src/control");
 
-// The link to Home Assistant.
-//
-// The drawer shows whether the panel is linked to Home Assistant. The
-// panel cannot tell: the socket between the panel and the device
-// program is on this machine and is up whatever Home Assistant is
-// doing, so the device program has to say.
-
 function socketPath() {
   return path.join(os.tmpdir(), `homepanel-link-${process.pid}-${Date.now()}.sock`);
 }

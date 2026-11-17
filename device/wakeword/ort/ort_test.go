@@ -12,29 +12,6 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/wakeword/ort"
 )
 
-// These tests need the ONNX Runtime and the three model files, none of which
-// live in this repository — the runtime is linked into the binary and the
-// models come from openwakeword. So they SKIP unless pointed at them:
-//
-//	EM_OWW_MODELS=$HOME/.local/lib/python3.14/site-packages/openwakeword/resources/models \
-//	EM_OWW_CLASSIFIER=$HOME/.local/lib/python3.14/site-packages/openwakeword/resources/models/hey_jarvis_v0.1.onnx \
-//	go test ./wakeword/ort/
-//
-// Skipping rather than failing is deliberate: CI would otherwise need the
-// models to test a package whose whole design point is that it works
-// without them.
-//
-// The models must be the ones the fixture was made with, or the embeddings
-// will not match it: the fixture records what openwakeword produced, and a
-// different embedding model produces different embeddings. The
-// MELSpectrogram stage does not depend on the model set and must match
-// exactly either way — see TestMelspectrogramMatchesTheFixture.
-//
-// The fixture was made with openwakeword 0.6.0. A newer openwakeword ships
-// a different embedding model, and the embedding tests fail against it
-// while the melspectrogram and the structure tests still pass. The
-// generator is in testdata/gen_ort_fixture.py and needs that version to
-// run.
 func models(t *testing.T) (lib string, m ort.Models) {
 	t.Helper()
 	dir := os.Getenv("EM_OWW_MODELS")
@@ -42,9 +19,7 @@ func models(t *testing.T) (lib string, m ort.Models) {
 	if dir == "" || cls == "" {
 		t.Skip("set EM_OWW_MODELS and EM_OWW_CLASSIFIER to run the ONNX Runtime tests")
 	}
-	// EM_OWW_STREAM is the streaming embedding model, made from the stock
-	// one by the controller's own tool. Without it the streaming tests
-	// skip and the rest run on the stock model.
+
 	return "onnxruntime", ort.Models{
 		Melspec:         filepath.Join(dir, "melspectrogram.onnx"),
 		Embedding:       filepath.Join(dir, "embedding_model.onnx"),
@@ -53,16 +28,6 @@ func models(t *testing.T) (lib string, m ort.Models) {
 	}
 }
 
-// TestMelspectrogramMatchesTheFixture is the part of the end-to-end claim
-// that does not depend on which openwakeword version is installed.
-//
-// The melspectrogram is the first stage: it turns audio into mel frames.
-// It has no learned weights of its own to differ — the model is the same —
-// so its output must match the fixture exactly whatever else is true.
-//
-// It is also the stage most sensitive to a wrong input length, so a
-// mismatch here would mean the audio path is wrong rather than that the
-// models differ.
 func TestMelspectrogramMatchesTheFixture(t *testing.T) {
 	fx := loadFixture(t)
 	rep := fixture.Verify(fixture.StockOnly(newInferer(t)), fx)
@@ -115,22 +80,11 @@ func newStreamingInferer(t *testing.T) *ort.Inferer {
 	return inf
 }
 
-// TestInfererMatchesPython is the end-to-end claim: the Go pipeline driving
-// real ONNX Runtime reproduces what openWakeWord's Python produced from the
-// same audio, at every stage.
-//
-// The parent package's fixture proves the BUFFERING by replaying model
-// outputs; this proves the INFERENCE by running the models for real. Neither
-// alone is sufficient — replayed models cannot catch a wrong tensor shape or a
-// misconfigured session, and hand-fed models cannot catch a misaligned window.
 func TestInfererMatchesPython(t *testing.T) {
 	fx := loadFixture(t)
 	checkAgainstPython(t, fx, fixture.Verify(fixture.StockOnly(newInferer(t)), fx), false)
 }
 
-// TestStreamingInfererMatchesPython is the same claim for the streaming
-// embedding (#893): same audio, same fixture, same tolerances. It is held to
-// Python and not to the stock model, so the two cannot drift together.
 func TestStreamingInfererMatchesPython(t *testing.T) {
 	fx := loadFixture(t)
 	checkAgainstPython(t, fx, fixture.Verify(newStreamingInferer(t), fx), true)
@@ -148,11 +102,7 @@ func checkAgainstPython(t *testing.T, fx *fixture.ORT, rep fixture.Report, strea
 	for _, msg := range rep.Structural {
 		t.Error(msg)
 	}
-	// Melspectrogram output is the stage most sensitive to a wrong input
-	// length, and embeddings must agree from chunk 0 because the mel ring's
-	// 1.0 pre-fill is deterministic. Scores only from ScoreFrom: before that
-	// Python's feature ring still holds embeddings of its random warm-up audio
-	// while ours is clean.
+
 	for i := range fx.Records {
 		if d := rep.Melspec[i]; !d.Ok() {
 			t.Errorf("melspec chunk %d: %d values differ, worst %.3g at %d: %v",
@@ -173,10 +123,6 @@ func checkAgainstPython(t *testing.T, fx *fixture.ORT, rep fixture.Report, strea
 	}
 }
 
-// TestProbeTensorsMatchPython covers the two model stages the audio path
-// exercises weakly. On synthetic noise every score is 0.0000, so a classifier
-// wired to return a constant zero would pass the test above; the probe feeds a
-// wide-range tensor that produces a small but distinctly non-zero score.
 func TestProbeTensorsMatchPython(t *testing.T) {
 	fx := loadFixture(t)
 	inf := newInferer(t)
@@ -201,9 +147,6 @@ func TestProbeTensorsMatchPython(t *testing.T) {
 	}
 }
 
-// TestRejectsWrongTensorSizes guards the shape checks. ONNX Runtime would
-// otherwise be handed a tensor whose declared shape disagrees with its data
-// length, which reads out of bounds rather than failing cleanly.
 func TestRejectsWrongTensorSizes(t *testing.T) {
 	inf := newInferer(t)
 	if _, err := inf.Embed(make([]float32, wakeword.MelWindow*wakeword.MelBins-1)); err == nil {
@@ -217,8 +160,6 @@ func TestRejectsWrongTensorSizes(t *testing.T) {
 	}
 }
 
-// TestUseAfterCloseFails pins that a closed Inferer reports an error rather
-// than calling into a released session.
 func TestUseAfterCloseFails(t *testing.T) {
 	lib, m := models(t)
 	rt, err := ort.Open(lib)
@@ -243,11 +184,6 @@ func TestUseAfterCloseFails(t *testing.T) {
 	}
 }
 
-// TestOpenTwiceReturnsTheSameRuntime covers the property that keeps the
-// thread pools from being duplicated: opening the same runtime twice gives
-// the same one back rather than a second environment with a second set of
-// thread pools, which on a device with one core typically online is pure
-// cost.
 func TestOpenTwiceReturnsTheSameRuntime(t *testing.T) {
 	first, err := ort.Open("onnxruntime")
 	if err != nil {
@@ -262,9 +198,6 @@ func TestOpenTwiceReturnsTheSameRuntime(t *testing.T) {
 	}
 }
 
-// TestThreadsMustBePositive covers the one Options value that cannot be
-// defaulted silently: ORT treats 0 as "pick for me", which would quietly
-// undo the single-thread choice that keeps CPU at 36% instead of 63%.
 func TestThreadsMustBePositive(t *testing.T) {
 	lib, m := models(t)
 	rt, err := ort.Open(lib)
@@ -278,8 +211,6 @@ func TestThreadsMustBePositive(t *testing.T) {
 	}
 }
 
-// TestStreamStepsEqualStockWindows compares the two embedding models directly,
-// over more audio than the fixture holds and with a reset in the middle.
 func TestStreamStepsEqualStockWindows(t *testing.T) {
 	inf := newStreamingInferer(t)
 	const step, win = wakeword.MelStep * wakeword.MelBins, wakeword.MelWindow * wakeword.MelBins
@@ -289,7 +220,7 @@ func TestStreamStepsEqualStockWindows(t *testing.T) {
 		seed = seed*6364136223846793005 + 1442695040888963407
 		mel[i] = float32((seed>>33)%2000000)/1000000*8 - 8
 	}
-	for _, from := range []int{0, 37} { // two starts: the state must not survive a reset
+	for _, from := range []int{0, 37} {
 		inf.ResetStream()
 		for j := from; j < 200; j++ {
 			got, err := inf.EmbedStep(mel[j*step : (j+1)*step])
@@ -298,7 +229,7 @@ func TestStreamStepsEqualStockWindows(t *testing.T) {
 			}
 			end := (j + 1) * step
 			if end-win < from*step {
-				continue // the window reaches back before this start
+				continue
 			}
 			got = append([]float32(nil), got...)
 			want, err := inf.Embed(mel[end-win : end])
@@ -312,9 +243,6 @@ func TestStreamStepsEqualStockWindows(t *testing.T) {
 	}
 }
 
-// TestAStreamModelThatIsNotOneIsRefused: any ONNX file can be put at the
-// streaming model's path. The stock embedding model is the likeliest wrong
-// file, and it must leave the Inferer working on the stock path.
 func TestAStreamModelThatIsNotOneIsRefused(t *testing.T) {
 	lib, m := models(t)
 	rt, err := ort.Open(lib)
@@ -340,10 +268,6 @@ func TestAStreamModelThatIsNotOneIsRefused(t *testing.T) {
 	}
 }
 
-// TestAWrongStreamModelFailsTheSelfCheck: a streaming model built from some
-// other embedding model has the right inputs and runs. Only comparing it with
-// the stock model can tell, which is what the self-check at load is for.
-// EM_OWW_STREAM_WRONG is one made with `oww_stream.py --perturb`.
 func TestAWrongStreamModelFailsTheSelfCheck(t *testing.T) {
 	lib, m := models(t)
 	wrong := os.Getenv("EM_OWW_STREAM_WRONG")
@@ -366,7 +290,7 @@ func TestAWrongStreamModelFailsTheSelfCheck(t *testing.T) {
 	if st := inf.StreamStatus(); !strings.HasPrefix(st, "self-check:") {
 		t.Fatalf("status %q, want the self-check's reason", st)
 	}
-	// And the stock path still reproduces Python.
+
 	if rep := fixture.Verify(inf, loadFixture(t)); !rep.Ok() || rep.Streaming {
 		t.Fatalf("stock path after a refused streaming model: ok=%v streaming=%v", rep.Ok(), rep.Streaming)
 	}

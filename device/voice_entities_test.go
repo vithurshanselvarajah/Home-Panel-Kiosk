@@ -6,12 +6,6 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 )
 
-// TestTheVoiceSettingsAreEntities checks that the voice settings are
-// things Home Assistant can read and change.
-//
-// They used to live in the device's own configuration file, which meant
-// Home Assistant could neither read them nor change them: the person
-// had to edit a file on the machine and restart the device.
 func TestTheVoiceSettingsAreEntities(t *testing.T) {
 	registry := esphome.NewRegistry()
 	voiceEntities(registry)
@@ -33,25 +27,14 @@ func TestTheVoiceSettingsAreEntities(t *testing.T) {
 		}
 	}
 
-	// The startup volume is not offered.
-	//
-	// The speaker keeps the level it was last at, so there is nothing to
-	// start up with. A panel that has never had a level starts at fifty.
 	if byID["startup_volume"] != nil {
 		t.Error("the startup volume is offered, the speaker keeps the level it was last at")
 	}
 
-	// The mute is not offered.
-	//
-	// It is the hardware latch, and the latch is one-way from software:
-	// the button on the unit sets it and only the button releases it. A
-	// switch that cannot be turned back on is not a control.
 	if byID["muted"] != nil {
 		t.Error("the mute is offered, the latch can only be released by the button on the unit")
 	}
 
-	// The sensitivity is a number between zero and a hundred, because
-	// that is how a person reads a percentage.
 	threshold := byID["wake_word_threshold"]
 	if threshold != nil {
 		if threshold.Kind != esphome.KindNumber {
@@ -63,8 +46,6 @@ func TestTheVoiceSettingsAreEntities(t *testing.T) {
 		}
 	}
 
-	// The ducking is a number of decibels, and it is negative: the music
-	// is quieter under a reply, not louder.
 	ducking := byID["music_ducking_db"]
 	if ducking != nil {
 		if ducking.Kind != esphome.KindNumber {
@@ -75,7 +56,6 @@ func TestTheVoiceSettingsAreEntities(t *testing.T) {
 		}
 	}
 
-	// The wake word is a switch.
 	if entity := byID["wake_word_enabled"]; entity != nil && entity.Kind != esphome.KindSwitch {
 		t.Errorf("the wake word is a %v, it should be a switch", entity.Kind)
 	}

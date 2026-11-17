@@ -3,19 +3,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-// The volume popup.
-//
-// It comes down from the top when the level changes and goes away again
-// on its own, the way a phone does it.
-//
-// It is here because the level is changed with the buttons on the unit,
-// and a person holding the device cannot see the drawer. The drawer
-// still has the slider; the popup is the one that says what just
-// happened.
-//
-// These are checked by looking at the code, because what matters is
-// that the popup is wired to the level and that it is drawn.
-
 const root = path.join(__dirname, "..");
 const renderer = fs.readFileSync(path.join(root, "src", "ui", "renderer.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "src", "ui", "index.html"), "utf8");
@@ -26,7 +13,7 @@ test("the popup is on the screen", () => {
   assert.ok(html.includes('id="volume-popup"'), "there is no volume popup");
   assert.ok(html.includes('id="volume-popup-fill"'), "the popup has no level to show");
   assert.ok(html.includes('id="volume-popup-value"'), "the popup has no number to show");
-  // Across the top, not in a corner.
+
   assert.ok(
     css.includes(".volume-popup{position:absolute;top:0;left:0;right:0;"),
     "the popup is not across the top",
@@ -34,13 +21,7 @@ test("the popup is on the screen", () => {
 });
 
 test("the popup is not raised by something that is not the volume", () => {
-  // The mute button changes the state, and the state carries the level
-  // with it — so the renderer sees the level and raises the popup, and
-  // the mute indicator and the volume popup are on the screen together.
-  //
-  // The popup is raised when the level is one the popup does not
-  // already show, and a level that is the one it is showing raises
-  // nothing.
+
   assert.ok(
     renderer.includes("if (volumePopup && state.volume !== lastPopupVolume) {"),
     "the popup is raised whatever the state says",
@@ -52,10 +33,7 @@ test("the popup is not raised by something that is not the volume", () => {
 });
 
 test("the popup is on the main screen and not only in the drawer", () => {
-  // The popup is drawn in the overlay view, and the overlay view is
-  // taken off the screen when nothing in it is showing. So the main
-  // process puts it up, because a renderer that is not on the screen
-  // never hears that the buttons on the unit were pressed.
+
   assert.ok(
     main.includes("showVolumePopup(value);"),
     "the main process does not raise the popup when the level changes",
@@ -72,7 +50,7 @@ test("the popup is on the main screen and not only in the drawer", () => {
     main.includes("overlayExpanded || sidePanelOpen || voiceOverlayFull || overlayNeeded() || displayIsOff) {"),
     "the overlay view is not the size of the screen for the popup",
   );
-  // And the renderer is told what to draw.
+
   assert.ok(
     main.includes('sendToOverlay("app:volume-popup"'),
     "the renderer is not told about the popup",
@@ -84,8 +62,7 @@ test("the popup is on the main screen and not only in the drawer", () => {
 });
 
 test("the mute indicator is on the main screen too", () => {
-  // The same reason: the button on top of the unit flips the latch, and
-  // the panel is the one that hears about it.
+
   assert.ok(
     main.includes("showMuteIndicator(muted);"),
     "the main process does not raise the mute indicator",
@@ -101,9 +78,7 @@ test("the mute indicator is on the main screen too", () => {
 });
 
 test("the popup and the indicator do not take each other down", () => {
-  // The popup goes down after a couple of seconds and the indicator
-  // stays up for as long as the microphones are cut, so they are kept
-  // apart.
+
   assert.ok(
     main.includes("let overlayPopup = false;"),
     "the popup's flag is gone",
@@ -119,12 +94,7 @@ test("the popup and the indicator do not take each other down", () => {
 });
 
 test("the popup shows the level every time it changes", () => {
-  // A person pressing the button again expects the number to move. A
-  // popup that showed the first number and then nothing was not saying
-  // what the level was.
-  //
-  // The main process raises it every time the level changes, and the
-  // renderer draws what it is given.
+
   assert.ok(
     main.includes("showVolumePopup(value);"),
     "the popup is not raised again when the level changes",
@@ -140,13 +110,12 @@ test("the popup shows the level every time it changes", () => {
 });
 
 test("the popup is raised by a change of level", () => {
-  // The device program's state carries the level, and it is what the
-  // buttons on the unit change.
+
   assert.ok(
     renderer.includes("showVolumePopup(state.volume)"),
     "a level from the device program does not raise the popup",
   );
-  // And the panel's own slider raises it too.
+
   assert.ok(
     renderer.includes("showVolumePopup(value);"),
     "the drawer slider does not raise the popup",
@@ -154,7 +123,7 @@ test("the popup is raised by a change of level", () => {
 });
 
 test("the popup goes away again", () => {
-  // A popup that never goes away is a popup that is always there.
+
   assert.ok(
     renderer.includes("setTimeout(hideVolumePopup, 2200)"),
     "the popup does not go away",
@@ -177,8 +146,7 @@ test("the popup shows the level", () => {
 });
 
 test("the level from the buttons reaches the panel", () => {
-  // The device program owns the level and tells the panel where it is,
-  // so the buttons on the unit and the popup are the same thing.
+
   assert.ok(
     main.includes("followDeviceVolume(command.volume)"),
     "the device program's level does not reach the panel",

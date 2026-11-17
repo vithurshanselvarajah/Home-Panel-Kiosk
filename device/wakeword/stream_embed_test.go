@@ -6,12 +6,8 @@ import (
 	"testing"
 )
 
-// fakeModels stands in for the three models with functions whose output
-// depends on exactly the input they were given, so a Detector that feeds a
-// wrong frame, in a wrong order, or from before a reset gets a different
-// embedding rather than a plausible one.
 type fakeModels struct {
-	next   float32 // every mel value ever produced is distinct
+	next   float32
 	embeds int
 }
 
@@ -28,7 +24,6 @@ func (f *fakeModels) Melspec(samples []float32) ([]float32, int, error) {
 	return out, frames, nil
 }
 
-// windowEmbedding is a function of every frame in the window and its place.
 func windowEmbedding(window []float32) []float32 {
 	out := make([]float32, FeatDim)
 	for i, v := range window {
@@ -43,18 +38,15 @@ func (f *fakeModels) Embed(window []float32) ([]float32, error) {
 }
 func (f *fakeModels) Classify(feats []float32) (float32, error) { return 0, nil }
 
-// fakeStream behaves as the streaming model does: its output is the stock
-// embedding of the last MelWindow frames it was fed, and is only valid once
-// streamPrime steps have been fed since the last reset.
 type fakeStream struct {
 	fakeModels
 	off     bool
 	fed     []float32
-	steps   int // since reset
+	steps   int
 	calls   int
 	resets  int
-	failAt  int // 1-based call number that returns an error; 0 = never
-	invalid int // outputs handed back before the state was primed
+	failAt  int
+	invalid int
 }
 
 func (f *fakeStream) Streaming() bool { return !f.off }
@@ -98,9 +90,6 @@ func sameFeatures(t *testing.T, stock, stream *Detector) {
 	}
 }
 
-// The sizes cover what the device does and what it could: single chunks, the
-// 160ms batches the mic delivers, a ragged tail, and a first chunk that
-// yields 5 mel frames where every later one yields 8.
 var pushSizes = []int{
 	ChunkSamples, ChunkSamples, 2 * ChunkSamples, 2*ChunkSamples + 37, ChunkSamples - 37,
 	3 * ChunkSamples, ChunkSamples, 5, ChunkSamples - 5, 2 * ChunkSamples,
@@ -117,8 +106,6 @@ func TestStreamingEmbeddingsEqualStock(t *testing.T) {
 	}
 }
 
-// Once primed, a chunk costs one step. A Detector that re-primed every chunk
-// would still be correct and would cost more than the stock model.
 func TestSteadyStateIsOneStepPerChunk(t *testing.T) {
 	fs := &fakeStream{}
 	d := New(fs)
@@ -135,9 +122,6 @@ func TestSteadyStateIsOneStepPerChunk(t *testing.T) {
 	}
 }
 
-// The first chunk adds 5 mel frames where every later one adds 8. The state
-// is built for wherever the first window ends, so that needs no special case:
-// one priming, then one step per chunk.
 func TestTheShortFirstChunkNeedsNoSecondPriming(t *testing.T) {
 	fs := &fakeStream{}
 	d := New(fs)
@@ -154,14 +138,12 @@ func TestTheShortFirstChunkNeedsNoSecondPriming(t *testing.T) {
 	}
 }
 
-// A chunk that adds some other number of frames moves the window off the
-// stream's grid. The state is rebuilt from the ring, never stepped anyway.
 func TestAnIrregularChunkRebuildsTheState(t *testing.T) {
 	stock, fs := New(&fakeModels{}), &fakeStream{}
 	stream := New(fs)
 	for _, d := range []*Detector{stock, stream} {
 		pushAll(t, d, ChunkSamples, ChunkSamples, ChunkSamples)
-		// As a melspec call returning 3 frames short would leave it.
+
 		d.mel = d.mel[:len(d.mel)-3*MelBins]
 		d.melTotal -= 3
 		pushAll(t, d, ChunkSamples, ChunkSamples)
@@ -183,8 +165,6 @@ func TestResetRebuildsTheStreamState(t *testing.T) {
 	sameFeatures(t, stock, stream)
 }
 
-// The mel ring is trimmed at MelBufMax frames. Positions are counted from the
-// start of the stream, so the trim must not look like a jump.
 func TestRingTrimDoesNotDisturbTheStream(t *testing.T) {
 	stock, fs := New(&fakeModels{}), &fakeStream{}
 	stream := New(fs)
@@ -199,7 +179,7 @@ func TestRingTrimDoesNotDisturbTheStream(t *testing.T) {
 	if fs.resets != 1 {
 		t.Fatalf("the stream was reset %d times over a trimmed ring, want only the one at the start", fs.resets)
 	}
-	// FeatBufMax trims both the same way, so the rings stay comparable.
+
 	sameFeatures(t, stock, stream)
 }
 
@@ -214,8 +194,6 @@ func TestAStreamThatIsOffIsNeverCalled(t *testing.T) {
 	}
 }
 
-// A failing stream costs CPU, never an embedding: the window it failed on is
-// embedded by the stock model, and the next one rebuilds the state.
 func TestAFailedStepFallsBackOnTheSameWindow(t *testing.T) {
 	for _, failAt := range []int{1, streamPrime, streamPrime + 3} {
 		stock, fs := New(&fakeModels{}), &fakeStream{failAt: failAt}

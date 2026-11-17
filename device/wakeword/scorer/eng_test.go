@@ -8,14 +8,11 @@ import (
 	"testing"
 )
 
-// testdataDir is where the model's own reference audio is.
 func testdataDir() string {
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(file), "..", "..", "..", "audio", "third_party", "microwakeword", "testdata")
 }
 
-// loadWAV reads a wav file's samples: the header is 44 bytes and the rest is
-// signed 16-bit little-endian mono.
 func loadWAV(path string) ([]int16, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -30,11 +27,6 @@ func loadWAV(path string) ([]int16, error) {
 	return samples, nil
 }
 
-// The engine must hear the wake word in the model's own reference audio.
-//
-// This is the model the engine was trained against, and the audio that goes
-// with it, so a score that does not reach the cutoff here means the engine
-// is not running the model it was given.
 func TestTheEngineHearsTheWakeWord(t *testing.T) {
 	eng, err := newMicroEngine(filepath.Join(testdataDir(), "hey_jarvis.tflite"))
 	if err != nil {

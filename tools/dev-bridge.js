@@ -1,18 +1,4 @@
-// Serves the Home Panel interface to a browser.
-//
-// The interface is an Electron overlay: a page that talks to the main
-// process over IPC. A browser has no IPC, so this serves the same page and
-// gives it the same API over a WebSocket instead.
-//
-// It is for development and demonstration. The real device runs the
-// Electron app; this runs the same interface in a tab, which is what
-// makes the interface reviewable without a screen.
-//
-//   npm run dev:ui
-//
-// The bridge owns the device program itself, so the voice state it reports
-// is the real state of a real device program talking to a real Home
-// Assistant.
+
 
 const http = require("node:http");
 const fs = require("node:fs");
@@ -31,11 +17,9 @@ const hostName = (os.hostname() || "home-panel").trim();
 
 const userData = path.join(process.env.XDG_CONFIG_HOME || path.join(process.env.HOME, ".config"), "homepanel-kiosk");
 const configFile = path.join(userData, "device-config.json");
-// The data directory is where the device program keeps what it has to
-// keep — the music player's identity and its pairing records.
+
 const dataDirectory = path.join(userData, "device");
 
-// The settings the interface reads and writes.
 const settingsPath = path.join(userData, "settings.json");
 
 const MIME = {
@@ -46,8 +30,6 @@ const MIME = {
   ".png": "image/png",
 };
 
-// The state the interface is told about. The drawer and the settings panel
-// both read it.
 let state = {
   mode: "dashboard",
   displayIsOff: false,
@@ -87,11 +69,6 @@ function broadcast(channel, payload) {
   }
 }
 
-// The device program. The interface is shown what it reports, so what is
-// on screen is what the device is doing.
-//
-// The identity comes from the settings, not from here, so a development
-// run is the same device as the application is.
 const binary = findSidecar(root, root, process.execPath);
 const client = new DeviceClient({
   binary,
@@ -107,13 +84,10 @@ const client = new DeviceClient({
 
 async function startSidecar() {
   const settings = await readSettings();
-  // The identity comes from the settings, so a development run is the same
-  // device as the application is.
+
   client.deviceId = hostName;
   client.board = hostName;
-  // The live state lives in memory, not on the disk, and the device
-  // program decides where: it is the one that writes it. The application
-  // reads it from the same place.
+
   const runtimeDir = path.join("/dev/shm/homepanel", client.deviceId.replace(/[^a-zA-Z0-9_-]/g, "-") || "device");
   client.stateFile = path.join(runtimeDir, "state.json");
   client.levelFile = path.join(runtimeDir, "level");
@@ -122,8 +96,7 @@ async function startSidecar() {
     console.log("dev: the sidecar was not started");
     return;
   }
-  // The configuration is written before the sidecar reads it, so the
-  // settings are in force from the first frame.
+
   await client.sendConfig({
     board: client.board,
     wakeThreshold: Number(settings.voiceWakeThreshold) || undefined,
@@ -136,8 +109,7 @@ async function startSidecar() {
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url, `http://localhost:${port}`);
   const name = url.pathname === "/" ? "/index.html" : url.pathname;
-  // The path is resolved against the interface directory and then checked
-  // to be inside it, so a request cannot read a file outside it.
+
   const file = path.join(uiDir, path.normalize(name));
   if (!file.startsWith(uiDir)) {
     response.writeHead(403).end("Forbidden");
@@ -158,7 +130,6 @@ wss.on("connection", (socket) => {
   sockets.add(socket);
   socket.on("close", () => sockets.delete(socket));
 
-  // The interface asks for its settings as soon as it loads.
   socket.send(JSON.stringify({ channel: "app:state", payload: state }));
   socket.send(JSON.stringify({ channel: "app:device", payload: client.state }));
 
@@ -166,7 +137,7 @@ wss.on("connection", (socket) => {
     let message;
     try { message = JSON.parse(String(raw)); } catch { return; }
     const { channel, payload, id } = message;
-    // A request that asked for an answer is answered to whoever asked.
+
     const reply = (value) => socket.send(JSON.stringify({ channel, payload: value, id }));
 
     if (channel === "app:get-settings") {
@@ -175,9 +146,7 @@ wss.on("connection", (socket) => {
     }
     if (channel === "app:save-settings") {
       const saved = await writeSettings(payload || {});
-      // The device is told the settings, the same way the application does
-      // it, so a saved change reaches the device rather than waiting for
-      // it to be restarted.
+
       await client.sendConfig({
         board: hostName,
         audioInput: saved.voiceAudioInput || "",
@@ -209,18 +178,14 @@ wss.on("connection", (socket) => {
       return;
     }
     if (channel === "app:set-brightness") {
-      // The brightness is the panel's own, so the development bridge keeps
-      // it the same way the application does: in the state it broadcasts.
+
       state.brightness = Math.max(0, Math.min(100, Math.round(Number(payload) || 0)));
       broadcast("app:state", state);
       reply(state.brightness);
       return;
     }
     if (channel === "app:set-volume") {
-      // The development bridge has no device program, so there is nobody
-      // to own the level and the mixer is the one that holds it. On the
-      // real panel the device program owns the level and the mixer is
-      // left alone.
+
       const volume = Math.max(0, Math.min(100, Math.round(Number(payload) || 0)));
       await setSystemVolume(volume);
       state.volume = volume;
@@ -230,15 +195,13 @@ wss.on("connection", (socket) => {
     }
     if (channel === "app:overlay-expanded" || channel === "app:activity") { reply(true); return; }
     if (channel === "app:transport") {
-      // The transport belongs to the music server, and the development
-      // bridge has no music server, so the press is answered and
-      // dropped rather than pretended about.
+
       reply(true);
       return;
     }
     if (channel === "app:keyboard-key") { reply(true); return; }
     if (channel === "app:test-sound") {
-      // The counter is what tells the device a new tone was asked for.
+
       const saved = await readSettings();
       const counter = (saved.voiceTestSound || 0) + 1;
       await writeSettings({ voiceTestSound: counter });
@@ -261,9 +224,6 @@ server.listen(port, () => {
   startSidecar();
 });
 
-// The sidecar holds the microphone and the speaker, and it releases them
-// when it exits. The exit waits for it, so the next thing to want the
-// sound card finds it free.
 process.on("exit", () => client.stop());
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {

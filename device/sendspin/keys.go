@@ -1,12 +1,3 @@
-// Package sendspin is a Sendspin player: synchronised multi-room audio from
-// Music Assistant, played through the device's music plane (#89, #272).
-//
-// It speaks the wire of aiosendspin 9.1.1, the server library Music Assistant
-// ships, and was tested against that library rather than against the spec
-// alone. The two disagree in places (fragment framing, the audio chunk
-// header, the shape of supported_pair_methods, static_delay_ms against
-// output_delay_ms); where they do, this package sends 9.1.1's form and
-// accepts both. Each divergence is marked "9.1.1:" where it is handled.
 package sendspin
 
 import (
@@ -24,11 +15,9 @@ import (
 const (
 	keySize = 32
 	pskSize = 32
-	idLen   = 43 // base64url of 32 bytes, unpadded
+	idLen   = 43
 )
 
-// sentinelPSK is the published PSK used when no other applies. Public, so it
-// authenticates nothing: a session under it is unpaired.
 var sentinelPSK = func() []byte { h := sha256.Sum256([]byte("sendspin-sentinel-psk-v1")); return h[:] }()
 
 func b64u(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
@@ -37,7 +26,6 @@ func unb64u(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(strings.TrimRight(s, "="))
 }
 
-// pskID is how a server names a PSK in Noise message 1 without revealing it.
 func pskID(psk []byte) string {
 	h := sha256.New()
 	h.Write([]byte("sendspin-psk-id-v1"))
@@ -45,9 +33,6 @@ func pskID(psk []byte) string {
 	return b64u(h.Sum(nil))
 }
 
-// identity is the device's long-term X25519 keypair. Its public half, as
-// base64url, is the client_id — so rotating it makes the device a stranger to
-// every server it was paired with.
 type identity struct {
 	priv, pub []byte
 }
@@ -73,7 +58,6 @@ func identityFrom(priv []byte) (identity, error) {
 
 func (id identity) clientID() string { return b64u(id.pub) }
 
-// peerKey decodes a server_id/client_id into the raw public key.
 func peerKey(id string) ([]byte, error) {
 	if len(id) != idLen {
 		return nil, fmt.Errorf("sendspin: peer id is %d chars, want %d", len(id), idLen)
@@ -91,10 +75,6 @@ func randomPSK() ([]byte, error) {
 	return p, err
 }
 
-// Pairing tokens: "SP:" + version + base32 body, '=' stripped and every '2'
-// written as '9', so the token is QR-alphanumeric and survives being typed.
-// Version 0 carries client_key || pairing_psk. Music Assistant takes it in
-// "pair with token" and checks the key against the connected client.
 var b32 = base32.StdEncoding.WithPadding(base32.NoPadding)
 
 func pairingToken(clientKey, pairingPSK []byte) string {

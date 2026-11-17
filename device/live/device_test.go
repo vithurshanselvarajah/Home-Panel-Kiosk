@@ -19,22 +19,6 @@ import (
 	"time"
 )
 
-// The live device.
-//
-// The live tests run the real device program — the binary that ships
-// — against the real Home Assistant and the real Music Assistant.
-//
-// That is the point of them. Every other test in this repository runs
-// the panel against a peer that was written for the test, which proves
-// the panel agrees with itself. These prove it agrees with the thing
-// it is for.
-//
-// The device program is run as a process, not called as a function,
-// because the process is what ships: it has its own flags, its own
-// announcement and its own connection. A test that called the code
-// directly would not notice that the binary could not start.
-
-// device is the running device program.
 type device struct {
 	t           *testing.T
 	cmd         *exec.Cmd
@@ -46,14 +30,10 @@ type device struct {
 	states      []deviceState
 	lines       []string
 	stopped     bool
-	// started is when the device program was started.
+
 	started time.Time
 }
 
-// deviceState is the state the device program publishes.
-//
-// It is the same shape as the panel's state file, so the live tests
-// read the panel's own view of the device.
 type deviceState struct {
 	Connection       string   `json:"connection"`
 	ConnectionReason string   `json:"connection_reason"`
@@ -85,30 +65,11 @@ type deviceState struct {
 	LastError        string   `json:"last_error"`
 }
 
-// startDevice runs the device program.
-//
-// The name it is announced under is the one Home Assistant knows it by,
-// so the test exercises the device that is really there.
 func startDevice(t *testing.T, recording string) *device {
 	t.Helper()
 
-	// Home Assistant is told where the panel is before the panel
-	// starts.
-	//
-	// A panel whose address has changed is a panel Home Assistant
-	// cannot reach, and pointing the entry at the panel after it has
-	// started means waiting for Home Assistant to notice it, which
-	// takes a moment the test does not have.
 	pointHomeAssistantHere(t)
 
-	// The tests cannot run at the same time, because they share the
-	// panel's ports. So they take a lock, and the one that is waiting
-	// says so.
-	//
-	// The lock is given back after the device has stopped, and not
-	// before: the cleanups run in the reverse order they were set, so
-	// the one set last runs first. The device's own cleanup is set
-	// last, so it runs first, and the lock is given back after it.
 	lockPorts()
 
 	binary := liveDeviceBinary()
@@ -122,40 +83,19 @@ func startDevice(t *testing.T, recording string) *device {
 	name := liveName()
 
 	dir := t.TempDir()
-	// The credentials directory is the panel's identity, and it has to
-	// be the same every run.
-	//
-	// The identity is what Home Assistant knows the panel by, and a
-	// panel with a new identity is a new panel to Home Assistant: the
-	// old one stays behind as an entity that is never available, and
-	// the tests cannot tell which player is the panel's.
-	//
-	// So the directory is in the temporary directory and not in the
-	// test's own, and it is shared by the tests.
+
 	creds := filepath.Join(os.TempDir(), "homepanel-live-credentials")
 	if err := os.MkdirAll(creds, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The control socket is how the panel talks to the device program,
-	// and it is in memory because it carries what is happening right
-	// now.
+
 	controlSocket := filepath.Join("/dev/shm/homepanel", name, "control.sock")
 	if err := os.MkdirAll(filepath.Dir(controlSocket), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
-	// The recording is the microphone, and the speaker's audio is
-	// written to a file, so the whole audio path is exercised without a
-	// sound card.
 	speakerFile := filepath.Join(dir, "speaker.wav")
 
-	// The state is written where the device program puts it.
-	//
-	// The device program writes the live state into memory when it can,
-	// because it is a live reading and not a record: it changes as the
-	// device listens and speaks, and it is worth nothing once the
-	// process is gone. Writing it to the flash would wear the flash out
-	// for nothing.
 	statePath := os.Getenv("LIVE_STATE_FILE")
 	if statePath == "" {
 		statePath = filepath.Join("/dev/shm/homepanel", name, "state.json")
@@ -163,27 +103,12 @@ func startDevice(t *testing.T, recording string) *device {
 	if dir := filepath.Dir(statePath); dir != "" {
 		_ = os.MkdirAll(dir, 0o700)
 	}
-	// An old state file would be read as the new one's first state.
+
 	_ = os.Remove(statePath)
 
-	// The ports have to be free, or the device cannot start and the
-	// test is about the wrong thing.
-	//
-	// They are the panel's own, so Home Assistant finds the device where
-	// it expects to find it, and a music server finds the player.
 	waitForFreePort(liveSendspinPort())
 	waitForFreePort(livePort())
 
-	// The port is the panel's own, so Home Assistant finds the device
-	// where it expects to find it.
-	//
-	// The port has to be fixed rather than chosen by the operating
-	// system: Home Assistant finds the device by the announcement, and
-	// the announcement carries the port. A device on a port nobody
-	// announced is a device nobody connects to.
-	//
-	// So the tests cannot run at the same time, and they are told which
-	// port to use.
 	port := livePort()
 
 	args := []string{
@@ -195,20 +120,16 @@ func startDevice(t *testing.T, recording string) *device {
 		"--control-socket", controlSocket,
 		"--esphome-port", strconv.Itoa(port),
 	}
-	// The speaker's audio is always written to a file, so the tests can
-	// see what the panel played. The recording is the microphone when
-	// there is one.
+
 	args = append(args, "--speaker-file", speakerFile)
 	if recording != "" {
 		args = append(args, "--mic-file", recording)
 	}
-	// The configuration is read, so the music player is started. It is
-	// what the panel is a player to, and it has to be running for the
-	// capabilities to say so.
+
 	if config := liveConfigFile(); config != "" {
 		args = append(args, "--config-file", config)
 	}
-	// The device says more when it is asked to.
+
 	if os.Getenv("LIVE_VERBOSE") != "" {
 		args = append(args, "--verbose")
 	}
@@ -236,7 +157,6 @@ func startDevice(t *testing.T, recording string) *device {
 		address:     "127.0.0.1:" + strconv.Itoa(port),
 	}
 
-	// The device's own words, which are how a failure is seen.
 	go func() {
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
@@ -246,7 +166,6 @@ func startDevice(t *testing.T, recording string) *device {
 		}
 	}()
 
-	// The state, which is how the device is watched.
 	go func() {
 		for {
 			state, err := readState(statePath)
@@ -262,50 +181,20 @@ func startDevice(t *testing.T, recording string) *device {
 	t.Cleanup(d.stop)
 	t.Cleanup(unlockPorts)
 
-	// Home Assistant does not always take the device the first time.
-	//
-	// It finds the device by the announcement, and it checks the
-	// announcement against the device it already has. A device that has
-	// just been reloaded — because the panel's address changed, or
-	// because the test before it left one behind — takes a moment to
-	// settle, and until it has the announcement is refused.
-	//
-	// So the device is started again if it does not connect. The
-	// announcement is the same every time, so the second try is the one
-	// that works.
 	go d.retryUntilConnected()
 
 	return d
 }
 
-// retryUntilConnected makes sure Home Assistant can reach the panel.
-//
-// Home Assistant finds the panel by the address it was given, and it
-// keeps that address. The panel's address changes: the machine it runs
-// on gets a new address from the network, and a machine with a
-// container network has several.
-//
-// So when the panel does not connect, the entry is pointed at this
-// machine and the panel is told to try again.
-//
-// The entry is only reconfigured when the panel has not connected,
-// because reconfiguring reloads the entry and a reload drops the
-// connection and takes a moment to come back. A test that reconfigured
-// every time would be about the reload rather than about the panel.
 func (d *device) retryUntilConnected() {
 	deadline := time.Now().Add(90 * time.Second)
-	// The entry is reconfigured once and not again.
-	//
-	// A reconfigure reloads the entry, and a reload drops the
-	// connection and takes a moment to come back. Doing it again while
-	// Home Assistant is reconnecting stops it from ever reconnecting.
+
 	pointed := false
 	for time.Now().Before(deadline) {
 		if state, found := d.lastState(); found && state.Connection == "connected" {
 			return
 		}
-		// The panel has had a moment and has not connected, so
-		// Home Assistant is probably looking in the wrong place.
+
 		if !pointed && time.Now().After(d.started.Add(10*time.Second)) {
 			pointed = true
 			pointHomeAssistantHere(d.t)
@@ -313,10 +202,7 @@ func (d *device) retryUntilConnected() {
 		time.Sleep(2 * time.Second)
 	}
 }
-// restoreHomeAssistantEntry puts the entry back.
-//
-// It is a function of its own so that it can be called when the tests
-// are over, which is not a test.
+
 func restoreHomeAssistantEntry(t *testing.T) {
 	t.Helper()
 	address := originalEsphomeAddress(t)
@@ -333,18 +219,15 @@ func restoreHomeAssistantEntry(t *testing.T) {
 	}
 }
 
-// TestMain puts Home Assistant's entry back when the tests are done.
 func TestMain(m *testing.M) {
 	code := m.Run()
-	// The entry is put back, so the panel that is really there is the
-	// one Home Assistant is talking to.
+
 	if haURL() != "" && haToken() != "" {
 		restoreHomeAssistantEntry(&testing.T{})
 	}
 	os.Exit(code)
 }
 
-// runtimeDirectory is where the onnx runtime is, next to the binary.
 func runtimeDirectory(binary string) string {
 	dir := filepath.Dir(binary)
 	candidate := filepath.Join(dir, "amd64")
@@ -354,7 +237,6 @@ func runtimeDirectory(binary string) string {
 	return ""
 }
 
-// stop shuts the device down.
 func (d *device) stop() {
 	d.mu.Lock()
 	if d.stopped {
@@ -378,17 +260,10 @@ func (d *device) stop() {
 		}
 	}
 
-	// The ports have to be free before the next test starts, and a
-	// process that has just been killed takes a moment to let go of
-	// them.
 	waitForFreePort(livePort())
 	waitForFreePort(liveSendspinPort())
 }
-// speakerBytes says how many bytes the speaker has played.
-//
-// The speaker's audio is written to a file, so the size of the file is
-// how much has been played. A station never ends, so the file keeps
-// growing for as long as the station is playing.
+
 func (d *device) speakerBytes() int64 {
 	if d.speakerPath == "" {
 		return 0
@@ -400,12 +275,6 @@ func (d *device) speakerBytes() int64 {
 	return info.Size()
 }
 
-// peer asks the running device something, over the Home Assistant
-// connection.
-//
-// It is the python peer that drives aioesphomeapi, the library Home
-// Assistant speaks the protocol with, so the question is asked the way
-// Home Assistant asks it.
 func (d *device) peer(mode string, extra string) ([]string, error) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
@@ -427,32 +296,22 @@ func (d *device) peer(mode string, extra string) ([]string, error) {
 	return lines, nil
 }
 
-// esphomeAddress is where the device is on the Home Assistant
-// connection.
 func (d *device) esphomeAddress() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.address
 }
 
-// portsLock is the lock the tests take, so they do not run at the same
-// time.
 var portsLock sync.Mutex
 
-// lockPorts takes the lock.
 func lockPorts() {
 	portsLock.Lock()
 }
 
-// unlockPorts gives it back.
 func unlockPorts() {
 	portsLock.Unlock()
 }
 
-// esphomePeer is the peer that asks the device questions.
-//
-// It uses aioesphomeapi's own client, so the handshake, the framing and
-// the messages are all the ones Home Assistant uses.
 const esphomePeer = `
 import asyncio, sys
 
@@ -483,19 +342,16 @@ async def main():
 asyncio.run(main())
 `
 
-// controlSocket is where the panel talks to the device program.
 func (d *device) controlSocket() string {
 	return d.controlPath
 }
 
-// logs gives back what the device said.
 func (d *device) logs() []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return append([]string(nil), d.lines...)
 }
 
-// lastState gives back the most recent state.
 func (d *device) lastState() (deviceState, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -505,11 +361,6 @@ func (d *device) lastState() (deviceState, bool) {
 	return d.states[len(d.states)-1], true
 }
 
-// waitFor waits for the state to satisfy something.
-//
-// It is how the tests wait for the device to do something: the state
-// file is the panel's own view of the device, so waiting on it is
-// waiting on the thing the person would see.
 func (d *device) waitFor(what string, within time.Duration, ok func(deviceState) bool) deviceState {
 	d.t.Helper()
 	deadline := time.Now().Add(within)
@@ -523,7 +374,6 @@ func (d *device) waitFor(what string, within time.Duration, ok func(deviceState)
 	return deviceState{}
 }
 
-// readState reads the state file.
 func readState(path string) (deviceState, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -536,11 +386,6 @@ func readState(path string) (deviceState, error) {
 	return state, nil
 }
 
-// TestTheDeviceConnectsToLiveHomeAssistant checks that the device
-// program, the real binary, connects to the real Home Assistant.
-//
-// This is the first thing that has to work, and everything else is
-// built on it.
 func TestTheDeviceConnectsToLiveHomeAssistant(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
@@ -550,8 +395,6 @@ func TestTheDeviceConnectsToLiveHomeAssistant(t *testing.T) {
 	})
 	t.Logf("the device is %s: %s", state.Connection, state.ConnectionReason)
 
-	// The entities are there too: a device that connects with no
-	// entities is a device Home Assistant cannot use.
 	entities := haEntities(t, "home_panel")
 	if len(entities) == 0 {
 		t.Error("Home Assistant has no entities for the panel")
@@ -559,7 +402,6 @@ func TestTheDeviceConnectsToLiveHomeAssistant(t *testing.T) {
 	t.Logf("Home Assistant has %d panel entities", len(entities))
 }
 
-// haEntities gives back the entities whose id has a piece in it.
 func haEntities(t *testing.T, piece string) map[string]string {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, haURL()+"/api/states", nil)
@@ -592,47 +434,24 @@ func haEntities(t *testing.T, piece string) map[string]string {
 	return out
 }
 
-// contextUnused keeps the import honest.
 var _ = context.Background
 var _ = fmt.Sprintf
 var _ = slog.Default
 
-// pointHomeAssistantHere tells Home Assistant where the panel is.
-//
-// Home Assistant finds the panel by the address it was given, and it
-// keeps that address. A panel whose machine has been given a new
-// address is a panel Home Assistant cannot reach, and the tests would
-// be about the network rather than about the panel.
-//
-// The entry is reconfigured rather than created, because there is one
-// panel and there should be one entry for it.
 func pointHomeAssistantHere(t *testing.T) {
 	t.Helper()
 	if haURL() == "" || haToken() == "" {
 		return
 	}
-	// The address is this machine's address on the network Home
-	// Assistant is on.
+
 	address := localAddress(t)
 
-	// The entry is found by its title, so the test does not care which
-	// entry it is.
 	entries := configEntries(t, "esphome")
 	for _, entry := range entries {
 		if entry.title != "Home Panel" {
 			continue
 		}
-		// The address the entry was pointed at before the tests
-		// changed it is remembered, so that it can be put back.
-		//
-		// The entry is only reconfigured when the panel has not
-		// connected, which is what this is only called for.
-		//
-		// Reconfiguring reloads the entry, and a reload drops the
-		// connection and takes a moment to come back. So it is not
-		// done over and over: the address it was pointed at is
-		// remembered, and it is only done again when the address has
-		// changed.
+
 		if lastEsphomeAddress(t) == address {
 			return
 		}
@@ -641,30 +460,17 @@ func pointHomeAssistantHere(t *testing.T) {
 		}
 		reconfigureEsphomeEntry(t, entry.id, address, livePort())
 		rememberEsphomeAddress(t, address)
-		// A reconfigure reloads the entry, and a reload takes a
-		// moment. The panel is started after it, so the panel is
-		// there when Home Assistant comes looking for it.
+
 		waitForEntryToLoad(t)
 		return
 	}
 	t.Log("Home Assistant has no esphome entry for the panel")
 }
 
-// esphomeAddressFile is where the address the entry was pointed at is
-// remembered.
-//
-// It is a file rather than a variable because the live tests are run
-// one at a time but in separate processes, and a variable would be
-// forgotten between them.
-//
-// The file holds two addresses: the one the entry was pointed at before
-// the tests changed it, which is put back at the end, and the one the
-// tests pointed it at, which says whether it needs changing at all.
 func esphomeAddressFile() string {
 	return filepath.Join(os.TempDir(), "homepanel-live-esphome-address")
 }
 
-// lastEsphomeAddress is the address the entry was last pointed at.
 func lastEsphomeAddress(t *testing.T) string {
 	t.Helper()
 	data, err := os.ReadFile(esphomeAddressFile())
@@ -678,8 +484,6 @@ func lastEsphomeAddress(t *testing.T) string {
 	return strings.TrimSpace(lines[1])
 }
 
-// originalEsphomeAddress is the address the entry was pointed at
-// before the tests changed it.
 func originalEsphomeAddress(t *testing.T) string {
 	t.Helper()
 	data, err := os.ReadFile(esphomeAddressFile())
@@ -693,18 +497,11 @@ func originalEsphomeAddress(t *testing.T) string {
 	return strings.TrimSpace(lines[0])
 }
 
-// esphomeAddressRemembered says whether the address has been
-// remembered already.
 func esphomeAddressRemembered() bool {
 	_, err := os.Stat(esphomeAddressFile())
 	return err == nil
 }
 
-// currentEsphomeAddress is the address the entry is pointed at now.
-//
-// Home Assistant's list of the entries does not say where the entry is
-// pointing, so the environment says it: the address the panel is
-// really at.
 func currentEsphomeAddress(t *testing.T) string {
 	t.Helper()
 	if address := os.Getenv("LIVE_ESPHOME_ADDRESS"); address != "" {
@@ -713,11 +510,6 @@ func currentEsphomeAddress(t *testing.T) string {
 	return ""
 }
 
-// rememberEsphomeAddress remembers the address the entry was pointed
-// at.
-//
-// The first address remembered is the one to put back, and the second
-// is the one the tests pointed it at.
 func rememberEsphomeAddress(t *testing.T, address string) {
 	t.Helper()
 	original := originalEsphomeAddress(t)
@@ -732,12 +524,6 @@ func rememberEsphomeAddress(t *testing.T, address string) {
 	}
 }
 
-// waitForEntryToLoad waits for Home Assistant to finish reloading the
-// entry.
-//
-// A reconfigure reloads the entry, and a reload takes a moment. The
-// panel is started after it, so the panel is there when Home Assistant
-// comes looking for it.
 func waitForEntryToLoad(t *testing.T) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -752,7 +538,6 @@ func waitForEntryToLoad(t *testing.T) {
 	t.Log("the entry did not say it was loaded")
 }
 
-// configEntry is one of Home Assistant's configuration entries.
 type configEntry struct {
 	id    string
 	title string
@@ -761,7 +546,6 @@ type configEntry struct {
 	port  int
 }
 
-// configEntries gives back the entries of a kind.
 func configEntries(t *testing.T, kind string) []configEntry {
 	t.Helper()
 	body, err := httpGet(haURL()+"/api/config/config_entries/entry", haToken())
@@ -784,8 +568,7 @@ func configEntries(t *testing.T, kind string) []configEntry {
 			title: stringOf(item["title"]),
 			state: stringOf(item["state"]),
 		}
-		// The address is in the entry's data, which the list does not
-		// always carry.
+
 		if data, ok := item["data"].(map[string]any); ok {
 			entry.host = stringOf(data["host"])
 			if number, ok := data["port"].(float64); ok {
@@ -797,7 +580,6 @@ func configEntries(t *testing.T, kind string) []configEntry {
 	return out
 }
 
-// reconfigureEsphomeEntry points an esphome entry at an address.
 func reconfigureEsphomeEntry(t *testing.T, entryID, host string, port int) {
 	t.Helper()
 	flow, err := httpPost(haURL()+"/api/config/config_entries/flow", haToken(), map[string]any{
@@ -816,8 +598,7 @@ func reconfigureEsphomeEntry(t *testing.T, entryID, host string, port int) {
 		t.Logf("the entry could not be reconfigured: %s", strings.TrimSpace(string(flow)))
 		return
 	}
-	// The form answers with an error when nothing is there to talk to
-	// yet, and the address is taken from the answer either way.
+
 	answer, err := httpPost(haURL()+"/api/config/config_entries/flow/"+form.FlowID, haToken(), map[string]any{
 		"host": host,
 		"port": port,
@@ -829,21 +610,13 @@ func reconfigureEsphomeEntry(t *testing.T, entryID, host string, port int) {
 	t.Logf("Home Assistant's entry was pointed at %s:%d (%s)", host, port, strings.TrimSpace(string(answer)))
 }
 
-// localAddress is this machine's address on the network.
-//
-// It is the address Home Assistant can reach the panel on, which is
-// the one on the network Home Assistant is on and not the one on a
-// container's own network.
 func localAddress(t *testing.T) string {
 	t.Helper()
-	// The address is found by asking which address would be used to
-	// reach Home Assistant.
-	// The address of Home Assistant is taken from its URL, because the
-	// machine can reach it and so Home Assistant can reach the machine.
+
 	address := haURL()
 	address = strings.TrimPrefix(address, "http://")
 	address = strings.TrimPrefix(address, "https://")
-	// The port is cut off: the address is what matters.
+
 	if colon := strings.LastIndex(address, ":"); colon > 0 {
 		address = address[:colon]
 	}
@@ -856,10 +629,6 @@ func localAddress(t *testing.T) string {
 	return conn.LocalAddr().(*net.UDPAddr).IP.String()
 }
 
-// httpGet asks for something and gives back the raw answer.
-//
-// The answer is raw because some of Home Assistant's answers are a list
-// and the helpers that read a list would have to know what was in it.
 func httpGet(url, token string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -882,10 +651,6 @@ func httpGet(url, token string) ([]byte, error) {
 	return body, nil
 }
 
-// httpPost asks for something to be done and gives back the raw answer.
-//
-// The answer is raw because Home Assistant's reconfigure flow answers
-// with a form, and the form is not an object with a known shape.
 func httpPost(url, token string, body any) ([]byte, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -914,7 +679,6 @@ func httpPost(url, token string, body any) ([]byte, error) {
 	return answer, nil
 }
 
-// stringOf is a string, or an empty string.
 func stringOf(value any) string {
 	if text, ok := value.(string); ok {
 		return text

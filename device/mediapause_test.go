@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// newTestServer makes a server that hands out a WAV file.
 func newTestServer(file []byte) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/wav")
@@ -16,15 +15,8 @@ func newTestServer(file []byte) *httptest.Server {
 	}))
 }
 
-// TestTheMusicCanBePaused checks that the music Home Assistant is
-// playing can be paused and played again.
-//
-// The music is a stream that is fetched while it is played, so pausing
-// it is not a matter of asking the server to stop: the audio that has
-// arrived is held, and the track picks up where it left off.
 func TestTheMusicCanBePaused(t *testing.T) {
-	// The audio is long enough that it is still playing when the pause
-	// happens.
+
 	pcm := make([]byte, 48000*20)
 	for i := 0; i < len(pcm)/2; i++ {
 		binary.LittleEndian.PutUint16(pcm[i*2:], uint16(i))
@@ -35,13 +27,7 @@ func TestTheMusicCanBePaused(t *testing.T) {
 	defer server.Close()
 
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
-	// The speaker is one for the whole program, so the loop that has it
-	// is stopped: a test that leaves it running is a test that leaves the
-	// next one without a speaker.
-	//
-	// The music is stopped as well: a paused track is still music, and
-	// the loop that has the speaker waits for the music to end before it
-	// lets the speaker go.
+
 	defer audio.stopPortedSpeaker()
 	defer audio.StopMedia()
 
@@ -51,15 +37,12 @@ func TestTheMusicCanBePaused(t *testing.T) {
 		close(played)
 	}()
 
-	// The music starts. The speaker waits for a buffer's worth of it
-	// before it opens, so the queue is what says it has started.
 	waitFor(t, func() bool {
 		audio.mu.Lock()
 		defer audio.mu.Unlock()
 		return len(audio.media) >= mediaBufferBytes
 	}, "the music never started")
 
-	// It is paused.
 	audio.PauseMedia()
 	audio.mu.Lock()
 	paused := audio.mediaPaused
@@ -68,12 +51,6 @@ func TestTheMusicCanBePaused(t *testing.T) {
 		t.Fatal("the music was not paused")
 	}
 
-	// The speaker takes nothing out of the queue while it is paused.
-	//
-	// The fetch may still be filling it, so the queue can grow: what
-	// matters is that the music is not being played. The check is the
-	// one the mixer makes, because that is what decides whether the
-	// music is heard.
 	taken := 0
 	for period := 0; period < 5; period++ {
 		audio.mu.Lock()
@@ -88,7 +65,6 @@ func TestTheMusicCanBePaused(t *testing.T) {
 		t.Errorf("%d bytes were taken out of the queue while it was paused", taken)
 	}
 
-	// And it plays again.
 	audio.ResumeMedia()
 	audio.mu.Lock()
 	resumed := !audio.mediaPaused
@@ -98,8 +74,6 @@ func TestTheMusicCanBePaused(t *testing.T) {
 	}
 }
 
-// TestTheMusicCanBeStopped checks that stopping the music throws it
-// away rather than leaving it to be played.
 func TestTheMusicCanBeStopped(t *testing.T) {
 	pcm := make([]byte, 48000*20)
 	file := buildStreamingWAV(pcm)
@@ -108,9 +82,7 @@ func TestTheMusicCanBeStopped(t *testing.T) {
 	defer server.Close()
 
 	audio := &deviceAudio{backend: &fakeBackend{}, log: testLogger()}
-	// The speaker is one for the whole program, so the loop that has it is
-	// stopped: a test that leaves it running is a test that leaves the next
-	// one without a speaker.
+
 	defer audio.stopPortedSpeaker()
 	go audio.playMediaURL(context.Background(), server.URL, false)
 

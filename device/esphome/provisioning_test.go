@@ -11,17 +11,6 @@ import (
 	"time"
 )
 
-// TestProvisioningKeyIsUsedWhenTheDeviceHasNone checks the handshake a
-// client does when the device has no key.
-//
-// Home Assistant asks for the device's details before it has the key,
-// and it does that over an encrypted connection made with the
-// provisioning key. The point of it is that the real key never crosses
-// the network in plain text: the client learns the name of the device
-// and finds out that a key is needed.
-//
-// So a device with no key answers the handshake with the provisioning
-// key, which is all zeros.
 func TestProvisioningKeyIsUsedWhenTheDeviceHasNone(t *testing.T) {
 	server := NewServer(ServerOptions{
 		Name: "home-panel", FriendlyName: "Home Panel", MAC: "aabbccddeeff",
@@ -34,8 +23,6 @@ func TestProvisioningKeyIsUsedWhenTheDeviceHasNone(t *testing.T) {
 	defer listener.Close()
 	go server.Listen(listener)
 
-	// The client uses the provisioning key, which is what Home
-	// Assistant does when it finds a device that has none.
 	lines, err := runPeer("list_entities", listener.Addr().String(), provisioningKey)
 	if err != nil {
 		if errors.Is(err, errSkipPeer) {
@@ -49,16 +36,8 @@ func TestProvisioningKeyIsUsedWhenTheDeviceHasNone(t *testing.T) {
 	}
 }
 
-// TestPlaintextIsRefusedWhenTheDeviceHasAKey checks that a device with
-// a key does not speak in plain text.
-//
-// The key is there so that nothing is said in plain text. A client that
-// starts in plain text is told so rather than being left waiting: the
-// answer is a frame with the encrypted indicator, which is what the
-// client reads as "this device needs a key".
 func TestPlaintextIsRefusedWhenTheDeviceHasAKey(t *testing.T) {
-	// The reply is the one a real ESPHome device gives. It was taken
-	// from one, so the bytes have to match.
+
 	want := []byte{
 		0x01, 0x00, 0x13, 0x01,
 		'B', 'a', 'd', ' ', 'i', 'n', 'd', 'i', 'c', 'a', 't', 'o', 'r', ' ', 'b', 'y', 't', 'e',
@@ -80,14 +59,14 @@ func TestPlaintextIsRefusedWhenTheDeviceHasAKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	// A plaintext hello request.
+
 	body := []byte{0x0a, 0x0e, 'H', 'o', 'm', 'e', ' ', 'A', 's', 's', 'i', 's', 't', 'a', 'n', 't', 0x10, 0x01, 0x18, 0x10}
 	frame := []byte{0x00, byte(len(body)), 0x01}
 	frame = append(frame, body...)
 	if _, err := client.Write(frame); err != nil {
 		t.Fatal(err)
 	}
-	// The refusal comes back on the connection.
+
 	reply := make([]byte, len(want))
 	client.SetReadDeadline(time.Now().Add(5 * time.Second))
 	if _, err := io.ReadFull(client, reply); err != nil {
@@ -98,8 +77,6 @@ func TestPlaintextIsRefusedWhenTheDeviceHasAKey(t *testing.T) {
 	}
 }
 
-// TestPlaintextIsRefusedByTheServer checks the same thing through the
-// server rather than through the frame.
 func TestPlaintextIsRefusedByTheServer(t *testing.T) {
 	server := NewServer(ServerOptions{
 		Name: "home-panel", FriendlyName: "Home Panel", MAC: "aabbccddeeff",
@@ -113,7 +90,6 @@ func TestPlaintextIsRefusedByTheServer(t *testing.T) {
 	defer listener.Close()
 	go server.Listen(listener)
 
-	// The client speaks in plain text.
 	lines, err := runPeer("list_entities", listener.Addr().String(), "")
 	if err == nil {
 		joined := strings.Join(lines, "\n")
@@ -123,14 +99,8 @@ func TestPlaintextIsRefusedByTheServer(t *testing.T) {
 	}
 }
 
-// TestHandshakeFailureReplyMatchesESPHome checks the reply the device
-// gives when the client does not know the key.
-//
-// The bytes were taken from a real ESPHome device, so the client reads
-// them the same way. The reply is what tells the client that the key is
-// wrong rather than that the device has gone.
 func TestHandshakeFailureReplyMatchesESPHome(t *testing.T) {
-	// A client that knows the wrong key.
+
 	wrong := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{1}, 32))
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -146,7 +116,6 @@ func TestHandshakeFailureReplyMatchesESPHome(t *testing.T) {
 	})
 	go server.Listen(listener)
 
-	// The client uses the wrong key and reads what comes back.
 	lines, err := runPeer("handshake_failure", listener.Addr().String(), wrong)
 	if err != nil {
 		if errors.Is(err, errSkipPeer) {

@@ -3,18 +3,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-// The overlay does not keep the last answer.
-//
-// The words are kept while the overlay is up, which is what keeps the
-// question on the screen while the assistant thinks about it. But the
-// next question comes with the overlay up again and the old answer
-// still on it, and the answer is only replaced when the new one
-// arrives — so for a moment the panel says the answer to the last
-// question while it is listening to this one.
-//
-// So a turn that starts clears the words, and they come back when the
-// new ones arrive.
-
 const root = path.join(__dirname, "..");
 const deviceUi = fs.readFileSync(path.join(root, "src", "ui", "device-ui.js"), "utf8");
 
@@ -34,8 +22,7 @@ test("a new turn clears the last answer", () => {
 });
 
 test("the words come back when the new ones arrive", () => {
-  // The clearing is only for the start of a turn: the text is put back
-  // by the state that carries it.
+
   assert.ok(
     deviceUi.includes("if (transcript && transcript !== overlay.heardText) {"),
     "the question is never put back",

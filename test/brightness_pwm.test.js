@@ -4,51 +4,26 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-// The backlight, and the panel's driver.
-//
-// The driver runs the panel's backlight from a PWM on the main chip. A
-// level of zero is not a level of light: the driver switches that PWM
-// off instead of running it at no duty, and once it has been switched
-// off and on again the panel stops following the levels written to it.
-// The screen comes back at a fixed brightness and the brightness
-// control is dead until the machine is rebooted.
-//
-// So the brightness a person sets never reaches zero, and a screen that
-// comes back from off is brought back at full for a moment before the
-// level it should be at.
-//
-// These are run against a fake backlight, so what is checked is what
-// reaches the driver and in what order, rather than how the code reads.
-
 const root = path.join(__dirname, "..");
 const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
 
-// The backlight's own code, taken out of the script.
-//
-// It is the part between the levels and the screen's off, so it has
-// everything that writes the backlight.
 function backlightSource() {
-  // The backlight's own code, and the reader for the level it is at:
-  // whether the backlight is lit is asked through that.
+
   const start = main.indexOf("const BACKLIGHT_FLOOR = 1;");
-  const end = main.indexOf("// setBacklightOff turns the screen dark");
+  const end = main.indexOf("async function setBacklightOff(off) {");
   assert.ok(start > 0, "the backlight's levels are not in the script");
   assert.ok(end > start, "the backlight's code is not where it should be");
   const reader = main.indexOf("function backlightRawLevel()");
   assert.ok(reader > 0, "the backlight's level is not read");
-  return main.slice(start, end) + main.slice(reader, reader + 700);
+  const readerEnd = main.indexOf("function currentBrightness() {");
+  assert.ok(readerEnd > reader, "the backlight's level is not where it should be");
+  return main.slice(start, end) + main.slice(reader, readerEnd);
 }
 
-// A backlight to write to.
-//
-// It is the driver's own shape: a directory with a max_brightness and a
-// brightness in it. What is written to the brightness is recorded, so a
-// test can see the levels in the order they were written.
 function harness({ max = 1023, powered = true, brightness = 512 } = {}) {
   const written = [];
   const delays = [];
-  // The level the backlight is at. It is what says whether the light is
-  // on: a backlight at zero is a dark screen.
+
   let current = powered ? brightness : 0;
 
   const fakeFs = {
@@ -74,8 +49,7 @@ function harness({ max = 1023, powered = true, brightness = 512 } = {}) {
           return String(current);
       },
     },
-    // The hold before the level is written is recorded rather than
-    // waited for, so a test can see how long it was.
+
     setTimeout: (fn, ms) => {
       delays.push(ms);
       fn();
@@ -94,9 +68,7 @@ function harness({ max = 1023, powered = true, brightness = 512 } = {}) {
     ...sandbox,
     written,
     delays,
-    // isOff is whether the backlight is believed to be switched off.
-    // It is a binding in the script rather than a property of the
-    // sandbox, so it is read by running a line of the script.
+
     isOff: () => vm.runInContext("backlightIsOff", sandbox),
   };
 }
@@ -171,8 +143,6 @@ test("a screen that comes back on leaves the light on", async () => {
 test("the screen's off is allowed to be zero", async () => {
   const backlight = harness();
 
-  // The screen's own off writes zero: that is how the screen is turned
-  // off, and it is the only thing that is allowed to.
   await backlight.writeBacklightLevel(0);
 
   assert.deepEqual(backlight.written, [0], "the screen's off did not write zero");
@@ -187,10 +157,7 @@ test("the driver's own range is read rather than assumed", async () => {
 });
 
 test("a backlight the driver says is off is brought back before the level", async () => {
-  // The backlight can be switched off from outside the panel: the
-  // display driver does it when the panel is blanked. The brightness
-  // file does not show it, because it holds the level that was last
-  // asked for. The level is what says, and that is what is asked.
+
   const backlight = harness({ powered: false });
 
   await backlight.writeBacklight(50);

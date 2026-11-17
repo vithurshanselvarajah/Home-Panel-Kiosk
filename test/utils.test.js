@@ -80,7 +80,7 @@ test("settingBoolean distinguishes an unticked box from an untouched one", () =>
 test("displayMode falls back to fullscreen", () => {
   assert.equal(displayMode("fullscreen"), "fullscreen");
   assert.equal(displayMode("window"), "window");
-  // A device that was set up before the setting existed has none.
+
   assert.equal(displayMode(undefined), "fullscreen");
   assert.equal(displayMode(null), "fullscreen");
   assert.equal(displayMode(""), "fullscreen");

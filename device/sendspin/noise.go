@@ -8,22 +8,12 @@ import (
 	"github.com/flynn/noise"
 )
 
-// The device is always the Noise RESPONDER: the server initiates the
-// handshake whichever side opened the WebSocket. Pattern KKpsk2 — both static
-// keys known in advance (they are the ids), PSK mixed at the end of message 2.
-//
-// ChaChaPoly rather than AESGCM: Go has no AES acceleration on 32-bit ARM,
-// and ChaCha costs 0.40% of a core at FLAC rate (measured, PR #271).
 const suiteName = "25519_ChaChaPoly_SHA256"
 
 var cipherSuite = noise.NewCipherSuite(noise.DH25519, noise.CipherChaChaPoly, noise.HashSHA256)
 
-// placeholderPSK is what the handshake is built with before message 1 says
-// which PSK the server is using. psk2 mixes the PSK only when message 2 is
-// written, so reading message 1 under a placeholder is exact.
 var placeholderPSK = make([]byte, pskSize)
 
-// transport is one direction pair of Noise cipher states.
 type transport struct {
 	send, recv *noise.CipherState
 }
@@ -36,8 +26,6 @@ func (t *transport) decrypt(ct []byte) ([]byte, error) {
 	return t.recv.Decrypt(nil, nil, ct)
 }
 
-// responder runs the device's half of one handshake. It is split in two
-// because the PSK is chosen between the messages.
 type responder struct {
 	hs *noise.HandshakeState
 }
@@ -59,15 +47,11 @@ func newResponder(id identity, serverPub, prologue []byte) (*responder, error) {
 	return &responder{hs: hs}, nil
 }
 
-// msg1Payload is what the server says inside Noise message 1: which PSK it is
-// using. psk_category is the spec's addition; 9.1.1 does not send it.
 type msg1Payload struct {
 	PskID       string `json:"psk_id"`
 	PskCategory string `json:"psk_category,omitempty"`
 }
 
-// readMsg1 decrypts message 1. It is authenticated by the static keys alone,
-// so a wrong server key fails here.
 func (r *responder) readMsg1(msg []byte) (msg1Payload, error) {
 	pt, _, _, err := r.hs.ReadMessage(nil, msg)
 	if err != nil {
@@ -80,8 +64,6 @@ func (r *responder) readMsg1(msg []byte) (msg1Payload, error) {
 	return p, nil
 }
 
-// writeMsg2 mixes the chosen PSK and completes the handshake. The payload is
-// the literal two bytes "{}", not an empty payload.
 func (r *responder) writeMsg2(psk []byte) ([]byte, *transport, []byte, error) {
 	if err := r.hs.SetPresharedKey(psk); err != nil {
 		return nil, nil, nil, err
@@ -93,19 +75,10 @@ func (r *responder) writeMsg2(psk []byte) ([]byte, *transport, []byte, error) {
 	if c1 == nil || c2 == nil {
 		return nil, nil, nil, errors.New("noise: handshake did not complete")
 	}
-	// c1 carries initiator→responder, c2 responder→initiator.
+
 	return msg, &transport{send: c2, recv: c1}, r.hs.ChannelBinding(), nil
 }
 
-// Binary message types after decryption. 0 is a JSON body; 4 is an audio
-// chunk. Fragments come in two dialects:
-//
-//   - spec: type 1, then a flags byte (bit 1 first, bit 0 last), with the
-//     original type after the flags on the first fragment;
-//   - 9.1.1: type 2 for "more" and 3 for "end", with the original type after
-//     the first "more" byte.
-//
-// Types 2 and 3 are reserved in the spec, so the two cannot be confused.
 const (
 	msgJSON         = 0
 	msgFragment     = 1
@@ -118,7 +91,6 @@ const (
 	fragFlagsUnused = 0xFC
 )
 
-// reassembler turns decrypted transport messages back into whole ones.
 type reassembler struct {
 	buf    []byte
 	typ    byte
@@ -127,9 +99,6 @@ type reassembler struct {
 
 var errFragment = errors.New("sendspin: malformed fragment sequence")
 
-// push takes one decrypted message and returns a complete one, or nil while a
-// fragmented message is still being collected. A malformed sequence is a
-// protocol error: the caller closes the connection.
 func (r *reassembler) push(pt []byte) ([]byte, error) {
 	if len(pt) == 0 {
 		return nil, errFragment

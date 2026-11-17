@@ -1,16 +1,7 @@
 :root{font-family:'DM Sans',sans-serif;color:#f5f7fa;font-synthesis:none;--ink:#10161f;--muted:#aab3c1;--accent:#8fe3c2;--panel:rgba(16,22,31,.97)}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;background:transparent;overflow:hidden}body{pointer-events:none}
-/* A screen that is off catches the touch that wakes it.
-   The page is transparent, so it does not get in the way of the
-   dashboard, but it does take the touch rather than letting it fall
-   through to the dashboard underneath. */
-body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;bottom:0;width:min(330px,calc(100vw - 32px));display:flex;flex-direction:column;overflow-y:auto;padding:22px 20px 14px;border-left:1px solid rgba(255,255,255,.14);border-radius:24px 0 0 24px;background:var(--panel);backdrop-filter:blur(25px);box-shadow:-24px 0 90px rgba(0,0,0,.48);pointer-events:auto;transform:translateX(100%);visibility:hidden;transition:transform .22s ease,visibility 0s linear .22s,bottom .16s ease}.side-panel.open{transform:translateX(0);visibility:visible;transition:transform .22s ease,visibility 0s,bottom .16s ease}.side-panel.with-home-bar{top:58px}.side-panel.dragging{visibility:visible;transition:transform none,bottom .16s ease}.drawer-heading{flex:none}.side-panel .service-status,.side-panel .drawer-actions{flex:none}.drawer-heading{display:flex;align-items:flex-start;justify-content:space-between}.eyebrow{color:var(--accent);font-size:9px;font-weight:700;letter-spacing:.16em}.drawer-heading h2{margin:0;font-size:20px;letter-spacing:-.04em}.close-button{border:0;background:transparent;color:#a7b2bf;font-size:29px;line-height:1;cursor:pointer}.service-status{display:grid;gap:3px;margin:auto 0 12px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.035)}.service-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:9px;min-height:29px;color:#d5dce5;font-size:12px}.service-row b{color:#8d99a8;font-size:10px;font-weight:500}.service-led{width:8px;height:8px;border-radius:50%;background:#657180}.service-led[data-status="online"]{background:#75e0a8;box-shadow:0 0 11px rgba(117,224,168,.65)}.service-led[data-status="connecting"]{background:#f0c568;box-shadow:0 0 10px rgba(240,197,104,.55)}.service-led[data-status="offline"]{background:#ef7777;box-shadow:0 0 10px rgba(239,119,119,.5)}/* ── The volume popup ───────────────────────────────────────────────────
 
-   It comes down from the top when the level changes and goes away again
-   on its own, the way a phone does it.
+body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;bottom:0;width:min(330px,calc(100vw - 32px));display:flex;flex-direction:column;overflow-y:auto;padding:22px 20px 14px;border-left:1px solid rgba(255,255,255,.14);border-radius:24px 0 0 24px;background:var(--panel);backdrop-filter:blur(25px);box-shadow:-24px 0 90px rgba(0,0,0,.48);pointer-events:auto;transform:translateX(100%);visibility:hidden;transition:transform .22s ease,visibility 0s linear .22s,bottom .16s ease}.side-panel.open{transform:translateX(0);visibility:visible;transition:transform .22s ease,visibility 0s,bottom .16s ease}.side-panel.with-home-bar{top:58px}.side-panel.dragging{visibility:visible;transition:transform none,bottom .16s ease}.drawer-heading{flex:none}.side-panel .service-status,.side-panel .drawer-actions{flex:none}.drawer-heading{display:flex;align-items:flex-start;justify-content:space-between}.eyebrow{color:var(--accent);font-size:9px;font-weight:700;letter-spacing:.16em}.drawer-heading h2{margin:0;font-size:20px;letter-spacing:-.04em}.close-button{border:0;background:transparent;color:#a7b2bf;font-size:29px;line-height:1;cursor:pointer}.service-status{display:grid;gap:3px;margin:auto 0 12px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.035)}.service-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:9px;min-height:29px;color:#d5dce5;font-size:12px}.service-row b{color:#8d99a8;font-size:10px;font-weight:500}.service-led{width:8px;height:8px;border-radius:50%;background:#657180}.service-led[data-status="online"]{background:#75e0a8;box-shadow:0 0 11px rgba(117,224,168,.65)}.service-led[data-status="connecting"]{background:#f0c568;box-shadow:0 0 10px rgba(240,197,104,.55)}.service-led[data-status="offline"]{background:#ef7777;box-shadow:0 0 10px rgba(239,119,119,.5)}
 
-   It is here because the level is changed with the buttons on the unit,
-   and a person holding the device cannot see the drawer. The drawer
-   still has the slider; this is the one that says what just happened. */
 .volume-popup{position:absolute;top:0;left:0;right:0;z-index:14;display:flex;justify-content:center;padding:18px 0 0;pointer-events:none;opacity:0;transform:translateY(-100%);transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1)}
 .volume-popup[hidden]{display:none}
 .volume-popup.is-visible{opacity:1;transform:translateY(0)}
@@ -20,50 +11,24 @@ body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;
 .volume-popup__track i{position:absolute;inset:0 auto 0 0;width:0;border-radius:999px;background:linear-gradient(90deg,#8fe3c2,#cfe9a8);transition:width .16s ease}
 .volume-popup__value{min-width:26px;color:#dbe3ec;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
 
-/* ── The mute indicator ─────────────────────────────────────────────────
-
-   The mute is the hardware latch's, and the button on top of the unit is
-   the only thing that moves it. So this says where the latch is rather
-   than changing it: it is there while the microphones are cut, and gone
-   when they are not.
-
-   It is red, because a device that cannot hear is closer to being
-   broken than to being a colour somebody chose. */
 .mute-indicator{position:absolute;top:18px;left:18px;z-index:13;display:flex;align-items:center;gap:9px;padding:10px 15px 10px 12px;border:1px solid rgba(255,107,107,.34);border-radius:999px;background:rgba(46,17,20,.92);backdrop-filter:blur(20px);box-shadow:0 14px 44px rgba(0,0,0,.34);color:#ff8f8f;font-size:12px;font-weight:600;pointer-events:none;opacity:0;transform:translateY(-10px);transition:opacity .2s ease,transform .2s ease}
 .mute-indicator[hidden]{display:none}
 .mute-indicator.is-visible{opacity:1;transform:translateY(0)}
 .mute-indicator__icon{width:19px;height:19px;flex:none}
 
-/* ── The quick controls ─────────────────────────────────────────────── */
-
-/* Brightness and volume sit at the top of the drawer because they are
-   the two things a person reaches for most often. */
 .quick-controls{flex:none;display:grid;gap:12px;margin:16px 0 14px;padding:12px 14px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.035)}
 .quick-control__head{display:flex;align-items:center;gap:9px;margin-bottom:6px}
 .quick-control__icon{display:grid;place-items:center;width:26px;height:26px;flex:none;border-radius:8px;background:rgba(143,227,194,.14);color:var(--accent);font-size:13px}
 .quick-control__label{flex:1;color:#d5dce5;font-size:12px;font-weight:600}
 .quick-control__value{color:#8d99a8;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
 
-
-
-/* A slider that is meant to be dragged with a thumb, so it is tall and
-   the thumb is big enough to hit. The filled part is a gradient that
-   stops where the thumb is. */
 .slider{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--fill,50%),rgba(255,255,255,.12) var(--fill,50%),rgba(255,255,255,.12) 100%) no-repeat center/100% 8px;cursor:pointer;touch-action:none}
 .slider::-webkit-slider-runnable-track{height:8px;border-radius:4px;background:transparent}
 .slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;margin-top:-7px;border:3px solid #141b26;border-radius:50%;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.35)}
 .slider:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px rgba(143,227,194,.2)}
 
-/* The control is not there when the device has no backlight or no mixer,
-   and a control that does nothing is worse than no control. */
 .quick-control[hidden]{display:none}
 
-/* ── The music ─────────────────────────────────────────────────────────── */
-
-/* The now-playing panel. It is a card with the album art on the left, the
-   name of the track beside it, the scrubber under both and the transport
-   buttons underneath, so the drawer reads as a music player rather than a
-   list of settings. */
 .media-panel{flex:none;display:grid;grid-template-columns:72px 1fr;grid-template-rows:auto auto auto;gap:11px 13px;margin:16px 0 4px;padding:14px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.035)}
 .media-panel[hidden]{display:none}
 .media-panel__art{position:relative;width:72px;height:72px;border-radius:12px;overflow:hidden;background:linear-gradient(150deg,#1d2a38,#131a24);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
@@ -85,26 +50,18 @@ body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;
 .media-button--play{width:46px;height:46px;background:var(--accent);color:#12221d;font-size:17px}
 .media-button--play:hover{background:#a4ecd0;color:#12221d}
 .media-button--play:disabled:hover{background:var(--accent)}
-/* The spinner is shown while the music is on its way. It is drawn with
-   a border rather than a glyph, because a glyph has no parts that can
-   move. */
+
 .media-button--play.is-loading{cursor:progress}
 .media-button--play.is-loading::before{content:"";width:18px;height:18px;border-radius:50%;border:2px solid rgba(18,34,29,.28);border-top-color:#12221d;animation:media-spin .7s linear infinite}
 @keyframes media-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion: reduce){.media-button--play.is-loading::before{animation-duration:2.4s}}
 
-/* A slim slider for the position in a track. The big one is for the
-   volume and the brightness, where the thumb is what is aimed at; here
-   the thumb is small and the track is thin. */
 .slider--slim{height:20px;background-size:100% 4px}
 .slider--slim::-webkit-slider-thumb{width:14px;height:14px;margin-top:-5px;border-width:2px}
 .slider--slim:disabled{cursor:default;opacity:.55}
 
-.drawer-actions{display:grid;gap:5px}/* The icons are drawn rather than typed.
-   The device has DejaVu's fonts and nothing else, and DejaVu has no
-   pause sign and no transport arrows, so a character it does not have
-   is a blank box or nothing at all. Every icon is a drawing, so it
-   looks the same on every machine. */
+.drawer-actions{display:grid;gap:5px}
+
 .drawer-button__icon{display:grid;place-items:center;width:17px;height:17px;flex:none}
 .drawer-button__icon svg{width:100%;height:100%;display:block}
 .media-button svg{width:19px;height:19px;display:block}
@@ -113,9 +70,8 @@ body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;
 .media-panel__fallback svg{width:26px;height:26px;display:block}
 .return-home__icon{display:inline-grid;place-items:center;width:15px;height:15px;vertical-align:-2px}
 .return-home__icon svg{width:100%;height:100%;display:block}
-.drawer-button{width:100%;min-height:45px;display:flex;align-items:center;gap:12px;padding:0 12px;border:0;border-radius:12px;background:transparent;color:#e6ebf1;text-align:left;font:500 13px 'DM Sans',sans-serif;cursor:pointer}.drawer-button>span{width:22px;color:#a5b5c2;text-align:center;font-size:19px}.drawer-button:hover,.drawer-button.selected{background:rgba(255,255,255,.09);color:var(--accent)}.drawer-button:hover>span,.drawer-button.selected>span{color:var(--accent)}/* The footer says what the panel is doing and what it is. The version is
-   here because it is the thing a person is asked for when something goes
-   wrong, and the drawer is where they would look. */
+.drawer-button{width:100%;min-height:45px;display:flex;align-items:center;gap:12px;padding:0 12px;border:0;border-radius:12px;background:transparent;color:#e6ebf1;text-align:left;font:500 13px 'DM Sans',sans-serif;cursor:pointer}.drawer-button>span{width:22px;color:#a5b5c2;text-align:center;font-size:19px}.drawer-button:hover,.drawer-button.selected{background:rgba(255,255,255,.09);color:var(--accent)}.drawer-button:hover>span,.drawer-button.selected>span{color:var(--accent)}
+
 .side-panel footer{padding-top:12px;border-top:1px solid rgba(255,255,255,.09);display:flex;align-items:baseline;justify-content:space-between;gap:12px}
 #mode-label{color:#8490a0;font-size:10px;text-transform:uppercase;letter-spacing:.12em}
 .version-label{color:#6f7b89;font-size:10.5px;letter-spacing:.02em;text-transform:none;font-variant-numeric:tabular-nums}.notice{position:absolute;top:24px;left:50%;transform:translateX(-50%);width:min(560px,calc(100% - 40px));padding:15px 16px;display:flex;align-items:center;gap:14px;border:1px solid rgba(255,255,255,.16);border-radius:18px;background:rgba(13,19,27,.96);backdrop-filter:blur(22px);box-shadow:0 20px 80px rgba(0,0,0,.32);pointer-events:auto}.notice[hidden]{display:none}.notice-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:13px;background:#1b3e37;color:var(--accent);font-size:24px}.notice-copy{flex:1;min-width:0;display:grid;gap:3px}.notice-copy strong{font-size:14px}.notice-copy span{color:#c1cad5;font-size:13px;line-height:1.4}.notice-close{border:0;background:transparent;color:#9fa9b7;font-size:26px;cursor:pointer}.settings-panel{position:absolute;inset:0;z-index:15;display:flex;flex-direction:column;padding:24px 22px 20px;background:rgba(8,12,18,.97);box-shadow:0 24px 100px rgba(0,0,0,.46);pointer-events:auto;transition:bottom .16s ease}.settings-panel[hidden]{display:none}.panel-heading{display:flex;justify-content:space-between;align-items:flex-start;flex:none}.panel-heading h1{margin:6px 0 0;font-size:27px;letter-spacing:-.04em}.panel-intro{margin:8px 0 22px;color:var(--muted);font-size:13px;flex:none}.settings-panel form{display:grid;gap:13px;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:6px}.settings-panel label{display:grid;gap:6px;color:#dfe5ec;font-size:11px;font-weight:600}.settings-panel input,.settings-panel textarea{width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.11);border-radius:10px;outline:none;background:rgba(255,255,255,.055);color:#f7f8fa;font:500 12px 'DM Sans',sans-serif}.settings-panel input:focus,.settings-panel textarea:focus{border-color:rgba(143,227,194,.65);box-shadow:0 0 0 3px rgba(143,227,194,.09)}.settings-panel input::placeholder,.settings-panel textarea::placeholder{color:#6f7b89}.settings-panel textarea{resize:vertical;min-height:70px}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.optional,.field-unit{margin-left:5px;color:#8490a0;font-size:10px;font-weight:400}
@@ -133,20 +89,9 @@ body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;
 .side-panel::-webkit-scrollbar,.settings-panel::-webkit-scrollbar,.side-panel *::-webkit-scrollbar,.settings-panel *::-webkit-scrollbar{width:0;height:0;display:none}
 .side-panel::-webkit-scrollbar-thumb,.settings-panel::-webkit-scrollbar-thumb,.side-panel *::-webkit-scrollbar-thumb,.settings-panel *::-webkit-scrollbar-thumb{background:transparent}
 
-/* ── Voice ───────────────────────────────────────────────────────── */
-
 .service-led[data-status="listening"]{background:#75e0a8;box-shadow:0 0 11px rgba(117,224,168,.65);animation:voice-pulse 1.4s ease-in-out infinite}
 @keyframes voice-pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
-/* The voice indicator is an overlay on the view, so it never depends on the
-   Home Assistant page re-rendering to stay put. */
-
-
-
-
-
-
-/* Settings tabs */
 .settings-tabs{display:flex;gap:4px;flex:none;margin:0 0 16px;padding:3px;border:1px solid rgba(255,255,255,.08);border-radius:11px;background:rgba(255,255,255,.03)}
 .settings-tab{flex:1;min-height:36px;border:0;border-radius:8px;background:transparent;color:var(--muted);font:600 12px 'DM Sans',sans-serif;letter-spacing:.02em;cursor:pointer}
 .settings-tab[aria-selected="true"]{background:rgba(143,227,194,.14);color:var(--accent)}
@@ -160,7 +105,6 @@ body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;
 .capability-grid{display:grid;gap:8px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025)}
 .capability-grid .setting-toggle{grid-template-columns:18px 1fr;min-height:30px;font-size:12px}
 
-/* The voice connection status, shown at the top of the voice tab. */
 .voice-status{display:flex;align-items:center;gap:12px;flex:none;margin:0 0 18px;padding:12px 14px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025)}
 .voice-status .service-led{width:10px;height:10px;flex:none}
 .voice-status strong{display:block;font-size:13px;font-weight:600;color:#f5f7fa}
@@ -180,27 +124,15 @@ body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;
 .audio-meter>i{display:block;width:0;height:100%;border-radius:4px;background:var(--accent);transition:width .08s linear}
 .audio-test__value{flex:none;width:38px;text-align:right;color:#8d99a8;font-size:11px;font-variant-numeric:tabular-nums}
 
-/* ── The wake word overlay ─────────────────────────────────────────────── */
-
-/* The overlay covers the screen while the assistant is working, the way
-   a smart display does. Everything behind it is dimmed out of the way:
-   the drawer, the keyboard and the dashboard alike.
-   
-   It is above everything else, so nothing is left showing around it. */
 .voice-overlay{position:absolute;inset:0;z-index:12;display:flex;align-items:center;justify-content:center;padding:6vh 8vw;background:radial-gradient(120% 90% at 50% 40%,rgba(20,30,44,.92),rgba(4,7,12,.97));backdrop-filter:blur(26px);pointer-events:auto;opacity:0;transition:opacity .22s ease}
 .voice-overlay[hidden]{display:none}
 .voice-overlay.is-active{opacity:1}
 .voice-overlay__inner{display:flex;flex-direction:column;align-items:center;gap:26px;max-width:900px;text-align:center}
 
-/* The orb. It breathes with the microphone level while it listens and
-   turns over slowly while it thinks, so the state is visible from across
-   a room without reading anything. */
 .voice-overlay__orb{position:relative;width:132px;height:132px;display:grid;place-items:center}
 .voice-overlay__ring{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(143,227,194,.45);transform:scale(1);opacity:.55;transition:transform .12s ease-out,opacity .3s ease}
 .voice-overlay__core{width:74px;height:74px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#b9f4de,var(--accent) 55%,#4fbf9a);box-shadow:0 0 44px rgba(143,227,194,.45);transition:transform .18s ease,box-shadow .3s ease}
-/* Thinking is still listening: the panel is hearing the room and
-   working out what to say. It looks the same, and only turns over
-   rather than breathing, so the change is not something to be read. */
+
 .voice-overlay[data-state="thinking"] .voice-overlay__core{background:radial-gradient(circle at 35% 30%,#b9f4de,var(--accent) 55%,#4fbf9a);box-shadow:0 0 44px rgba(143,227,194,.45)}
 .voice-overlay[data-state="speaking"] .voice-overlay__core{background:radial-gradient(circle at 35% 30%,#d7c6ff,#a98cf0 55%,#7a5ec4);box-shadow:0 0 44px rgba(169,140,240,.42)}
 .voice-overlay[data-state="thinking"] .voice-overlay__ring{border-color:rgba(143,227,194,.45);animation:voice-overlay-turn 2.4s linear infinite}
@@ -210,16 +142,9 @@ body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;
 .voice-overlay__state{color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase}
 .voice-overlay[data-state="speaking"] .voice-overlay__state{color:#c9b3ff}
 
-/* The words. What is being heard while it listens and what is being said
-   while it answers. The text does not go away between listening and
-   thinking: the words are carried over, so the screen reads as one
-   conversation rather than three screens. */
 .voice-overlay__text{min-height:1.3em;color:#f2f6fa;font-size:clamp(19px,2.6vw,34px);font-weight:500;line-height:1.35;letter-spacing:-.01em;max-width:100%}
 .voice-overlay__text:empty{display:none}
 
-/* What was heard is above, in the quieter colour, and what is being said
-   is below, in the brighter one. The two are apart so the screen reads
-   as a question and an answer rather than as one block of text. */
 .voice-overlay__text--heard{color:#9fb0c4;font-size:clamp(15px,1.9vw,25px);font-weight:500}
 .voice-overlay__text--said{color:#fff}
 
@@ -228,14 +153,8 @@ body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;
 .host-identity>strong{color:var(--ink);font-size:17px;overflow-wrap:anywhere}
 .host-identity>small{color:var(--muted);font-size:12px}
 
-/* The overlay is swiped away in any direction. It follows the finger and
-   fades as it goes, so the gesture reads as the gesture rather than as a
-   button press. */
 .voice-overlay.is-dismissing{transition:opacity .2s ease,transform .2s ease}
 
-/* Which music the panel is showing. The music server's is the default
-   because it is the one that knows what it is playing, and the panel's
-   own music is a tap away. */
 .media-panel__sources{grid-column:1 / -1;display:flex;gap:6px}
 .media-source{flex:1;padding:6px 8px;border:0;border-radius:9px;background:rgba(255,255,255,.05);color:#8d99a8;font:600 10px 'DM Sans',sans-serif;letter-spacing:.02em;cursor:pointer;transition:background .15s ease,color .15s ease}
 .media-source:hover{background:rgba(255,255,255,.1);color:#d5dce5}
@@ -243,7 +162,6 @@ body.screen-off{pointer-events:auto}.side-panel{position:absolute;right:0;top:0;
 .media-source:disabled{opacity:.35;cursor:default}
 .media-source:disabled:hover{background:rgba(255,255,255,.05);color:#8d99a8}
 
-/* Home display refresh: quiet surfaces, warm accents, and touch-first sizing. */
 :root{
   color-scheme:dark;
   font-family:system-ui,-apple-system,"Segoe UI",sans-serif;

@@ -18,15 +18,14 @@ func TestTheMediaPlayerIsListed(t *testing.T) {
 	if !ok {
 		t.Fatalf("the speaker's listing was a %T", message.Body)
 	}
-	// The name is empty on purpose: Home Assistant composes the device
-	// name and the entity name itself, so a name here is rendered twice.
+
 	if body.GetName() != "" {
 		t.Errorf("the speaker's name was %q, want empty", body.GetName())
 	}
 	if body.GetKey() != 7 {
 		t.Errorf("the speaker's key was %d, want 7", body.GetKey())
 	}
-	// The formats are what Home Assistant converts the audio to.
+
 	if len(body.GetSupportedFormats()) != 2 {
 		t.Fatalf("the speaker offered %d formats, want 2", len(body.GetSupportedFormats()))
 	}
@@ -76,12 +75,6 @@ func TestAMediaPlayerCommandSetsTheVolume(t *testing.T) {
 	}
 }
 
-// The mute is handed on, and the player does not say it is muted.
-//
-// There is one mute on this device and it is the microphone's, so the
-// speaker's mute is not acted on. The player must therefore not claim to
-// be muted either: a player that says it is muted while the music is
-// playing is telling Home Assistant something untrue.
 func TestAMediaPlayerCommandSetsTheMute(t *testing.T) {
 	player := NewMediaPlayer(nil)
 
@@ -127,11 +120,6 @@ func TestAMediaPlayerCommandHandsOnTheURL(t *testing.T) {
 	}
 }
 
-// TestTheSpeakerCanBeBrowsed checks that Home Assistant offers its media
-// browser for the speaker.
-//
-// Without the flag the speaker shows up with no way of choosing anything
-// to play on it: the service works, but there is nothing to pick from.
 func TestTheSpeakerCanBeBrowsed(t *testing.T) {
 	player := NewMediaPlayer(nil)
 	message, err := player.Message(1)
@@ -144,20 +132,12 @@ func TestTheSpeakerCanBeBrowsed(t *testing.T) {
 		t.Fatalf("the speaker's listing was a %T", message.Body)
 	}
 
-	// The value is the one Home Assistant reads. It is the same bit
-	// ESPHome uses, and the two are the same bit.
 	if body.GetFeatureFlags()&(1<<17) == 0 {
 		t.Errorf("the speaker's flags were %d, which do not include browsing",
 			body.GetFeatureFlags())
 	}
 }
 
-// TestTheSpeakerOffersTheFormatsHomeAssistantAsks checks that the
-// announcement format is there.
-//
-// Home Assistant reads the announcement format to know what to convert
-// the audio to, and without it the announcement is sent at whatever rate
-// the source happened to be at.
 func TestTheSpeakerOffersTheFormatsHomeAssistantAsks(t *testing.T) {
 	player := NewMediaPlayer(nil)
 	message, err := player.Message(1)

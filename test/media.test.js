@@ -4,24 +4,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-// The music transport.
-//
-// The panel shows a play button, and the button has to do what it
-// shows: a button that shows the pause sign and sends "play" pauses
-// nothing, and the music keeps going while the panel says it is
-// paused.
-//
-// Pressing play is also not the same as the music starting: the
-// command goes to the server, the server gets the music, and the music
-// starts. That takes a moment, and the button says so while it waits.
-//
-// This is checked by pressing the real buttons and watching what is
-// sent, rather than by looking for a line of code.
-
 const root = path.join(__dirname, "..");
 const renderer = fs.readFileSync(path.join(root, "src", "ui", "renderer.js"), "utf8");
 
-// element is a small piece of the page.
 function element(tag, attrs = {}, children = []) {
   const el = {
     tagName: tag.toUpperCase(),
@@ -81,7 +66,7 @@ function findAll(root, selector) {
 function matches(el, selector) {
   if (selector.startsWith(".")) return el.classList.contains(selector.slice(1));
   if (selector.startsWith("#")) return el.id === selector.slice(1);
-  // An attribute selector, like [data-transport].
+
   const attribute = selector.match(/^\[([\w-]+)(?:="([^"]*)")?\]$/);
   if (attribute) {
     const name = attribute[1].replace(/^data-/, "");
@@ -93,7 +78,6 @@ function matches(el, selector) {
   return el.tagName === selector.toUpperCase();
 }
 
-// The pieces of the page the media panel needs.
 function buildPage() {
   const root = element("div", { id: "root" });
   const mediaPanel = element("section", { id: "media-panel", class: "media-panel" });
@@ -123,12 +107,6 @@ function buildPage() {
   return { root, mediaPanel, previous, play, next, sourceServer, sourceHome, scrubber, artwork, title, artist, elapsed, duration };
 }
 
-// The media part of the script, run on the page above.
-//
-// The script is one file of several hundred lines, and it draws the
-// whole page, so the media part is taken out of it and run on its own.
-// The media part is what decides what the transport buttons say and
-// send, so that is the part that matters.
 function media(page, sent) {
   const start = renderer.indexOf('const mediaPanel = $("#media-panel");');
   const end = renderer.indexOf("const statusLabels = {");
@@ -146,7 +124,7 @@ function media(page, sent) {
       querySelectorAll: (selector) => findAll(page.root, selector),
       addEventListener() {},
     },
-    // The script's own way of finding a thing on the page.
+
     $: (selector) => find(page.root, selector),
     setInterval() { return 0; },
     setTimeout(fn, ms) { timers.push(fn); return timers.length; },
@@ -160,13 +138,11 @@ function media(page, sent) {
   return { sandbox, timers };
 }
 
-// press clicks a button.
 function press(button) {
   const event = { target: button, preventDefault() {}, stopPropagation() {} };
   for (const fn of button.listeners.click || []) fn(event);
 }
 
-// The state of a music server that is playing something.
 function playingState() {
   return {
     music_title: "Aurora",
@@ -187,8 +163,6 @@ test("the play button pauses what is playing", () => {
 
   sandbox.paintMedia(playingState());
 
-  // The signs are drawings rather than characters: the device's fonts
-  // have no pause sign, so a typed one is a blank box.
   assert.ok(
     page.play.innerHTML.includes("<svg"),
     "the button does not show the pause sign",
@@ -238,7 +212,6 @@ test("the wait ends when the music starts", () => {
   press(page.play);
   assert.ok(page.play.classList.contains("is-loading"), "the button did not start waiting");
 
-  // The music arrives.
   sandbox.paintMedia(playingState());
 
   assert.ok(!page.play.classList.contains("is-loading"), "the button is still waiting");
@@ -254,7 +227,6 @@ test("the wait ends by itself when the music never comes", () => {
   press(page.play);
   assert.ok(page.play.classList.contains("is-loading"), "the button did not start waiting");
 
-  // The timer comes.
   timers[timers.length - 1]();
 
   assert.ok(!page.play.classList.contains("is-loading"), "the button is still waiting for ever");
@@ -266,12 +238,9 @@ test("the wait does not follow the wrong music", () => {
   const sent = [];
   const { sandbox } = media(page, sent);
 
-  // The music server is playing, but the panel's own music is shown.
   sandbox.paintMedia(playingState());
   sandbox.mediaSource = "home";
 
-  // The panel's own music starts on its own. That is not the music the
-  // person asked for, so the wait does not end.
   sandbox.paintMedia({ ...playingState(), media_state: "playing" });
 
   assert.ok(!page.play.classList.contains("is-loading"), "the wait ended on the wrong music");

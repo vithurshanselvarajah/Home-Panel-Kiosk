@@ -10,15 +10,6 @@ import (
 	"time"
 )
 
-// TestHandshakeAgainstAioesphomeapi checks the Noise handshake against
-// the client Home Assistant uses.
-//
-// The peer is a Python program that drives aioesphomeapi's own Noise
-// implementation. A handshake that only works against a hand-written
-// test would not work against Home Assistant, and the handshake is the
-// one thing that has to be exactly right.
-//
-// The peer is skipped when Python or aioesphomeapi is not there.
 func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
@@ -28,7 +19,6 @@ func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 		t.Skip("aioesphomeapi is not installed")
 	}
 
-	// The key is the one the peer is given, so both sides agree.
 	key := base64.StdEncoding.EncodeToString(make([]byte, 32))
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -37,7 +27,6 @@ func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 	}
 	defer listener.Close()
 
-	// The peer's answer comes back on this channel.
 	type result struct {
 		frameType uint32
 		payload   []byte
@@ -63,15 +52,14 @@ func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 			results <- result{err: err}
 			return
 		}
-		// The indicator is read first, because it says which
-		// conversation this is.
+
 		var indicator [1]byte
 		if _, err := io.ReadFull(conn, indicator[:]); err != nil {
 			results <- result{err: err}
 			return
 		}
 		secure.pending = indicator[:]
-		// The server hello comes first, then the handshake.
+
 		if err := secure.writeServerHello("home-panel", "aabbccddeeff"); err != nil {
 			results <- result{err: err}
 			return
@@ -85,7 +73,7 @@ func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 			results <- result{err: err}
 			return
 		}
-		// Answer with a hello response so the peer can read something.
+
 		if err := secure.writeEncrypted(TypeHelloResponse, nil); err != nil {
 			results <- result{err: err}
 			return
@@ -93,7 +81,6 @@ func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 		results <- result{frameType: frame.Type, payload: frame.Payload}
 	}()
 
-	// The peer connects and sends one frame.
 	peer := exec.Command(python, "-c", handshakePeerSource, key, listener.Addr().String())
 	peer.Stdout = os.Stderr
 	peer.Stderr = os.Stderr
@@ -116,10 +103,6 @@ func TestHandshakeAgainstAioesphomeapi(t *testing.T) {
 	}
 }
 
-// peerSource is the Python peer.
-//
-// It uses aioesphomeapi's own Noise implementation, so the handshake is
-// checked against the same code Home Assistant runs.
 const handshakePeerSource = `
 import asyncio, base64, struct, sys
 

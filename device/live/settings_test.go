@@ -6,20 +6,6 @@ import (
 	"time"
 )
 
-// The live voice settings.
-//
-// The voice settings are entities, so Home Assistant can read them and
-// change them. The panel's settings are the entities' values, and the
-// entities' values are what the panel is really using.
-//
-// The round trip is the whole of it: a value is changed in Home
-// Assistant, and the device says it is using the new one.
-
-// TestTheVoiceSettingsRoundTrip checks that the voice settings can be
-// changed from Home Assistant and are read back.
-//
-// The ducking is the one that matters most: it was set to minus twenty
-// decibels and the music did not get any quieter.
 func TestTheVoiceSettingsRoundTrip(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
@@ -28,11 +14,6 @@ func TestTheVoiceSettingsRoundTrip(t *testing.T) {
 		return s.Connection == "connected"
 	})
 
-	// The entities are there, and they are the panel's.
-	//
-	// There may be more than one panel in Home Assistant — a device that
-	// was here before and one that is here now — so the entities that
-	// are available are the ones to use.
 	entities := haEntities(t, "home_panel")
 	ducking := ""
 	for name, state := range entities {
@@ -45,12 +26,6 @@ func TestTheVoiceSettingsRoundTrip(t *testing.T) {
 	}
 	t.Logf("the ducking entity is %s", ducking)
 
-	// The ducking is changed, and the device says it is using the new
-	// value.
-	//
-	// The value is read back from Home Assistant, because that is where
-	// it was set: the entity is the panel's setting, and the panel
-	// reports what it is using by putting it there.
 	const want = -20.0
 	setEntity(t, ducking, want)
 
@@ -65,10 +40,9 @@ func TestTheVoiceSettingsRoundTrip(t *testing.T) {
 	t.Errorf("the ducking was not changed: %v", haEntities(t, "home_panel")[ducking])
 }
 
-// setEntity changes an entity's value from Home Assistant.
 func setEntity(t *testing.T, entity string, value any) {
 	t.Helper()
-	// The domain is in the entity's name.
+
 	domain := "switch"
 	if strings.HasPrefix(entity, "number.") {
 		domain = "number"

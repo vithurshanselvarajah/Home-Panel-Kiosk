@@ -3,20 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- The album art comes from the music server, which is somewhere else
-         on the network, so images are allowed from anywhere. Nothing else
-         is: the scripts and the styles are the panel's own, and the only
-         connection is to the development bridge. -->
+
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: http: https:; connect-src 'self' ws://localhost:* ws://127.0.0.1:*;" />
     <title>Home Panel</title>
     <link rel="stylesheet" href="./style.css" />
     <script src="./dev-bridge.js"></script>
   </head>
   <body>
-    <!-- The volume popup. It comes down from the top when the level changes,
-         the way a phone does it, and goes away again on its own. It is here
-         because the level is changed with the buttons on the unit, and a
-         person holding the device cannot see the drawer. -->
+
     <div id="volume-popup" class="volume-popup" role="status" aria-live="polite" hidden>
       <div class="volume-popup__bar">
         <svg class="volume-popup__icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -27,9 +21,7 @@
         <span id="volume-popup-value" class="volume-popup__value">0</span>
       </div>
     </div>
-    <!-- The mute indicator. The mute is the hardware latch's, and the button
-         on top of the unit is the only thing that moves it, so this says
-         where the latch is rather than changing it. -->
+
     <div id="mute-indicator" class="mute-indicator" role="status" aria-live="polite" hidden>
       <svg class="mute-indicator__icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z" fill="currentColor" />
@@ -46,8 +38,7 @@
     </main>
     <aside id="side-panel" class="side-panel" aria-hidden="true">
       <header class="drawer-heading"><div><h2>Quick controls</h2></div></header>
-      <!-- Brightness and volume. The two things a person reaches for most
-           often, so they are at the top rather than in the settings. -->
+
       <section class="quick-controls" aria-label="Display and sound">
         <div class="quick-control" id="brightness-control" hidden>
           <div class="quick-control__head">
@@ -55,10 +46,7 @@
             <span class="quick-control__label">Brightness</span>
             <span class="quick-control__value" id="brightness-value">—</span>
           </div>
-          <!-- The lowest is 1%, not 0%: a brightness of zero switches the
-               panel's backlight PWM off, and the panel does not follow the
-               levels written to it after that, so the brightness control
-               stops working. The screen's own off is a separate button. -->
+
           <input class="slider" id="brightness-slider" type="range" min="1" max="100" step="1" value="50" aria-label="Brightness" />
         </div>
         <div class="quick-control" id="volume-control" hidden>
@@ -70,13 +58,9 @@
           <input class="slider" id="volume-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Volume" />
         </div>
       </section>
-      <!-- The music. It is here rather than in the settings because it is
-           what the drawer is for: the thing that is playing, and the
-           buttons for it. -->
+
       <section class="media-panel" id="media-panel" aria-label="Now playing" hidden>
-        <!-- Which music is shown. The music server's takes priority,
-             because it is the one that knows what it is playing, and
-             the panel's own music is one tap away. -->
+
         <div class="media-panel__sources" id="media-sources" role="group" aria-label="Music source">
           <button class="media-source is-selected" id="media-source-server" data-source="server">Music server</button>
           <button class="media-source" id="media-source-home" data-source="home">Home Assistant</button>
@@ -107,9 +91,7 @@
         <button class="drawer-button" id="display-mode-button"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg></span><span id="display-mode-label" class="button-label">Window mode</span></button>
         <button class="drawer-button drawer-button--exit" id="exit-button"><span class="drawer-button__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /><path d="M7 6.5a7 7 0 1 0 10 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></span>Exit</button>
       </div>
-      <!-- The status is at the bottom of the drawer because it is the
-           thing that is looked at least: it says whether the panel is
-           working, and it is not something that is pressed. -->
+
       <section class="service-status" aria-label="Service status">
         <div class="service-row"><i class="service-led" data-service="control"></i><span>ESPHome</span><b id="control-state">Checking</b></div>
         <div class="service-row"><i class="service-led" data-service="immich"></i><span>Immich Kiosk</span><b id="immich-state">Checking</b></div>
@@ -121,10 +103,7 @@
       </footer>
     </aside>
     <section id="keyboard" class="keyboard" aria-label="Touch keyboard" hidden></section>
-    <!-- The wake word overlay. It covers the screen while the assistant is
-         working, in the way a smart display does, and it is where the
-         words are shown: what is being heard while it listens and what
-         is being said while it answers. -->
+
     <div id="voice-overlay" class="voice-overlay" hidden>
       <div class="voice-overlay__inner">
         <div class="voice-overlay__orb" id="voice-overlay-orb" aria-hidden="true">
@@ -132,9 +111,9 @@
           <div class="voice-overlay__core"></div>
         </div>
         <div class="voice-overlay__state" id="voice-overlay-state">Listening</div>
-        <!-- What was heard, above. -->
+
         <div class="voice-overlay__text voice-overlay__text--heard" id="voice-overlay-heard" aria-live="polite"></div>
-        <!-- What is being said, below. -->
+
         <div class="voice-overlay__text voice-overlay__text--said" id="voice-overlay-said" aria-live="polite"></div>
       </div>
     </div>

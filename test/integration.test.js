@@ -114,7 +114,7 @@ test("re-probe of unknown URL returns offline", async () => {
 });
 
 test("keyboard state machine: tapping editable field while keyboard is hidden re-shows it", async () => {
-  // Simulates the remote-preload's checkFocus + main's setKeyboardVisible logic.
+
   let focusedEditable = false;
   let keyboardVisible = false;
   let ipcCalls = 0;
@@ -132,20 +132,14 @@ test("keyboard state machine: tapping editable field while keyboard is hidden re
     keyboardVisible = next;
   }
 
-  function simulateKeyEvent() { /* no-op for this test */ }
+  function simulateKeyEvent() {  }
 
-  // Step 1: User taps editable field A → keyboard shows
   setKeyboardVisible(checkFocus("editable"));
   assert.equal(keyboardVisible, true);
 
-  // Step 2: User taps X button on keyboard → keyboard hidden, but field A still has focus
-  // (no focus event fires in the dashboard because the click is on the overlay)
   setKeyboardVisible(false);
   assert.equal(keyboardVisible, false);
 
-  // Step 3: User taps another editable field B → focus moves from A to B
-  // Both are editable, but the OLD code would dedup and not send IPC.
-  // The FIX: always send IPC so main knows.
   ipcCalls = 0;
   setKeyboardVisible(checkFocus("editable"));
   assert.equal(ipcCalls, 1, "fix: IPC must fire on every focus change");
@@ -185,19 +179,15 @@ test("keyboard is never shown while in slideshow mode", () => {
     keyboardVisible = next;
   }
 
-  // Step 1: User is on dashboard, taps editable field
   setKeyboardVisible(true);
   assert.equal(keyboardVisible, true);
 
-  // Step 2: User switches to slideshow
   mode = "slideshow";
   setKeyboardVisible(false);
 
-  // Step 3: focus event fires while in slideshow — must NOT show keyboard
   setKeyboardVisible(true);
   assert.equal(keyboardVisible, false, "keyboard must not appear in slideshow");
 
-  // Step 4: User switches back to dashboard
   mode = "dashboard";
   setKeyboardVisible(true);
   assert.equal(keyboardVisible, true, "keyboard returns when dashboard is active");

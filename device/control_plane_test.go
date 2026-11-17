@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// TestControlPlaneStarts checks that the control plane comes up: the
-// API socket, the announcement, and the control socket.
 func TestControlPlaneStarts(t *testing.T) {
 	if testing.Short() {
 		t.Skip("the control plane opens sockets")
@@ -27,14 +25,13 @@ func TestControlPlaneStarts(t *testing.T) {
 	if plane.server == nil {
 		t.Fatal("the control socket was not opened")
 	}
-	// The socket is there and can be connected to.
+
 	conn, err := netDial(socket)
 	if err != nil {
 		t.Fatalf("the control socket could not be reached: %v", err)
 	}
 	conn.Close()
 
-	// The panel's entities are registered.
 	if plane.api.Registry() == nil {
 		t.Fatal("there is no registry")
 	}
@@ -44,15 +41,6 @@ func TestControlPlaneStarts(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
-// TestPanelAddressesAreOnTheNetwork checks that the address the panel
-// is announced at is one on the network.
-//
-// The panel is announced on one interface, and it has to be the one
-// that reaches the outside world. A machine has more interfaces than
-// that: a bridge for each container network, and sometimes a tunnel.
-// Home Assistant keeps the device under the address it was given, so
-// an address on one of the others is an address it will keep failing
-// on.
 func TestPanelAddressesAreOnTheNetwork(t *testing.T) {
 	addresses := panelAddresses()
 	if len(addresses) == 0 {
@@ -67,8 +55,7 @@ func TestPanelAddressesAreOnTheNetwork(t *testing.T) {
 			t.Errorf("the link-local address %s was chosen", address)
 		}
 	}
-	// Every address has to be on the interface that carries the default
-	// route, when there is one.
+
 	if outward == "" {
 		return
 	}
@@ -95,13 +82,6 @@ func TestPanelAddressesAreOnTheNetwork(t *testing.T) {
 	}
 }
 
-// TestPanelMACIsStableAndUnique checks the address that identifies the
-// panel.
-//
-// Home Assistant keeps the device under this address, so it has to be
-// the same every time the panel starts. And it has to be different for
-// every panel, because two panels that share it are one panel to Home
-// Assistant and the second one is refused.
 func TestPanelMACIsStableAndUnique(t *testing.T) {
 	first := panelMAC("home-panel")
 	second := panelMAC("home-panel")
@@ -112,8 +92,7 @@ func TestPanelMACIsStableAndUnique(t *testing.T) {
 	if first == other {
 		t.Errorf("two panels have the same address: %s", first)
 	}
-	// The address has to look like one, because Home Assistant treats it
-	// as one.
+
 	parts := strings.Split(first, ":")
 	if len(parts) != 6 {
 		t.Fatalf("the address %q does not look like an address", first)

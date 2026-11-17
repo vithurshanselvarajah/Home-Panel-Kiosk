@@ -1,26 +1,11 @@
-// The control plane.
-//
-// The panel and the device program are two processes. The device
-// program owns the link to Home Assistant, and the panel talks to it
-// over a socket.
-//
-// The socket is in memory, because it carries what is happening right
-// now rather than anything that is worth keeping. The panel is a
-// display: it redraws when it is told something changed, and a socket
-// tells it the moment it changes rather than when it happens to look.
+
 
 const net = require("node:net");
 const fs = require("node:fs");
 const path = require("node:path");
 
-// How long the connection is given before it is tried again.
 const RETRY_INTERVAL_MS = 2000;
 
-// The state the panel reports.
-//
-// The panel is the thing being displayed, so it is the one that knows
-// what it is doing. The device program turns this into the entities
-// Home Assistant sees.
 const DEFAULT_STATE = {
   mode: "dashboard",
   displayIsOff: false,
@@ -31,9 +16,6 @@ const DEFAULT_STATE = {
   volume: 60,
 };
 
-/**
- * ControlClient talks to the device program over the control socket.
- */
 class ControlClient {
   constructor({ socket, onState, onCommand, onStatus, onLink, onLog, onConnect }) {
     this.socket = socket;
@@ -52,13 +34,6 @@ class ControlClient {
     this.pendingSendspinTokens = new Map();
   }
 
-  /**
-   * Starts the connection.
-   *
-   * The socket may not be there yet: the device program makes it when
-   * it starts, and the two are started together. So the connection is
-   * tried again until it works.
-   */
   start() {
     if (!this.socket) {
       this.onLog("the control socket has no name");
@@ -69,9 +44,6 @@ class ControlClient {
     return true;
   }
 
-  /**
-   * Connects to the socket, if it is not connected already.
-   */
   connect() {
     if (this.connection) return;
     try {
@@ -84,16 +56,7 @@ class ControlClient {
       this.connected = true;
       this.onStatus("online");
       this.onLog("the device program was reached");
-      // The state is sent as soon as the connection is there.
-      //
-      // The state is sent when it changes, and the connection is made
-      // after the first state has been sent — so without this the device
-      // program never hears what the panel is doing until something
-      // else changes.
-      //
-      // The owner is asked for it rather than the cached copy being
-      // sent, because the cached copy is what was last sent and the
-      // panel's own state is what is current.
+
       if (this.onConnect) this.onConnect();
     });
     this.connection.on("data", (chunk) => this.receive(chunk));
@@ -104,20 +67,13 @@ class ControlClient {
       this.onStatus("offline");
     });
     this.connection.on("error", (error) => {
-      // A socket that is not there yet is expected, so it is not
-      // reported as a failure. The next try picks it up.
+
       this.onStatus("offline");
       this.connection = null;
       this.rejectPendingSendspinTokens(error);
     });
   }
 
-  /**
-   * Reads what the device program sent.
-   *
-   * The messages are newline separated JSON. They are the commands
-   * Home Assistant asked for.
-   */
   receive(chunk) {
     this.buffer += chunk.toString("utf8");
     let index;
@@ -131,8 +87,7 @@ class ControlClient {
       } catch {
         continue;
       }
-      // The link message says whether Home Assistant is talking to the
-      // device program. The rest are commands.
+
       if (parsed && parsed.action === "link") {
         this.onLink(Boolean(parsed.connected));
         continue;
@@ -151,17 +106,6 @@ class ControlClient {
     }
   }
 
-  /**
-   * Sends the panel's state to the device program.
-   *
-   * The state goes over as one message. It is sent when it changes and
-   * not on a timer, because the device program turns it into the
-   * entities Home Assistant sees and there is no reason to publish a
-   * state that has not changed.
-   *
-   * @param {object} state the state of the panel
-   * @returns {boolean} whether it was sent
-   */
   sendState(state) {
     if (!this.connection || !this.connected) return false;
     this.state = { ...DEFAULT_STATE, ...state };
@@ -212,16 +156,6 @@ class ControlClient {
     this.pendingSendspinTokens.clear();
   }
 
-  /**
-   * Asks the device program to drive the music transport.
-   *
-   * The transport belongs to the music server and the panel has the
-   * buttons, so the request goes over the socket and the device program
-   * passes it on.
-   *
-   * @param {object} command the command
-   * @returns {boolean} whether it was sent
-   */
   sendTransport(command) {
     if (!this.connection || !this.connected) return false;
     try {
@@ -233,15 +167,6 @@ class ControlClient {
     }
   }
 
-  /**
-   * Asks the device program for a volume.
-   *
-   * The level is the device program's, because it applies the level to
-   * everything it plays. The panel is a control surface for it.
-   *
-   * @param {number} percent the level, 0 to 100
-   * @returns {boolean} whether the request was sent
-   */
   sendVolume(percent) {
     if (!this.connection || !this.connected) return false;
     try {
@@ -254,9 +179,6 @@ class ControlClient {
     }
   }
 
-  /**
-   * Stops the connection.
-   */
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
@@ -268,25 +190,15 @@ class ControlClient {
     if (this.connection) {
       try {
         this.connection.destroy();
-      } catch { /* it has already gone */ }
+      } catch {  }
       this.connection = null;
     }
     this.connected = false;
   }
 }
 
-/**
- * Finds the control socket.
- *
- * The socket is in the runtime directory, which is in memory. The
- * application and the device program are told about it through
- * RUNTIME_DIRECTORY, so the two cannot disagree about where it is.
- *
- * @param {string} runtimeDirectory the directory the runtime lives in
- * @returns {string|null} the path to the socket, or null when there is none
- */
 function findControlSocket(runtimeDirectory) {
-  // The socket is in the device's own directory, beside the live state.
+
   const base = runtimeDirectory || "/dev/shm/homepanel";
   const candidates = [
     path.join(base, "control.sock"),
@@ -296,10 +208,9 @@ function findControlSocket(runtimeDirectory) {
     try {
       fs.accessSync(candidate, fs.constants.F_OK);
       return candidate;
-    } catch { /* try the next one */ }
+    } catch {  }
   }
-  // The socket may not be there yet, so the first candidate is used
-  // anyway: the connection is retried until it appears.
+
   return candidates[0];
 }
 

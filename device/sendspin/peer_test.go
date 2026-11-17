@@ -6,23 +6,8 @@ import (
 	"strings"
 )
 
-// errSkipPeer says the python peer could not be run.
-//
-// The peer needs python3 and aiosendspin. Neither is needed to build the
-// device, so the tests that use the peer are skipped when it is not
-// there.
 var errSkipPeer = errors.New("the python peer is not available")
 
-// runPeer runs the python peer and gives back what it printed.
-//
-// The peer drives aiosendspin, the library Music Assistant speaks the
-// protocol with. A peer written for the test would only prove that the
-// test agrees with itself.
-//
-// The client id is the panel's own identity, and the peer is told it so
-// the server will take an unpaired session: a server that has not been
-// told to trust a client will not play to it, and the test would then be
-// about pairing rather than about the metadata.
 func runPeer(mode, address, clientID string) ([]string, error) {
 	cmd, err := peerCommand(mode, address, clientID)
 	if err != nil {
@@ -35,10 +20,6 @@ func runPeer(mode, address, clientID string) ([]string, error) {
 	return splitLines(string(out)), nil
 }
 
-// startPeer runs the python peer in the background.
-//
-// It is used when the panel has to be watched while the peer is still
-// running: the metadata is only there for as long as the music is.
 func startPeer(mode, address, clientID string) (*exec.Cmd, error) {
 	cmd, err := peerCommand(mode, address, clientID)
 	if err != nil {
@@ -50,10 +31,6 @@ func startPeer(mode, address, clientID string) (*exec.Cmd, error) {
 	return cmd, nil
 }
 
-// peerCommand is the command that runs the peer.
-//
-// It is errSkipPeer when the python or the library is not there, because
-// neither is needed to build the device.
 func peerCommand(mode, address, clientID string) (*exec.Cmd, error) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
@@ -65,7 +42,6 @@ func peerCommand(mode, address, clientID string) (*exec.Cmd, error) {
 	return exec.Command(python, "-c", sendspinPeerSource, mode, address, clientID), nil
 }
 
-// peerError turns the peer's failure into something worth reading.
 func peerError(err error) error {
 	if err == nil {
 		return nil
@@ -76,7 +52,6 @@ func peerError(err error) error {
 	return err
 }
 
-// splitLines turns the peer's output into a list.
 func splitLines(text string) []string {
 	var out []string
 	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
@@ -88,10 +63,6 @@ func splitLines(text string) []string {
 	return out
 }
 
-// sendspinPeerSource is the python peer.
-//
-// It uses aiosendspin's own server, so the handshake, the roles and the
-// messages are all the ones Music Assistant uses.
 const sendspinPeerSource = `
 import asyncio, sys, time
 

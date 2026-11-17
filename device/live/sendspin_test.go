@@ -9,25 +9,6 @@ import (
 	"time"
 )
 
-// The live sendspin player.
-//
-// The panel is a music player to a music server: the server finds it on
-// the network, pairs with it, and plays music through it.
-//
-// The pairing is the interesting part. Home Assistant has to know the
-// player's identity and has to give the music server the token the
-// player hands out, and the player has to be announced on the network
-// under a name of its own.
-//
-// These tests check the two halves of that: that the device says who it
-// is, and that Home Assistant has heard.
-
-// TestTheDeviceIsASendspinPlayer checks that the device says it is a
-// music player.
-//
-// The identity is in the device's capabilities, and Home Assistant
-// reads it from there. A device that says nothing is a device a music
-// server never pairs with.
 func TestTheDeviceIsASendspinPlayer(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
@@ -36,11 +17,6 @@ func TestTheDeviceIsASendspinPlayer(t *testing.T) {
 		return s.Connection == "connected"
 	})
 
-	// The pairing token is asked for over the connection.
-	//
-	// It is the thing a music server pairs with, and the device says it
-	// hands out one. A device that says nothing is a device a music
-	// server never pairs with.
 	token := devicePairingToken(t, d)
 	if token == "" {
 		t.Error("the device does not hand out a pairing token")
@@ -48,12 +24,6 @@ func TestTheDeviceIsASendspinPlayer(t *testing.T) {
 	t.Logf("the device hands out a pairing token")
 }
 
-// TestHomeAssistantKnowsThePlayer checks that Home Assistant has the
-// player's identity.
-//
-// Home Assistant passes it to the music server, which pairs with the
-// player using the token the device hands out. Without it there is
-// nothing to pair with.
 func TestHomeAssistantKnowsThePlayer(t *testing.T) {
 	skipUnlessLive(t, "Home Assistant", haURL(), haToken())
 
@@ -67,7 +37,6 @@ func TestHomeAssistantKnowsThePlayer(t *testing.T) {
 		t.Fatal("the device does not say what its player is called")
 	}
 
-	// The clients Home Assistant knows about.
 	ids := homeAssistantSendspinClients(t)
 	t.Logf("Home Assistant knows %d sendspin clients: %v", len(ids), ids)
 	for _, id := range ids {
@@ -78,10 +47,6 @@ func TestHomeAssistantKnowsThePlayer(t *testing.T) {
 	t.Errorf("Home Assistant does not know the panel's player %q", clientID)
 }
 
-// deviceSendspinClientID asks the device what its player is called.
-//
-// The question is asked over the Home Assistant connection, so it is the
-// same answer Home Assistant gets.
 func deviceSendspinClientID(t *testing.T, d *device) string {
 	t.Helper()
 	lines, err := d.peer("capabilities", "")
@@ -96,10 +61,6 @@ func deviceSendspinClientID(t *testing.T, d *device) string {
 	return ""
 }
 
-// devicePairingToken asks the device for the token a music server pairs
-// with.
-//
-// It is the same question Home Assistant asks.
 func devicePairingToken(t *testing.T, d *device) string {
 	t.Helper()
 	lines, err := d.peer("pairing_token", "")
@@ -114,12 +75,6 @@ func devicePairingToken(t *testing.T, d *device) string {
 	return ""
 }
 
-// homeAssistantSendspinClients gives back the players Home Assistant
-// knows about.
-//
-// It is asked over the websocket, because that is where Home Assistant
-// says it: the music server follows the list, so that a player it has
-// not paired with can be paired with as soon as it appears.
 func homeAssistantSendspinClients(t *testing.T) []string {
 	t.Helper()
 	script := `
@@ -157,6 +112,5 @@ asyncio.run(main())
 	return ids
 }
 
-// The result of a call that is not a map.
 var _ = json.Marshal
 var _ = os.Getenv

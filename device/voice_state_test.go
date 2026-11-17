@@ -6,27 +6,6 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/esphome"
 )
 
-// The wake word's state is published to Home Assistant.
-//
-// The wake word is one switch, and it is the one Home Assistant shows.
-// It has to show what the panel is really doing: a switch that says off
-// while the panel is listening is a switch that lies, and Home Assistant
-// acts on what it is told.
-//
-// It used to show the wrong thing. The audio kept a copy of the answer
-// — whether the wake word is on — and that copy was only written when
-// the wake word was switched. On a panel that was never switched, the
-// copy held the zero value: off. The wake word itself was listening.
-//
-// So changing anything that published the voice settings — the
-// sensitivity, the ducking — published that stale "off", and Home
-// Assistant switched the wake word off to match. A person changing the
-// ducking turned off the wake word.
-//
-// What is published is now read from the wake word itself.
-
-// TestThePublishedWakeWordStateIsTheRealOne checks that the state
-// published is the wake word's own.
 func TestThePublishedWakeWordStateIsTheRealOne(t *testing.T) {
 	wake := &wakeWord{enabled: true}
 	plane := &ControlPlane{audio: &deviceAudio{}, wake: wake}
@@ -41,13 +20,6 @@ func TestThePublishedWakeWordStateIsTheRealOne(t *testing.T) {
 	}
 }
 
-// TestTheWakeWordStateIsPublishedWhenTheVoiceSettingsChange checks that
-// changing a voice setting does not change the wake word's published
-// state.
-//
-// This is the bug: changing the sensitivity or the ducking published
-// the voice settings, and that published the wake word's state, and the
-// state was wrong.
 func TestTheWakeWordStateIsPublishedWhenTheVoiceSettingsChange(t *testing.T) {
 	registry := esphome.NewRegistry()
 	voiceEntities(registry)
@@ -56,7 +28,6 @@ func TestTheWakeWordStateIsPublishedWhenTheVoiceSettingsChange(t *testing.T) {
 	server := &ControlServer{registry: registry}
 	plane := &ControlPlane{server: server, audio: &deviceAudio{}, wake: wake}
 
-	// The state is published as the panel is really doing it.
 	plane.publishVoiceSettings()
 
 	var found bool
@@ -73,8 +44,6 @@ func TestTheWakeWordStateIsPublishedWhenTheVoiceSettingsChange(t *testing.T) {
 		t.Fatal("there is no wake word entity")
 	}
 
-	// Changing the sensitivity publishes the settings again. The wake
-	// word's state must not change with it.
 	plane.setWakeThreshold(0.8)
 	for _, entity := range registry.All() {
 		if entity.ObjectID != "wake_word_enabled" {
@@ -85,7 +54,6 @@ func TestTheWakeWordStateIsPublishedWhenTheVoiceSettingsChange(t *testing.T) {
 		}
 	}
 
-	// And changing the ducking does the same.
 	plane.setDucking(-12)
 	for _, entity := range registry.All() {
 		if entity.ObjectID != "wake_word_enabled" {
@@ -97,12 +65,6 @@ func TestTheWakeWordStateIsPublishedWhenTheVoiceSettingsChange(t *testing.T) {
 	}
 }
 
-// TestTheAudioCopyOfTheWakeWordStateStartsOn checks the copy the audio
-// keeps.
-//
-// It is a copy of the wake word's answer, and it is only written when
-// the wake word is switched. A copy that started off would say the wake
-// word was off on a panel that was listening.
 func TestTheAudioCopyOfTheWakeWordStateStartsOn(t *testing.T) {
 	audio := &deviceAudio{wakeWordEnabled: true}
 	if !audio.wakeEnabled() {
@@ -110,36 +72,24 @@ func TestTheAudioCopyOfTheWakeWordStateStartsOn(t *testing.T) {
 	}
 }
 
-// TestTheSpeakerStartsAtHalf checks where the speaker starts.
-//
-// There is no startup volume to choose any more: the speaker keeps the
-// level it was last at. A panel that has never had a level starts here.
 func TestTheSpeakerStartsAtHalf(t *testing.T) {
 	if defaultVolume != 50 {
 		t.Errorf("the speaker starts at %d, it should start at 50", defaultVolume)
 	}
 }
 
-// TestTheLouderSpeechIsPublishedAsItIs checks that the Louder speech
-// switch says what the device is actually doing.
-//
-// The switch is a writeback like the others: Home Assistant sets it, and
-// the published state has to say what was done, or Home Assistant shows a
-// switch that is off while the replies are being compressed.
 func TestTheLouderSpeechIsPublishedAsItIs(t *testing.T) {
 	registry := esphome.NewRegistry()
 	voiceEntities(registry)
 
 	server := &ControlServer{registry: registry}
 	plane := &ControlPlane{server: server, audio: &deviceAudio{}}
-	// The switch is wired the way the program wires it: the control plane
-	// tells the audio, and the audio does it.
+
 	plane.OnLouderSpeech(func(on bool) {
 		plane.audio.setLouderSpeech(on)
 	})
 	plane.SetAudioSettings()
 
-	// The switch is off to begin with.
 	for _, entity := range registry.All() {
 		if entity.ObjectID != "speaker_louder_speech" {
 			continue
@@ -149,7 +99,6 @@ func TestTheLouderSpeechIsPublishedAsItIs(t *testing.T) {
 		}
 	}
 
-	// Turning it on changes the device, and the published state says so.
 	plane.setLouderSpeech(true)
 	if !louderSpeechOn.Load() {
 		t.Error("the Louder speech switch was turned on, and the device did not change")
@@ -164,7 +113,6 @@ func TestTheLouderSpeechIsPublishedAsItIs(t *testing.T) {
 		}
 	}
 
-	// And turning it off again.
 	plane.setLouderSpeech(false)
 	plane.SetAudioSettings()
 	for _, entity := range registry.All() {

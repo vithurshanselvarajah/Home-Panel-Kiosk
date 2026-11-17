@@ -5,53 +5,32 @@ import (
 	"sync"
 )
 
-// A service is something Home Assistant can ask the device to do that
-// takes an argument.
-//
-// A notification and an address are the two: they are commands with
-// something in them, rather than a value that sits there after it has
-// been typed. The protocol has a message for them, and Home Assistant
-// turns each one into a service of its own.
-//
-// The service is named after the device, so two panels on one network
-// do not have a service with the same name.
 type Service struct {
-	// Key identifies the service on the wire.
 	Key uint32
-	// Name is the name of the service, without the device in front of
-	// it.
+
 	Name string
-	// Description says what the service does.
+
 	Description string
-	// Args are the arguments the service takes.
+
 	Args []ServiceArg
-	// onCall is called when the service is called.
+
 	onCall func(args map[string]any) error
-	// mu guards the callback.
+
 	mu sync.Mutex
 }
 
-// ServiceArg is one argument of a service.
-//
-// The kind is what Home Assistant uses to decide what to ask for: a
-// string is a box, a number is a number, and a boolean is a toggle.
 type ServiceArg struct {
-	// Name is the name of the argument.
 	Name string
-	// Kind is what kind of value it takes.
-	//
-	// It is the protocol's own kind, so the argument needs no
-	// translating when it goes over the wire.
+
 	Kind ServiceArgType
-	// Description says what the argument is for.
+
 	Description string
-	// Optional says whether the service can be called without it.
+
 	Optional bool
-	// Default is the value used when it is not given.
+
 	Default string
 }
 
-// ServiceRegistry holds the services the device offers.
 type ServiceRegistry struct {
 	mu       sync.RWMutex
 	services []*Service
@@ -59,12 +38,10 @@ type ServiceRegistry struct {
 	nextKey  uint32
 }
 
-// NewServiceRegistry makes an empty registry.
 func NewServiceRegistry() *ServiceRegistry {
 	return &ServiceRegistry{byKey: map[uint32]*Service{}, nextKey: 1}
 }
 
-// Add registers a service and gives it its key.
 func (r *ServiceRegistry) Add(service *Service) *Service {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -75,7 +52,6 @@ func (r *ServiceRegistry) Add(service *Service) *Service {
 	return service
 }
 
-// All returns the services in the order they were added.
 func (r *ServiceRegistry) All() []*Service {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -84,24 +60,18 @@ func (r *ServiceRegistry) All() []*Service {
 	return out
 }
 
-// ByKey finds a service by its key.
 func (r *ServiceRegistry) ByKey(key uint32) *Service {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.byKey[key]
 }
 
-// OnCall sets what is called when the service is called.
 func (s *Service) OnCall(fn func(args map[string]any) error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onCall = fn
 }
 
-// Call runs the service with the arguments given.
-//
-// The arguments are checked against what the service takes, because an
-// argument of the wrong kind is a mistake and not something to pass on.
 func (s *Service) Call(args map[string]any) error {
 	s.mu.Lock()
 	handler := s.onCall
@@ -116,7 +86,6 @@ func (s *Service) Call(args map[string]any) error {
 	return handler(checked)
 }
 
-// checkArgs checks the arguments and fills in the ones that are missing.
 func (s *Service) checkArgs(args map[string]any) (map[string]any, error) {
 	out := make(map[string]any, len(s.Args))
 	for _, arg := range s.Args {
@@ -139,7 +108,6 @@ func (s *Service) checkArgs(args map[string]any) (map[string]any, error) {
 	return out, nil
 }
 
-// convertArg turns a value into the kind the argument takes.
 func convertArg(arg ServiceArg, value any) (any, error) {
 	switch arg.Kind {
 	case ServiceArgType_SERVICE_ARG_TYPE_STRING:

@@ -1,14 +1,5 @@
-/* The pull out tab.
- *
- * It is a page of its own, in a view of its own, so that it does not sit
- * over the dashboard and swallow the taps meant for it. The page is
- * transparent, so only the tab itself is seen.
- *
- * The view is put on the right hand edge of the screen and the tab hangs
- * over the edge from it. The part of the tab that is off the screen
- * cannot be pressed, so the tab is drawn wide enough that the part that is
- * on the screen is still a finger's width.
- */
+
+
 html, body {
   margin: 0;
   padding: 0;
@@ -26,8 +17,7 @@ body {
   position: absolute;
   top: 50%;
   right: 0;
-  /* The tab is wider than the part of it that is on the screen, so that
-     the visible part is a finger's width. */
+
   width: 46px;
   height: 132px;
   padding: 0;
@@ -57,9 +47,6 @@ body {
   display: none;
 }
 
-/* The grip in the middle of the tab: the lines that say it can be
-   pulled out. It sits towards the inner edge of the tab, so that it is
-   still seen when the tab hangs over the edge of the screen. */
 .drawer-tab__grip {
   position: absolute;
   top: 50%;

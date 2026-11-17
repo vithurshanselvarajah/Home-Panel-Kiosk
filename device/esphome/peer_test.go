@@ -6,18 +6,8 @@ import (
 	"strings"
 )
 
-// errSkipPeer says the python peer could not be run.
-//
-// The peer needs python3 and aioesphomeapi. Neither is needed to build
-// the device, so the tests that use the peer are skipped when it is not
-// there.
 var errSkipPeer = errors.New("the python peer is not available")
 
-// runPeer runs the python peer and gives back what it printed.
-//
-// The peer drives aioesphomeapi, the library Home Assistant speaks the
-// protocol with. A peer written for the test would only prove that the
-// test agrees with itself.
 func runPeer(mode, address, key string) ([]string, error) {
 	python, err := exec.LookPath("python3")
 	if err != nil {
@@ -36,7 +26,6 @@ func runPeer(mode, address, key string) ([]string, error) {
 	return splitLines(string(out)), nil
 }
 
-// splitLines turns the peer's output into a list.
 func splitLines(text string) []string {
 	var out []string
 	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
@@ -48,10 +37,6 @@ func splitLines(text string) []string {
 	return out
 }
 
-// apiPeerSource is the python peer.
-//
-// It uses aioesphomeapi's own client, so the handshake, the framing and
-// the messages are all the ones Home Assistant uses.
 const apiPeerSource = `
 import asyncio, base64, sys, time
 

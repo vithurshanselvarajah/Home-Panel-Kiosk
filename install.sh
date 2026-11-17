@@ -56,12 +56,12 @@ if [[ "${HOMEPANEL_INSTALL_WLOPM:-1}" != "0" ]] && command -v apt-cache >/dev/nu
   fi
 fi
 
-# Resolve the per-user config directory used by the Electron app
+
 APP_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/homepanel-kiosk
 
-# configure_homepanel writes the initial settings.json so the app does not need
-# to be configured from its UI. Values may be supplied via HOMEPANEL_* env vars
-# (useful for automation) or gathered with read -p prompts.
+
+
+
 configure_homepanel() {
   local settings_file="${APP_CONFIG_DIR}/settings.json"
   local interactive=true
@@ -74,7 +74,7 @@ configure_homepanel() {
     return 0
   fi
 
-  # Validate a URL; accept http(s) for the dashboard and the slideshow.
+
   validate_url() {
     local value=$1 label=$2 scheme=$3
     if [[ -z "$value" ]]; then return 0; fi
@@ -83,8 +83,8 @@ configure_homepanel() {
     return 1
   }
 
-  # Pull defaults from any existing settings.json so re-running the installer
-  # pre-fills the prompts with the user's previous values.
+
+
   local existing_dashboard_url="" existing_slideshow_url=""
   local existing_idle_slideshow_min="" existing_slideshow_off_min="" existing_touch_keyboard=""
   local existing_display_mode=""
@@ -116,7 +116,7 @@ PY
   local dashboard_url slideshow_url esphome_key esphome_encryption
   local idle_slideshow_min slideshow_off_min touch_keyboard display_mode
 
-  # Fall back to the documented defaults if no prior value is recorded.
+
   local def_dashboard=${existing_dashboard_url:-http://homeassistant.local:8123}
   local def_slideshow=${existing_slideshow_url:-}
   local def_idle_slideshow_min=${existing_idle_slideshow_min:-5}
@@ -161,9 +161,9 @@ PY
     if [[ -z "$display_mode_input" ]]; then
       display_mode=$def_display_mode
     elif [[ "$display_mode_input" =~ ^[Ww]$ ]]; then display_mode="window"; else display_mode="fullscreen"; fi
-    # The key is not asked for here. It is made by the application when
-    # the connection is turned to encrypted, and it is shown in the
-    # settings to be copied into Home Assistant.
+
+
+
     esphome_key=""
     esphome_encryption="false"
   else
@@ -182,8 +182,8 @@ PY
 
   mkdir -p "$APP_CONFIG_DIR"
 
-  # Build the JSON file using python3 (already a hard dependency for this script)
-  # so values are escaped properly.
+
+
   HOMEPANEL_DASHBOARD_URL="$dashboard_url" \
   HOMEPANEL_SLIDESHOW_URL="$slideshow_url" \
   HOMEPANEL_IDLE_SLIDESHOW_MINUTES="$idle_slideshow_min" \
@@ -228,10 +228,10 @@ PY
 
 configure_homepanel
 
-# The Chromium caches are put in memory by the application itself, when it
-# starts. It knows which directories Chromium makes and it can make the
-# links before Chromium opens them, which an install script cannot: the
-# profile is made by Chromium when the app runs.
+
+
+
+
 
 DISPLAY_VALUE=${DISPLAY:-:0}
 WAYLAND_VALUE=${WAYLAND_DISPLAY:-}
@@ -256,25 +256,25 @@ Wants=network-online.target
 ExecStart=/usr/bin/homepanel-kiosk
 Restart=on-failure
 RestartSec=5
-# A directory in memory for the things that are worth having while the
-# device is running and worth nothing after it: the live state, and
-# Chromium's caches.
-#
-# It is made before the service starts and taken away when it stops, so
-# nothing is left behind and nothing is written to the disk. The
-# application is told where it is through RUNTIME_DIRECTORY.
+
+
+
+
+
+
+
 RuntimeDirectory=homepanel
 RuntimeDirectoryMode=0700
-# The memory the service may use.
-#
-# The app keeps its working state in memory and a device with 2 GB of RAM
-# cannot be given all of it. The ceiling is high enough for the app to
-# work and low enough that the system still has room for everything else.
+
+
+
+
+
 MemoryHigh=600M
 MemoryMax=900M
-# The number of processes the app may have. Chromium makes a process for
-# each kind of work, and a runaway page that keeps making them would
-# otherwise take the device with it.
+
+
+
 TasksMax=256
 UNIT
     printf 'Environment="DISPLAY=%s"\n' "$DISPLAY_VALUE"

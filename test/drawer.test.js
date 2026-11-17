@@ -4,26 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-// The drawer's buttons.
-//
-// The drawer closes when an action is picked, so that the panel does
-// not linger over the view. But the media panel has buttons of its own,
-// and closing the drawer on every one of them makes the music impossible
-// to control.
-//
-// This is checked by running the script and pressing the buttons, rather
-// than by looking for a line of code: a check for a line of code is
-// satisfied by the line being there, whether it works or not.
-
-// The pieces of the page the drawer needs.
 const root = path.join(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "src", "ui", "index.html"), "utf8");
 const renderer = fs.readFileSync(path.join(root, "src", "ui", "renderer.js"), "utf8");
 
-// element is a small piece of the page.
-//
-// It is enough of one for the drawer's handler: it knows its parent,
-// its children and its own attributes.
 function element(tag, attrs = {}, children = []) {
   const el = {
     tagName: tag.toUpperCase(),
@@ -69,7 +53,6 @@ function element(tag, attrs = {}, children = []) {
   return el;
 }
 
-// find finds the first descendant that matches.
 function find(root, selector) {
   for (const child of root.children) {
     if (matches(child, selector)) return child;
@@ -79,7 +62,6 @@ function find(root, selector) {
   return null;
 }
 
-// findAll finds every descendant that matches.
 function findAll(root, selector) {
   const out = [];
   for (const child of root.children) {
@@ -89,22 +71,16 @@ function findAll(root, selector) {
   return out;
 }
 
-// matches says whether an element matches a simple selector.
 function matches(el, selector) {
   if (selector.startsWith(".")) return el.classList.contains(selector.slice(1));
   if (selector.startsWith("#")) return el.id === selector.slice(1);
   return el.tagName === selector.toUpperCase();
 }
 
-// The page, with the drawer's buttons.
-//
-// It is the drawer's own markup, so the test presses the real buttons.
 function page() {
   const drawer = element("aside", { id: "side-panel", class: "side-panel open" });
   const backdrop = element("div", { id: "side-panel-backdrop" });
 
-  // The music panel, with its transport, its source buttons and its
-  // scrubber.
   const mediaPanel = element("section", { id: "media-panel", class: "media-panel" });
   const previous = element("button", { id: "media-previous", dataset: { transport: "previous" } });
   const play = element("button", { id: "media-play", dataset: { transport: "play" } });
@@ -119,14 +95,10 @@ function page() {
   mediaPanel.appendChild(sourceHome);
   mediaPanel.appendChild(scrubber);
 
-  // The quick controls. The microphone's mute button is not here: the
-  // mute is the hardware latch's and only the button on the unit moves
-  // it, so the screen shows it rather than switching it.
   const quick = element("section", { class: "quick-controls" });
   const mute = element("div", { id: "mute-indicator" });
   quick.appendChild(mute);
 
-  // The drawer's own actions.
   const dashboard = element("button", { id: "dashboard-button", dataset: { action: "dashboard" } });
   const settings = element("button", { id: "settings-button" });
   const displayMode = element("button", { id: "display-mode-button" });
@@ -141,10 +113,6 @@ function page() {
   return { drawer, backdrop, mediaPanel, previous, play, next, sourceServer, sourceHome, scrubber, quick, mute, dashboard, settings, displayMode, exit };
 }
 
-// press clicks a button.
-//
-// The click travels up the tree, the way a real click does, so a
-// listener on the drawer hears a press on a button inside it.
 function press(button) {
   const event = { target: button, preventDefault() {}, stopPropagation() {} };
   let node = button;
@@ -154,14 +122,8 @@ function press(button) {
   }
 }
 
-// The drawer handler, run on its own.
-//
-// The script is one file of several hundred lines, and it draws the
-// whole page, so the handler is taken out of it and run on the page
-// above. The handler is the part that decides whether the drawer
-// closes, so that is the part that matters.
 function handler(page) {
-  // The part of the script that closes the drawer.
+
   const source = renderer.slice(
     renderer.indexOf("drawer.addEventListener(\"click\""),
     renderer.indexOf('$("#notice").addEventListener("click"'),
@@ -190,7 +152,7 @@ function handler(page) {
   };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  // The script's own variables, which the handler uses.
+
   sandbox.bindings = {
     drawer: page.drawer,
     drawerBackdrop: page.backdrop,
@@ -238,8 +200,7 @@ test("the music's source buttons leave the drawer open", () => {
 test("the music's scrubber leaves the drawer open", () => {
   const page = build();
   const { closed } = handler(page);
-  // The scrubber is an input, so the drawer's handler does not see it as
-  // a button at all.
+
   for (const fn of page.scrubber.parent.listeners.click || []) {
     fn({ target: page.scrubber, preventDefault() {}, stopPropagation() {} });
   }
@@ -247,8 +208,7 @@ test("the music's scrubber leaves the drawer open", () => {
 });
 
 test("the mute button leaves the drawer open", () => {
-  // The mute is a button inside the drawer, and the drawer used to
-  // close on every button.
+
   const page = build();
   const { closed } = handler(page);
   press(page.mute);
@@ -256,22 +216,19 @@ test("the mute button leaves the drawer open", () => {
 });
 
 test("the settings button closes the drawer", () => {
-  // The settings panel is drawn over the drawer, so the drawer is
-  // closed when it opens.
+
   const page = build();
   const { closed } = handler(page);
   press(page.settings);
   assert.equal(closed.length, 1, "the drawer stayed open when the settings were opened");
 });
 
-// build makes the page the handler runs on.
 function build() {
   const page = element("div");
   Object.assign(page, page0());
   return page;
 }
 
-// page0 makes the drawer's parts.
 function page0() {
   const parts = page();
   const root = element("div");

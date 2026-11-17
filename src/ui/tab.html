@@ -3,16 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- The tab is a page of its own, in a view of its own, so that it
-         does not sit over the dashboard and swallow the taps meant for
-         it. It needs nothing from anywhere: the styles are its own and
-         the script is its own. -->
+
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self';" />
     <title>Drawer tab</title>
     <link rel="stylesheet" href="./tab.css" />
   </head>
   <body>
-    <!-- The tab is a button: a tap on it opens the drawer. -->
+
     <button id="drawer-tab" class="drawer-tab" aria-label="Open quick controls" aria-expanded="false" aria-controls="side-panel">
       <span class="drawer-tab__grip" aria-hidden="true"></span>
     </button>

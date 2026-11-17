@@ -6,12 +6,6 @@ import (
 	"testing"
 )
 
-// TestTheMetadataIsRead checks that the music is read out of the server's
-// state.
-//
-// The server sends what is playing in its state message, and it is the
-// only thing that says what is playing: the audio itself says nothing
-// about it.
 func TestTheMetadataIsRead(t *testing.T) {
 	payload := `{
 		"metadata": {
@@ -75,12 +69,6 @@ func TestTheMetadataIsRead(t *testing.T) {
 	}
 }
 
-// TestTheMusicStoppingIsRead checks that the music stopping is told
-// apart from the state not changing.
-//
-// The server clears the metadata by sending it as null, and null and
-// absent mean different things: one says the music has stopped and the
-// other says nothing has changed.
 func TestTheMusicStoppingIsRead(t *testing.T) {
 	var st serverState
 	if err := json.Unmarshal([]byte(`{"metadata": null}`), &st); err != nil {
@@ -102,11 +90,6 @@ func TestTheMusicStoppingIsRead(t *testing.T) {
 	}
 }
 
-// TestTheTransportIsRead checks that what the transport can do is read.
-//
-// The server says which commands it will take, and the panel only
-// offers those, because a button that does nothing is worse than no
-// button.
 func TestTheTransportIsRead(t *testing.T) {
 	payload := `{
 		"controller": {
@@ -137,10 +120,6 @@ func TestTheTransportIsRead(t *testing.T) {
 	}
 }
 
-// TestTheEmptyMetadataIsTold checks that a metadata with nothing in it is
-// said to be empty.
-//
-// It is what the panel uses to decide whether to show the music at all.
 func TestTheEmptyMetadataIsTold(t *testing.T) {
 	if !(Metadata{}).Empty() {
 		t.Error("a metadata with nothing in it was not said to be empty")
@@ -150,12 +129,6 @@ func TestTheEmptyMetadataIsTold(t *testing.T) {
 	}
 }
 
-// TestTheServerStateIsHandled checks that the server's state reaches the
-// client.
-//
-// The session is driven with the message the server would send, and the
-// client is asked what it thinks is playing. This is the whole path:
-// the server says, the session reads, and the client reports.
 func TestTheServerStateIsHandled(t *testing.T) {
 	client, err := New(Config{
 		StorePath: filepath.Join(t.TempDir(), "sendspin.json"),
@@ -167,11 +140,9 @@ func TestTheServerStateIsHandled(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := &session{c: client, filter: newTimeFilter()}
-	// A server may not send anything before it has activated the
-	// session, so the session is activated before it is driven.
+
 	session.activated = true
 
-	// The server sends what is playing.
 	state, err := json.Marshal(map[string]any{
 		"metadata": map[string]any{
 			"title":        "Suck the Blood",
@@ -206,7 +177,6 @@ func TestTheServerStateIsHandled(t *testing.T) {
 		t.Errorf("the speed was %d, want 1000", got.Speed)
 	}
 
-	// The server says the transport can seek.
 	controller, err := json.Marshal(map[string]any{
 		"controller": map[string]any{
 			"supported_commands": []string{"play", "pause", "next", "previous", "seek"},
@@ -230,7 +200,6 @@ func TestTheServerStateIsHandled(t *testing.T) {
 		t.Errorf("there were %d commands, want 5", len(commands.SupportedCommands))
 	}
 
-	// The music stops, and the server says so with a null.
 	stopped, err := json.Marshal(map[string]any{"metadata": nil})
 	if err != nil {
 		t.Fatal(err)
@@ -243,17 +212,6 @@ func TestTheServerStateIsHandled(t *testing.T) {
 	}
 }
 
-// TestTheBufferIsSmallEnoughToHearTheMusic checks that the buffer is
-// small.
-//
-// The server holds the audio back by the buffer before it sends it, and
-// the player plays the audio when its own time says it is due. So a big
-// buffer is a long silence before the music is heard — and a buffer of
-// two seconds meant the panel played nothing for two seconds and then
-// waited for the buffer to pass.
-//
-// The buffer only has to be big enough that the network cannot outrun
-// the speaker.
 func TestTheBufferIsSmallEnoughToHearTheMusic(t *testing.T) {
 	dir := t.TempDir()
 	client, err := New(Config{StorePath: filepath.Join(dir, "sendspin.json"), Name: "Test Panel"})

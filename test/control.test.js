@@ -6,9 +6,6 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { ControlClient } = require("../src/control");
 
-// The control plane is a socket between the panel and the device
-// program. These tests drive the panel's end of it.
-
 function socketPath() {
   return path.join(os.tmpdir(), `homepanel-control-${process.pid}-${Date.now()}.sock`);
 }
@@ -36,7 +33,7 @@ test("the client sends the state and the peer reads it", async () => {
   assert.equal(sent.action, "state");
   assert.equal(sent.value.displayIsOff, true);
   assert.equal(sent.value.brightness, 42);
-  // The fields that were not given keep their defaults.
+
   assert.equal(sent.value.displayMode, "fullscreen");
 
   client.stop();
@@ -66,7 +63,6 @@ test("the client gives a command to the peer", async () => {
   client.start();
   await waitFor(() => client.connected);
 
-  // The peer sends a command.
   await waitFor(() => peer !== null);
   peer.write(`${JSON.stringify({ action: "screen_off" })}\n`);
   await waitFor(() => commands.length > 0);
@@ -124,7 +120,6 @@ test("the client keeps trying when the socket is not there yet", async () => {
   client.start();
   await waitFor(() => status.includes("offline"));
 
-  // The device program starts and makes the socket.
   const server = net.createServer(() => {});
   await new Promise((resolve) => server.listen(socket, resolve));
 
@@ -178,14 +173,8 @@ test("the client sends the state and the peer sees it as JSON", async () => {
   client.sendState({ mode: "slideshow", displayIsOff: true });
   await waitFor(() => received.length > 0);
 
-  // The client sends the state it knows when the connection is made, so
-  // that the device program hears what the panel is doing even if
-  // nothing changes after the connection. The state that was asked for
-  // comes after it.
   await waitFor(() => received.some((message) => message.value?.mode === "slideshow"));
 
-  // The device program reads the state as one message with the state
-  // under a value.
   for (const message of received) {
     assert.equal(message.action, "state");
   }
@@ -218,9 +207,6 @@ test("the client sends the state when the connection is made", async () => {
   });
   await new Promise((resolve) => server.listen(socket, resolve));
 
-  // The state is known before the connection is made, which is the
-  // ordinary case: the device program makes the socket, and the panel
-  // connects to it.
   const client = new ControlClient({ socket, onConnect: () => client.sendState({ mode: "slideshow" }) });
   client.start();
   await waitFor(() => received.some((message) => message.value?.mode === "slideshow"));
@@ -248,8 +234,6 @@ test("the client asks the peer to drive the transport", async () => {
   client.start();
   await waitFor(() => client.connected);
 
-  // The transport buttons are on the panel and the transport is on the
-  // music server, so the request goes over the socket.
   client.sendTransport({ action: "play" });
   await waitFor(() => received.some((message) => message.action === "transport"));
 

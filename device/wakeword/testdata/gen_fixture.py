@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 gen_fixture.py — regenerate testdata/stream_fixture.bin
 
@@ -43,11 +43,11 @@ with wave.open(WAV,'rb') as w:
     audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
 print("audio", audio.shape, "=", audio.size/16000, "s")
 
-# AudioFeatures seeds its feature ring by running four seconds of RANDOM
-# audio through the embedding model, so without a fixed seed this fixture is
-# not byte-reproducible. The Go test only asserts the classifier input from
-# chunk 16 onward (by which point the ring holds only real audio), but a
-# golden file that changes on every regeneration is a bad artifact.
+
+
+
+
+
 np.random.seed(0)
 af = AudioFeatures(ncpu=1)
 cls = ort.InferenceSession(f"{D}/hey_mycroft_v0.1.onnx", providers=["CPUExecutionProvider"])
@@ -59,7 +59,7 @@ def fnv(a):
         h = ((h ^ b) * 1099511628211) & 0xFFFFFFFFFFFFFFFF
     return h
 
-# monkeypatch to capture what actually gets fed to the embedding model
+
 captured = []
 orig = af.embedding_model_predict
 def spy(x):
@@ -68,7 +68,7 @@ def spy(x):
     return out
 af.embedding_model_predict = spy
 
-# also capture melspec model outputs (what the Go mock will replay)
+
 mel_out = []
 orig_mel = af.melspec_model_predict
 def spy_mel(x):

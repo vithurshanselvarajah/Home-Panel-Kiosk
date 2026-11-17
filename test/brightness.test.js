@@ -4,24 +4,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-// The brightness control.
-//
-// The brightness is the backlight's, and a machine without a backlight
-// has no brightness to change: a laptop with a screen on HDMI, or a
-// desktop with a monitor on the graphics card.
-//
-// So the control is only shown when the system has a backlight. A
-// control that is shown on a machine with no backlight is a control
-// that does nothing when it is dragged.
-//
-// This is checked by running the script and giving it a state, rather
-// than by looking for a line of code: a check for a line of code is
-// satisfied by the line being there, whether it works or not.
-
 const root = path.join(__dirname, "..");
 const renderer = fs.readFileSync(path.join(root, "src", "ui", "renderer.js"), "utf8");
 
-// element is a small piece of the page.
 function element(tag, attrs = {}, children = []) {
   const el = {
     tagName: tag.toUpperCase(),
@@ -92,11 +77,6 @@ function matches(el, selector) {
   return el.tagName === selector.toUpperCase();
 }
 
-// The page, with the brightness control in it.
-//
-// The state handler touches the whole drawer, so the page has all of
-// it. The parts that matter are the brightness control and the volume
-// control, which are shown and hidden with the state.
 function buildPage() {
   const root = element("div", { id: "root" });
   const brightnessControl = element("section", { id: "brightness-control" });
@@ -105,7 +85,7 @@ function buildPage() {
   brightnessControl.appendChild(slider);
   root.appendChild(brightnessControl);
   root.appendChild(volumeControl);
-  // The rest of the drawer, which the state handler touches.
+
   for (const id of [
     "mode-label", "version-label", "dashboard-action-label", "return-home",
     "slideshow-action", "display-mode-label", "control-state", "immich-state",
@@ -123,24 +103,16 @@ function buildPage() {
   return { root, brightnessControl, volumeControl, slider };
 }
 
-// The part of the script that draws the state.
-//
-// The script is one file of several hundred lines and it draws the
-// whole page, so the part that acts on a state is taken out of it and
-// run on the page above.
 function stateHandler(page) {
-  // The handler and the functions it draws with.
+
   const start = renderer.indexOf("function paintBrightness(value) {");
-  // The handler ends with the line that closes it, which is the first
-  // "});" on a line of its own after it starts.
+
   const handlerStart = renderer.indexOf('window.homePanel.onState((state) => {');
   const end = renderer.indexOf("\n});", handlerStart) + "\n});".length;
   const source = renderer.slice(start, end);
 
-  // The handler gives itself to the panel, so the panel's callback is
-  // kept and the test can give it a state.
   let onState = null;
-  // The sliders the paint functions draw with.
+
   const brightnessSlider = find(page.root, "#brightness-slider");
   const volumeSlider = find(page.root, "#volume-slider");
   const sandbox = {
@@ -149,7 +121,7 @@ function stateHandler(page) {
       querySelector: (selector) => find(page.root, selector),
       querySelectorAll: (selector) => findAll(page.root, selector),
       addEventListener() {},
-      // The page's body, whose class says whether the screen is off.
+
       body: { classList: { toggle() {}, contains() { return false; } } },
     },
     $: (selector) => find(page.root, selector),
@@ -157,8 +129,7 @@ function stateHandler(page) {
     setTimeout() { return 0; },
     clearTimeout() {},
     clearInterval() {},
-    // The mute indicator slides in on the next frame, and the popup does
-    // the same, so the frame is asked for.
+
     requestAnimationFrame: (fn) => fn(),
     Date, Math, Number, Boolean, Array, Object,
     console,
@@ -175,7 +146,7 @@ function stateHandler(page) {
     volumePopupFill: find(page.root, "#volume-popup-fill"),
     volumePopupValue: find(page.root, "#volume-popup-value"),
     muteIndicator: find(page.root, "#mute-indicator"),
-    // The slider is drawn by the script's own helper.
+
     paintSlider: (slider, percent) => {
       if (!slider) return;
       slider.value = String(percent);
@@ -212,7 +183,6 @@ function stateHandler(page) {
   return { ...sandbox, onState: (state) => onState(state) };
 }
 
-// The state the panel sends when the system has a backlight.
 function stateWithBrightness() {
   return {
     mode: "dashboard",
@@ -229,9 +199,6 @@ function stateWithBrightness() {
   };
 }
 
-// The state the panel sends when the system has no backlight.
-//
-// The brightness is not a number, because there is nothing to read.
 function stateWithoutBrightness() {
   const state = stateWithBrightness();
   delete state.brightness;
@@ -260,7 +227,6 @@ test("the brightness control goes away when the backlight goes", () => {
   const page = buildPage();
   const sandbox = stateHandler(page);
 
-  // The machine had a backlight and now it does not.
   sandbox.onState(stateWithBrightness());
   assert.equal(page.brightnessControl.hidden, false, "the brightness control was hidden on a machine with a backlight");
 

@@ -4,53 +4,34 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// The voice messages the server handles.
-//
-// The numbers are the ones the upstream protocol assigns. They are part
-// of the wire format and do not change.
 const (
-	// TypeSubscribeVoiceAssistantRequest is home assistant saying it
-	// wants the voice events. It has no reply.
 	TypeSubscribeVoiceAssistantRequest uint32 = 89
-	// TypeVoiceAssistantRequest is the device asking for a turn.
+
 	TypeVoiceAssistantRequest uint32 = 90
-	// TypeVoiceAssistantResponse is home assistant's acknowledgement.
+
 	TypeVoiceAssistantResponse uint32 = 91
-	// TypeVoiceAssistantEventResponse is home assistant's progress.
+
 	TypeVoiceAssistantEventResponse uint32 = 92
-	// TypeVoiceAssistantAnnounceRequest is home assistant asking the
-	// device to speak.
+
 	TypeVoiceAssistantAnnounceRequest uint32 = 119
-	// TypeVoiceAssistantAnnounceFinished is the device saying it has
-	// finished speaking.
+
 	TypeVoiceAssistantAnnounceFinished uint32 = 120
-	// TypeVoiceAssistantConfigurationRequest is home assistant asking
-	// what wake words the device has.
+
 	TypeVoiceAssistantConfigurationRequest uint32 = 121
-	// TypeVoiceAssistantConfigurationResponse is the answer.
+
 	TypeVoiceAssistantConfigurationResponse uint32 = 122
-	// TypeVoiceAssistantSetConfiguration is home assistant switching the
-	// wake word on or off.
+
 	TypeVoiceAssistantSetConfiguration uint32 = 123
-	// TypeVoiceAssistantAudio is the audio, in both directions.
+
 	TypeVoiceAssistantAudio uint32 = 106
-	// TypeVoiceAssistantTimerEventResponse is a timer event.
+
 	TypeVoiceAssistantTimerEventResponse uint32 = 115
 )
 
-// handleVoiceMessage handles the messages of the voice assistant.
-//
-// The messages that start a turn come from the device, so they are sent
-// rather than received. The ones here are the ones home assistant sends.
-//
-// It reports whether the message was handled, so the caller knows whether
-// to pass it on to anything else.
 func (s *Server) handleVoiceMessage(client *Client, messageType uint32, payload []byte) (bool, error) {
 	switch messageType {
 	case TypeSubscribeVoiceAssistantRequest:
-		// Home assistant says it wants the voice events. There is no
-		// reply: the request is one way, and answering it would be a
-		// message home assistant does not expect.
+
 		s.log.Debug("home assistant subscribed to the voice events")
 		return true, nil
 
@@ -75,8 +56,7 @@ func (s *Server) handleVoiceMessage(client *Client, messageType uint32, payload 
 		return true, nil
 
 	case TypeVoiceAssistantConfigurationRequest:
-		// Home assistant asks what wake words the panel has. The answer
-		// is what its picker shows.
+
 		response := &VoiceAssistantConfigurationResponse{
 			AvailableWakeWords: []*VoiceAssistantWakeWord{},
 			ActiveWakeWords:    []string{},
@@ -100,8 +80,7 @@ func (s *Server) handleVoiceMessage(client *Client, messageType uint32, payload 
 		return true, nil
 
 	case TypeVoiceAssistantAudio:
-		// The reply audio. It arrives as a stream of chunks, and the
-		// last one has the end flag set.
+
 		audio := &VoiceAssistantAudio{}
 		if err := proto.Unmarshal(payload, audio); err != nil {
 			return true, err
@@ -110,12 +89,7 @@ func (s *Server) handleVoiceMessage(client *Client, messageType uint32, payload 
 		return true, nil
 
 	case TypeVoiceAssistantResponse:
-		// Home assistant's acknowledgement of the device's request.
-		//
-		// The port in it is only meaningful for the UDP audio path that
-		// real ESP32 firmware uses. This device uses the same connection
-		// for the audio, so the port is not used and the message is
-		// only a note that home assistant accepted the turn.
+
 		response := &VoiceAssistantResponse{}
 		if err := proto.Unmarshal(payload, response); err != nil {
 			return true, err
@@ -127,14 +101,6 @@ func (s *Server) handleVoiceMessage(client *Client, messageType uint32, payload 
 	return false, nil
 }
 
-// pushReplyAudio hands the reply audio to whoever is playing it.
-//
-// The audio arrives in chunks and the chunks are handed on as they arrive,
-// so the reply starts playing before it has all arrived.
-//
-// The end flag is not what ends a reply. Home Assistant sends the audio
-// with the flag clear and says the reply is over with an event, so the
-// flag only ever marks a reply that was cut short.
 func (s *Server) pushReplyAudio(audio *VoiceAssistantAudio) {
 	data := audio.GetData()
 	if len(data) == 0 && !audio.GetEnd() {
@@ -146,15 +112,6 @@ func (s *Server) pushReplyAudio(audio *VoiceAssistantAudio) {
 	}
 }
 
-// sendVoiceRequest starts a turn.
-//
-// The request carries the phrase that fired the wake word. It must not
-// be empty for a wake word turn: home assistant's setup dialog reads it
-// and refuses the run when it is missing.
-//
-// The flags are zero because the wake word has already fired. Home
-// assistant would otherwise run its own wake word detection and wait for
-// a second one.
 func (s *Server) sendVoiceRequest(client *Client, conversationID, phrase string) error {
 	return client.write(TypeVoiceAssistantRequest, &VoiceAssistantRequest{
 		Start:          true,
@@ -164,18 +121,8 @@ func (s *Server) sendVoiceRequest(client *Client, conversationID, phrase string)
 	})
 }
 
-// sendVoiceAudio sends a chunk of microphone audio.
-//
-// The audio is signed 16-bit little-endian mono at 16 kHz, which is what
-// home assistant expects.
 func (s *Server) sendVoiceAudio(client *Client, pcm []byte, end bool) error {
-	// The microphone's audio is the biggest thing on the connection, and
-	// it is the thing that goes wrong quietly: a chunk that is dropped
-	// is a word that is never heard, and nothing says so.
-	//
-	// So the size of every chunk is said at the debug level, and the
-	// first one after a turn starts is said at the info level, because
-	// that is the one that tells whether the question was heard whole.
+
 	if len(pcm) > 0 {
 		client.log("the microphone is going to home assistant", "bytes", len(pcm))
 	}
@@ -185,10 +132,6 @@ func (s *Server) sendVoiceAudio(client *Client, pcm []byte, end bool) error {
 	})
 }
 
-// sendAnnounceFinished says the announcement has finished playing.
-//
-// It tells home assistant that the device is free again, which is what
-// lets the next thing happen without waiting for a timeout.
 func (s *Server) sendAnnounceFinished(client *Client) error {
 	return client.write(TypeVoiceAssistantAnnounceFinished, &VoiceAssistantAnnounceFinished{})
 }
