@@ -645,7 +645,13 @@ func main() {
 			// The music server's music comes first: it has priority,
 			// and it is the music the panel is playing when both
 			// somehow are.
-			if player := speaker_.sendspinPlayer(); player != nil && player.Active() {
+			//
+			// It is the server's own answer that is asked for, and not
+			// whether it is connected: a server that is connected and
+			// paused still has a decoder, and a pause sent to it pauses
+			// nothing. The music Home Assistant is playing then carries
+			// on, and the person pressed pause for nothing.
+			if player := speaker_.sendspinPlayer(); player != nil && player.Streaming() {
 				switch command {
 				case esphome.MediaPlayerCommand_MEDIA_PLAYER_COMMAND_PLAY:
 					player.Transport("play")
@@ -733,24 +739,24 @@ func main() {
 		control.ReplyPlayedOut()
 	}
 
-	// The counters of the last log line, so that the status is only
-	// written down when it has moved on.
-	var lastChunks int
-	var lastSamples int64
+	// When the last log line was written, so that the status is only
+	// written down once a second.
 	var lastLog time.Time
 
 	speaker_.onSendspinStatus = func(status sendspin.Status) {
 		// The player's counters, for the log.
 		//
-		// The status is read many times a second, so it is only written
-		// down when something has moved on or once a minute: a line
-		// every time would bury the journal.
-		if status.Player.Chunks != lastChunks || status.Player.Samples != lastSamples {
-			lastChunks, lastSamples = status.Player.Chunks, status.Player.Samples
-			lastLog = time.Now()
-		} else if time.Since(lastLog) < time.Minute {
+		// The status is read many times a second, so the line is only
+		// written down once a second: a line every time would bury the
+		// journal, and the journal is where the correction says what it
+		// is doing.
+		//
+		// The counters themselves are in the line, so what changed
+		// between two lines is what the change was.
+		if time.Since(lastLog) < time.Second {
 			return
 		}
+		lastLog = time.Now()
 		log.Info("[sendspin] status", "state", status.State, "buffered", status.BufferedMs,
 			"snaps", status.Player.Snaps, "corrections", status.Player.Corrections,
 			"underruns", status.Player.Underruns, "lateDrops", status.Player.LateDrops,
