@@ -129,6 +129,21 @@ type Player struct {
 	// holds pathMu across the codec writes, and on the 1st gen Show 5 those are slow enough that a write
 	// loop waiting on them missed the ring once at every switch. Written under pathMu, with out.
 	outNow atomic.Value
+	// running says whether the write loop is running. Only one may run at a
+	// time: two loops on one player fight over the queues, and the card
+	// gets the audio of both.
+	running atomic.Bool
+	// speakerClaimed says whether this program holds the speaker. It is
+	// here rather than with the caller because the speaker is one for the
+	// whole program: two callers that each thought they held it would
+	// both write to it.
+	speakerClaimed atomic.Bool
+	// releaseMu guards released, the channel that says the claim has been
+	// given back.
+	releaseMu sync.Mutex
+	// released is closed when the claim is given back, so that a caller
+	// waiting for the speaker is woken exactly then.
+	released chan struct{}
 	// draining is a switch to the jack waiting for audio at the old gain to clear (setOutput).
 	draining     bool
 	jack         Output
@@ -428,8 +443,10 @@ func New() *Player {
 }
 
 var (
-	once   sync.Once
-	shared *Player
+	once sync.Once
+	// running says whether the write loop is running.
+	running atomic.Bool
+	shared  *Player
 )
 
 // Get is the speaker. There is one, and everything audible goes through it.
@@ -777,11 +794,18 @@ func applyTo(mixer *alsa.Mixer, seq []kctl) bool {
 }
 
 // Run feeds the stream until ctx is canceled, writing silence when nothing is queued.
+//
+// Only one write loop may run at a time. Two loops on one player fight over
+// the queues, and the card gets the audio of both.
 func (p *Player) Run(ctx context.Context) error {
 	pb, _ := p.device()
 	if pb == nil {
 		return errors.New("speaker: the playback device is not held")
 	}
+	if !p.running.CompareAndSwap(false, true) {
+		return errors.New("speaker: the write loop is already running")
+	}
+	defer p.running.Store(false)
 	buf := make([]byte, period*Channels*Bits/8)
 
 	// The order the vendor HAL uses on a route change: route with the amplifier off, let the
@@ -1383,6 +1407,75 @@ func (p *Player) Tone() asp.Tone {
 	return t
 }
 
+// Claim takes the speaker for a caller.
+//
+// It is one speaker for the whole program, so the claim is here rather
+// than with the caller: two callers that each thought they held it would
+// both write to it. The claim is released when the speaker is closed.
+func (p *Player) Claim() bool {
+	return p.speakerClaimed.CompareAndSwap(false, true)
+}
+
+// Release gives the speaker back.
+//
+// It is used when the claim was taken but the speaker was never opened:
+// a start that failed after the claim was taken would otherwise hold the
+// speaker for ever, and nothing else in the program could ever make a
+// sound.
+func (p *Player) Release() {
+	p.releaseClaim()
+}
+
+// Released is closed when the claim is given back.
+//
+// A caller that could not take the claim waits on this rather than on a
+// guess, so that it is woken exactly when the speaker is free.
+type Released struct{ ch chan struct{} }
+
+// Wait blocks until the speaker is given back, or the context is done.
+func (r *Released) Wait(ctx context.Context) error {
+	select {
+	case <-r.ch:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// WaitForRelease returns a handle that is closed when the claim is
+// released.
+//
+// It is taken while the claim is held, so that a release that happens
+// between the caller's check and its wait is not missed.
+func (p *Player) WaitForRelease() *Released {
+	p.releaseMu.Lock()
+	defer p.releaseMu.Unlock()
+	if !p.speakerClaimed.Load() {
+		// The claim is already gone: the wait must not block.
+		ch := make(chan struct{})
+		close(ch)
+		return &Released{ch: ch}
+	}
+	if p.released == nil {
+		p.released = make(chan struct{})
+	}
+	return &Released{ch: p.released}
+}
+
+// releaseClaim gives the claim back and wakes anybody waiting for it.
+func (p *Player) releaseClaim() {
+	p.releaseMu.Lock()
+	if p.released != nil {
+		close(p.released)
+		p.released = nil
+	}
+	p.releaseMu.Unlock()
+	p.speakerClaimed.Store(false)
+}
+
+// Held says whether this program holds the speaker.
+func (p *Player) Held() bool { return p.speakerClaimed.Load() }
+
 // ASP reports whether the driver tuning is being applied.
 func (p *Player) ASP() bool { return p.on.Load() }
 
@@ -1755,6 +1848,7 @@ func (p *Player) Volume() float32 { return math.Float32frombits(p.volume.Load())
 // Start can take it again, which is how a restart works.
 func (p *Player) Close() error {
 	p.initializeMixer()
+	p.releaseClaim()
 
 	p.devMu.Lock()
 	pb, mixer, hold := p.pb, p.mixer, p.hold
@@ -1862,7 +1956,13 @@ func (p *Player) DrainUnder() {
 
 // initializeMixer keeps vendor amplifier controls off the mainline card.
 func (p *Player) initializeMixer() {
-	if p.mainline {
+	// The board is read under the lock that holds it: the card can be
+	// opened and closed on another goroutine, and reading it while that
+	// happens is a race.
+	p.devMu.Lock()
+	mainline := p.mainline
+	p.devMu.Unlock()
+	if mainline {
 		// TAS5805M index 110 is unity; the existing software volume curve controls loudness.
 		p.apply([]kctl{{name: "Master Playback Volume", level: 110}})
 		return

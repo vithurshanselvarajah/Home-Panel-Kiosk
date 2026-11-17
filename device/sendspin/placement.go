@@ -279,10 +279,9 @@ func (o *placement) openAgain() {
 // write places a decoded chunk at the frame its timestamp asks for.
 func (o *placement) write(at int64, samples []int16) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	if !o.ready {
 		o.dropped++
+		o.mu.Unlock()
 		return
 	}
 
@@ -314,22 +313,22 @@ func (o *placement) write(at int64, samples []int16) {
 		// laid against the card and this chunk is the first of the
 		// stream.
 		o.pending = append(o.pending, heldChunk{at: at, samples: samples})
+		o.mu.Unlock()
 		return
 	}
 	// The chunks that arrived before the speaker started are placed now,
 	// against the anchor that has just been laid.
-	if len(o.pending) > 0 {
-		held := o.pending
-		o.pending = nil
-		o.mu.Unlock()
-		for _, c := range held {
-			o.write(c.at, c.samples)
-		}
-		o.mu.Lock()
-		frame = o.frameFor(at) + o.delay
+	held := o.pending
+	o.pending = nil
+	o.mu.Unlock()
+	for _, c := range held {
+		o.write(c.at, c.samples)
 	}
+	o.mu.Lock()
+	frame = o.frameFor(at) + o.delay
 	if frame > int64(o.played) && frame-int64(o.played) > holdMax {
 		o.dropped++
+		o.mu.Unlock()
 		return
 	}
 
@@ -340,6 +339,7 @@ func (o *placement) write(at int64, samples []int16) {
 	span := int64(len(samples) / outChannels)
 	if frame+span <= int64(o.played) {
 		o.late++
+		o.mu.Unlock()
 		return
 	}
 	if frame < int64(o.played) {
@@ -363,6 +363,7 @@ func (o *placement) write(at int64, samples []int16) {
 		o.pcm = append(o.pcm, make([]int16, need-len(o.pcm))...)
 	}
 	copy(o.pcm[off:], samples)
+	o.mu.Unlock()
 }
 
 // frameFor converts a server timestamp to an output frame. Wants mu.
