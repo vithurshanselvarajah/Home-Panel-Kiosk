@@ -306,7 +306,7 @@ func (d *device) retryUntilConnected() {
 		}
 		// The panel has had a moment and has not connected, so
 		// Home Assistant is probably looking in the wrong place.
-		if !pointed && time.Now().After(d.started.Add(10 * time.Second)) {
+		if !pointed && time.Now().After(d.started.Add(10*time.Second)) {
 			pointed = true
 			pointHomeAssistantHere(d.t)
 		}
@@ -836,8 +836,8 @@ func configEntries(t *testing.T, kind string) []configEntry {
 func reconfigureEsphomeEntry(t *testing.T, entryID, host string, port int) {
 	t.Helper()
 	flow, err := httpPost(haURL()+"/api/config/config_entries/flow", haToken(), map[string]any{
-		"handler":              "esphome",
-		"entry_id":             entryID,
+		"handler":               "esphome",
+		"entry_id":              entryID,
 		"show_advanced_options": true,
 	})
 	if err != nil {

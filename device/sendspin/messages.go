@@ -168,14 +168,26 @@ type streamProgress struct {
 }
 
 type playerState struct {
-	Volume int  `json:"volume"`
-	Muted  bool `json:"muted"`
+	// State says whether the player is in step with the server's clock:
+	// "synchronized", or "error" when it is not.
+	//
+	// The spec makes the timing fields below required, and a server that
+	// sees a player without them treats it as a legacy one and can be set
+	// to refuse it.
+	State  string `json:"state,omitempty"`
+	Volume int    `json:"volume"`
+	Muted  bool   `json:"muted"`
+	// StaticDelayMs is how far behind the server's clock the panel's audio
+	// is played. It was called output_delay_ms before the spec renamed it,
+	// and it is sent under both names: a server ignores a field it does
+	// not know.
+	//
+	// It is zero, and the command to set it is not offered. It is for a
+	// chain beyond the panel's own port, which it does not have; the
+	// panel's own latency is compensated where the audio is placed.
+	StaticDelayMs int `json:"static_delay_ms"`
 	// OutputDelayMs is how far behind the server's clock the panel's
 	// audio is played.
-	//
-	// It was called static_delay_ms, and a server that speaks the
-	// current protocol says a client that uses the old name is not
-	// conforming.
 	OutputDelayMs int `json:"output_delay_ms"`
 	// RequiredLeadMs is how far ahead of the clock the server sends.
 	RequiredLeadMs int `json:"required_lead_time_ms"`
