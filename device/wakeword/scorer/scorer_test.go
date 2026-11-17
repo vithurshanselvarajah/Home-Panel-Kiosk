@@ -23,6 +23,37 @@ type fakeInferer struct {
 	calls     int
 }
 
+// fakeEngine is the fake inferer as an engine, so the scorer can be driven
+// by it: the scorer's behaviour under load is about the scorer's, and none
+// of it needs a model, a runtime, or a device.
+type fakeEngine struct {
+	inf *fakeInferer
+	det *wakeword.Detector
+}
+
+// newFakeEngine makes the engine around a fake inferer. The detector is
+// made once and kept: a fresh one per push would lose the streaming state,
+// which is the thing these tests are about.
+func newFakeEngine(inf *fakeInferer) *fakeEngine {
+	return &fakeEngine{inf: inf, det: wakeword.New(inf)}
+}
+
+func (e *fakeEngine) Push(samples []int16) (float32, bool, error) {
+	if _, err := e.det.Push(samples); err != nil {
+		return 0, false, err
+	}
+	if !e.det.Ready() {
+		return 0, false, nil
+	}
+	score, err := e.det.Score()
+	if err != nil {
+		return 0, false, err
+	}
+	return score, true, nil
+}
+
+func (e *fakeEngine) Reset() { e.det.Reset() }
+
 func (f *fakeInferer) Melspec(samples []float32) ([]float32, int, error) {
 	// Mirror the real model's frame count so the Detector's windowing behaves
 	// as it does in production: ceil(samples/160 - 3).
@@ -100,7 +131,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 func TestPushNeverBlocks(t *testing.T) {
 	inf := &fakeInferer{}
 	inf.set(0, 200*time.Millisecond) // pathologically slow
-	s := NewScorer(inf, 0.5, nil)
+	s := NewScorer(newFakeEngine(inf), 0.5, nil)
 	defer s.Close()
 
 	start := time.Now()
@@ -130,7 +161,7 @@ func TestPushNeverBlocks(t *testing.T) {
 func TestDropsAreCountedNotSilent(t *testing.T) {
 	inf := &fakeInferer{}
 	inf.set(0, 50*time.Millisecond)
-	s := NewScorer(inf, 0.5, nil)
+	s := NewScorer(newFakeEngine(inf), 0.5, nil)
 	defer s.Close()
 
 	const pushed = 40
@@ -158,7 +189,7 @@ func TestCrossingFiresOncePerUtterance(t *testing.T) {
 		crosses []float32
 	)
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(score, _ float32, at time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(score, _ float32, at time.Time) {
 		mu.Lock()
 		crosses = append(crosses, score)
 		mu.Unlock()
@@ -200,7 +231,7 @@ func TestBelowThresholdDoesNotCross(t *testing.T) {
 	var fired int
 	var mu sync.Mutex
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(float32, float32, time.Time) {
 		mu.Lock()
 		fired++
 		mu.Unlock()
@@ -230,7 +261,7 @@ func TestBelowThresholdDoesNotCross(t *testing.T) {
 // survived rather than killing the goroutine.
 func TestInferenceErrorsDoNotStopScoring(t *testing.T) {
 	inf := &fakeInferer{failEmbed: true}
-	s := NewScorer(inf, 0.5, nil)
+	s := NewScorer(newFakeEngine(inf), 0.5, nil)
 	defer s.Close()
 
 	for i := 0; i < 5; i++ {
@@ -260,7 +291,7 @@ func TestInferenceErrorsDoNotStopScoring(t *testing.T) {
 func TestDrainZeroesCounters(t *testing.T) {
 	inf := &fakeInferer{}
 	inf.set(0.3, 0)
-	s := NewScorer(inf, 0.5, nil)
+	s := NewScorer(newFakeEngine(inf), 0.5, nil)
 	defer s.Close()
 
 	pushAll(t, s, wakeword.FeatWindow+1)
@@ -278,7 +309,7 @@ func TestDrainZeroesCounters(t *testing.T) {
 func TestResetClearsDetectorState(t *testing.T) {
 	inf := &fakeInferer{}
 	inf.set(0.1, 0)
-	s := NewScorer(inf, 0.5, nil)
+	s := NewScorer(newFakeEngine(inf), 0.5, nil)
 	defer s.Close()
 
 	pushAll(t, s, wakeword.FeatWindow)
@@ -293,7 +324,7 @@ func TestResetClearsDetectorState(t *testing.T) {
 // TestCloseIsIdempotent — Close runs on config changes and on shutdown, and
 // those can overlap.
 func TestCloseIsIdempotent(t *testing.T) {
-	s := NewScorer(&fakeInferer{}, 0.5, nil)
+	s := NewScorer(newFakeEngine(&fakeInferer{}), 0.5, nil)
 	s.Close()
 	s.Close()
 }
@@ -323,7 +354,7 @@ func TestBargeThresholdAppliesOnlyWhileSpeaking(t *testing.T) {
 	var crosses int
 
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(float32, float32, time.Time) {
 		mu.Lock()
 		crosses++
 		mu.Unlock()
@@ -371,7 +402,7 @@ func TestBargeThresholdIgnoredWhenUnset(t *testing.T) {
 	inf := &fakeInferer{}
 	var fired int
 	var mu sync.Mutex
-	s := NewScorer(inf, 0.5, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(float32, float32, time.Time) {
 		mu.Lock()
 		fired++
 		mu.Unlock()
@@ -395,7 +426,7 @@ func TestBargeThresholdNeverRaisesTheBar(t *testing.T) {
 	inf := &fakeInferer{}
 	var fired int
 	var mu sync.Mutex
-	s := NewScorer(inf, 0.3, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.3, func(float32, float32, time.Time) {
 		mu.Lock()
 		fired++
 		mu.Unlock()
@@ -415,7 +446,7 @@ func TestDrainReportsAndResetsTheTimingMaxima(t *testing.T) {
 	// These exist to explain drops, which is a question about the TAIL — so
 	// they must be maxima that survive being surrounded by fast frames, and
 	// must reset per window, or one early stall would haunt every later report.
-	s := NewScorer(&fakeInferer{}, 0.5, nil)
+	s := NewScorer(newFakeEngine(&fakeInferer{}), 0.5, nil)
 	defer s.Close()
 
 	s.maxInferMs.Store(37)
@@ -440,7 +471,7 @@ func TestTheFirstFrameRecordsNoProducerGap(t *testing.T) {
 	// A zero-valued lastPush would make the first frame look like a gap of
 	// however long the process had been running — an enormous MaxGapMs on
 	// every startup, pointing at a producer stall that never happened.
-	s := NewScorer(&fakeInferer{}, 0.5, nil)
+	s := NewScorer(newFakeEngine(&fakeInferer{}), 0.5, nil)
 	defer s.Close()
 
 	s.Push(make([]int16, 1280))
@@ -452,7 +483,7 @@ func TestTheFirstFrameRecordsNoProducerGap(t *testing.T) {
 func TestTheProducerGapIsMeasuredForBothEntryPoints(t *testing.T) {
 	// Measured in enqueue rather than in Push/PushBytes so one site covers
 	// both — the same reason drops are counted in exactly one place.
-	s := NewScorer(&fakeInferer{}, 0.5, nil)
+	s := NewScorer(newFakeEngine(&fakeInferer{}), 0.5, nil)
 	defer s.Close()
 
 	s.Push(make([]int16, 1280))
@@ -479,7 +510,7 @@ func TestCrossingReportsTheThresholdItCleared(t *testing.T) {
 	var got []float32
 
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(_, threshold float32, _ time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(_, threshold float32, _ time.Time) {
 		mu.Lock()
 		got = append(got, threshold)
 		mu.Unlock()
@@ -537,7 +568,7 @@ func TestCrossingReportsTheThresholdItCleared(t *testing.T) {
 // on-device scoring active AND the model changed.
 func TestCloseDuringPushDoesNotPanic(t *testing.T) {
 	for i := 0; i < 50; i++ {
-		s := NewScorer(&fakeInferer{score: 0.1}, 0.5, func(float32, float32, time.Time) {})
+		s := NewScorer(newFakeEngine(&fakeInferer{score: 0.1}), 0.5, func(float32, float32, time.Time) {})
 
 		var wg sync.WaitGroup
 		wg.Add(1)
@@ -563,7 +594,7 @@ func TestBargeBarNeedsTwoConsecutiveFrames(t *testing.T) {
 	var mu sync.Mutex
 	var crosses int
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(float32, float32, time.Time) {
 		mu.Lock()
 		crosses++
 		mu.Unlock()
@@ -601,7 +632,7 @@ func TestNormalBarStillFiresOnOneFrame(t *testing.T) {
 	var mu sync.Mutex
 	var crosses int
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(float32, float32, time.Time) {
 		mu.Lock()
 		crosses++
 		mu.Unlock()
@@ -625,7 +656,7 @@ func TestNormalBarMinFramesNeedsConsecutiveFrames(t *testing.T) {
 	var mu sync.Mutex
 	var crosses int
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(float32, float32, time.Time) {
 		mu.Lock()
 		crosses++
 		mu.Unlock()
@@ -659,7 +690,7 @@ func TestNormalBarMinFramesCountsToN(t *testing.T) {
 	var mu sync.Mutex
 	var crosses int
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(float32, float32, time.Time) {
 		mu.Lock()
 		crosses++
 		mu.Unlock()
@@ -688,7 +719,7 @@ func TestNormalBarMinFramesCountsToN(t *testing.T) {
 func TestNormalBarMinFramesDatesFromTheFirstFrame(t *testing.T) {
 	got := make(chan time.Time, 1)
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(_, _ float32, at time.Time) { got <- at })
+	s := NewScorer(newFakeEngine(inf), 0.5, func(_, _ float32, at time.Time) { got <- at })
 	defer s.Close()
 	s.SetMinFrames(2)
 	inf.set(0.0, 0)
@@ -714,7 +745,7 @@ func TestMinFramesIsCapped(t *testing.T) {
 	var mu sync.Mutex
 	var crosses int
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(float32, float32, time.Time) {
 		mu.Lock()
 		crosses++
 		mu.Unlock()
@@ -739,7 +770,7 @@ func TestMinFramesDoesNotChangeTheBargeBar(t *testing.T) {
 	var mu sync.Mutex
 	var crosses int
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(float32, float32, time.Time) {
+	s := NewScorer(newFakeEngine(inf), 0.5, func(float32, float32, time.Time) {
 		mu.Lock()
 		crosses++
 		mu.Unlock()
@@ -766,7 +797,7 @@ func TestMinFramesDoesNotChangeTheBargeBar(t *testing.T) {
 func TestCrossingReportsCaptureTime(t *testing.T) {
 	got := make(chan time.Time, 1)
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(_, _ float32, at time.Time) { got <- at })
+	s := NewScorer(newFakeEngine(inf), 0.5, func(_, _ float32, at time.Time) { got <- at })
 	defer s.Close()
 	inf.set(0.0, 0)
 	pushAll(t, s, wakeword.FeatWindow+1)
@@ -790,7 +821,7 @@ func TestCrossingReportsCaptureTime(t *testing.T) {
 func TestBargeCrossingIsDatedFromItsFirstFrame(t *testing.T) {
 	got := make(chan time.Time, 1)
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, func(_, _ float32, at time.Time) { got <- at })
+	s := NewScorer(newFakeEngine(inf), 0.5, func(_, _ float32, at time.Time) { got <- at })
 	defer s.Close()
 	s.SetBargeThreshold(0.25, func() bool { return true })
 	inf.set(0.0, 0)
@@ -814,7 +845,7 @@ func TestBargeCrossingIsDatedFromItsFirstFrame(t *testing.T) {
 // for the barge watcher's "peak=" line.
 func TestBargeWindowReportsThePeakAtTheBargeBar(t *testing.T) {
 	inf := &fakeInferer{}
-	s := NewScorer(inf, 0.5, nil)
+	s := NewScorer(newFakeEngine(inf), 0.5, nil)
 	defer s.Close()
 	playing := false
 	var mu sync.Mutex
