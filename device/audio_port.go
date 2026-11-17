@@ -180,10 +180,25 @@ func (a *deviceAudio) musicSourceFor(client *sendspin.Client) *musicSource {
 	return a.musicSource
 }
 
+// monoSamples16 turns mono little-endian bytes into mono samples.
+//
+// The reply is handed to the speaker's voice path, which takes one channel
+// and lays it into both itself: it interpolates the reply up to the card's
+// own rate, and it knows what the reply should sound like at the speaker's
+// rate. Duplicating the samples here would put them in the wrong place in
+// the stream the speaker builds.
+func monoSamples16(pcm []byte) []int16 {
+	out := make([]int16, 0, len(pcm)/2)
+	for i := 0; i+1 < len(pcm); i += 2 {
+		out = append(out, int16(uint16(pcm[i])|uint16(pcm[i+1])<<8))
+	}
+	return out
+}
+
 // monoSamples turns mono little-endian bytes into interleaved stereo samples.
 //
-// The speaker takes interleaved stereo, and the reply, the test sound and
-// the media are all mono, so each sample is laid into both channels.
+// The speaker takes interleaved stereo, and the test sound and the media
+// are all mono, so each sample is laid into both channels.
 func monoSamples(pcm []byte) []int16 {
 	out := make([]int16, 0, len(pcm))
 	for i := 0; i+1 < len(pcm); i += 2 {
