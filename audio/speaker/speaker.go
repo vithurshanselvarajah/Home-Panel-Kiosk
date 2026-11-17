@@ -340,6 +340,21 @@ func (p *Player) Position() (written uint64, latency time.Duration) {
 	return r.written, max(left, 0) + OutputExtra
 }
 
+// Started says whether the speaker has written anything to the card yet.
+//
+// A placement that lays its anchor before the card has been written to
+// lays it against a position that does not exist: the card is at frame
+// zero and has no latency reading, so the anchor is the send-ahead alone
+// and the audio is a moment ahead of a card that has not started. The
+// drift correction then spends the first seconds of the track pulling it
+// back, which is the jitter at the start of a track.
+//
+// So the placement waits for the speaker to have started before it lays the
+// anchor.
+func (p *Player) Started() bool {
+	return p.ring.Load() != nil || p.written.Load() > 0
+}
+
 // stereoInternalSpeakers permits stereo only on athena after explicit opt-in.
 // Every board uses two-channel PCM, so channel count alone cannot decide.
 func stereoInternalSpeakers(board string, enabled bool) bool {
