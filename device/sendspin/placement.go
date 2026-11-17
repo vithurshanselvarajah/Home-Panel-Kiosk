@@ -135,6 +135,10 @@ type placement struct {
 	// has asked for.
 	gain, target float32
 
+	// logRaw says to log the placement, for working out where the audio
+	// goes.
+	logRaw bool
+
 	// chunks is how many chunks have arrived and samples how many frames
 	// they carried.
 	chunks  int
@@ -213,8 +217,15 @@ func (o *placement) write(at int64, samples []int16) {
 	}
 
 	frame := o.frameFor(at) + o.delay
+	if o.logRaw {
+		log.Printf("[sendspin] place frame=%d anchor=%d at=%d o.at=%d played=%d base=%d ahead=%d queued=%d",
+			frame, o.frame, at, o.at, o.played, o.base, frame-int64(o.played), len(o.pcm)/outChannels)
+	}
 	if frame > int64(o.played) && frame-int64(o.played) > holdMax {
 		o.dropped++
+		if o.logRaw {
+			log.Printf("[sendspin] DROPPED too far ahead: %d frames", frame-int64(o.played))
+		}
 		return
 	}
 
