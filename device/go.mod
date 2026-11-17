@@ -25,6 +25,7 @@ require (
 	github.com/mewpkg/term v0.0.0-20241026122259-37a80af23985 // indirect
 	github.com/miekg/dns v1.1.27 // indirect
 	github.com/pion/logging v0.2.3 // indirect
+	github.com/pion/opus v0.1.1-0.20261005072002-44637de087b3
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/rtcp v1.2.15 // indirect
 	github.com/pion/sdp/v3 v3.0.15 // indirect

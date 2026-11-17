@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -114,7 +113,6 @@ func New(cfg Config) (*Client, error) {
 		requiredLeadMs:   int(cfg.RequiredLeadTime.Milliseconds()),
 	}
 	c.place = newPlacement(newTimeFilter())
-	c.place.logRaw = os.Getenv("HOME_PANEL_SENDSPIN_RAW") != ""
 
 	set := st.settings()
 	c.place.setGain(c.gainVolume(set.Volume), set.Muted)
@@ -583,6 +581,20 @@ func (c *Client) SyncDiag() (SyncDiag, bool) {
 	return s.filter.takeDiag(), true
 }
 
+// offeredFormats is what the device can play.
+//
+// The order matters: the server takes the first it can. FLAC leads because
+// it is the only lossless one this radio can afford; Opus is the fallback
+// that always arrives at 48 kHz whatever the source was; and PCM is the
+// plain one.
+func offeredFormats() []audioFormat {
+	return []audioFormat{
+		{Codec: "flac", Channels: outChannels, SampleRate: outRate, BitDepth: outBits},
+		{Codec: "opus", Channels: outChannels, SampleRate: outRate, BitDepth: outBits},
+		{Codec: "pcm", Channels: outChannels, SampleRate: outRate, BitDepth: outBits},
+	}
+}
+
 func (c *Client) hello() clientHello {
 	return clientHello{
 		Name:           c.cfg.Name,
@@ -593,8 +605,17 @@ func (c *Client) hello() clientHello {
 			SoftwareVersion: c.cfg.Version,
 		},
 		PlayerSupport: &playerSupport{
-			SupportedFormats: []audioFormat{{Codec: "flac", Channels: outChannels, SampleRate: outRate, BitDepth: outBits}},
-			BufferCapacity:   bufferCapacity,
+			// FLAC leads because it is the only lossless one this radio can
+			// afford. Opus is the fallback that always arrives at 48 kHz
+			// whatever the source was, and PCM is the plain one.
+			//
+			// The order matters: the server takes the first it can.
+			SupportedFormats: []audioFormat{
+				{Codec: "flac", Channels: outChannels, SampleRate: outRate, BitDepth: outBits},
+				{Codec: "opus", Channels: outChannels, SampleRate: outRate, BitDepth: outBits},
+				{Codec: "pcm", Channels: outChannels, SampleRate: outRate, BitDepth: outBits},
+			},
+			BufferCapacity: bufferCapacity,
 		},
 		SupportedPairMethods: pairMethods{
 			PairingPSK: &pairMethod{Locations: []string{"home_assistant"}},
