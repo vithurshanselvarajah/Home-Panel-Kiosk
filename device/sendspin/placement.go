@@ -126,6 +126,19 @@ type placement struct {
 	// filter maps the server's clock onto ours.
 	filter *timeFilter
 
+	// attach and detach are how the placement takes the speaker and gives
+	// it back.
+	//
+	// The placement attaches itself when it is opened and detaches when it
+	// is closed, rather than leaving it to a timer elsewhere to notice
+	// that there is audio. A timer decides on what it can see at the
+	// moment it looks, and the queue is empty between two chunks and
+	// after a clear: a source detached because the queue was empty is
+	// never attached again, because the queue stays empty while nothing
+	// is pulling from it.
+	attach func()
+	detach func()
+
 	// position is the speaker's own frame counter and latency.
 	position func() (uint64, time.Duration)
 	// latency is how long until a frame written now is heard.
@@ -151,6 +164,17 @@ type placement struct {
 	playedFrames  int64
 	late          int64
 	dropped       int64
+}
+
+// SetAttach tells the placement how to take the speaker and how to give it
+// back.
+//
+// The placement attaches itself when it is opened and detaches when it is
+// closed. See the fields for why.
+func (o *placement) SetAttach(attach, detach func()) {
+	o.mu.Lock()
+	o.attach, o.detach = attach, detach
+	o.mu.Unlock()
 }
 
 // newPlacement makes the placement for a session's clock.
@@ -183,6 +207,29 @@ func (o *placement) close() {
 	// held, silent for as long as it played.
 	o.held = false
 	o.reset()
+	detach := o.detach
+	o.mu.Unlock()
+	if detach != nil {
+		detach()
+	}
+}
+
+// openAgain is what a stream that starts after one that ended does.
+//
+// The placement stays open across the end of a stream: the server ends the
+// stream on a pause and resumes the same one, and the audio has to be
+// placed again when it does. So what is released is the hold, and the
+// anchor with it, and not the placement itself.
+func (o *placement) openAgain() {
+	o.mu.Lock()
+	o.ready = true
+	o.held = false
+	o.reset()
+	attach := o.attach
+	o.mu.Unlock()
+	if attach != nil {
+		attach()
+	}
 }
 
 // write places a decoded chunk at the frame its timestamp asks for.
@@ -191,6 +238,13 @@ func (o *placement) write(at int64, samples []int16) {
 	defer o.mu.Unlock()
 
 	if !o.ready {
+		o.dropped++
+		return
+	}
+	if o.held {
+		// The audio is held: the server keeps sending, and what it sends
+		// belongs to a timeline the panel is not playing. It is dropped,
+		// so that a play starts from the server's now.
 		o.dropped++
 		return
 	}
@@ -522,6 +576,35 @@ func (o *placement) Suspend() {
 func (o *placement) Resume() {
 	o.mu.Lock()
 	o.held = false
+	o.mu.Unlock()
+}
+
+// Held says whether the audio is held.
+func (o *placement) Held() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.held
+}
+
+// hold stops the audio, or starts it again.
+//
+// What is queued is dropped and the anchor with it: a pause means the
+// timeline is about to change, and what was queued belongs to the
+// timeline before it. The next chunk lays a new anchor against the card.
+//
+// Holding does not let go of the stream: the server keeps sending, and the
+// chunks that arrive while the audio is held are dropped rather than
+// queued, so that a play starts from the server's now rather than from
+// where the audio was left.
+func (o *placement) hold(paused bool) {
+	o.mu.Lock()
+	o.held = paused
+	if paused {
+		o.pcm = o.pcm[:0]
+		o.base = 0
+		o.anchored = false
+		o.drift = 0
+	}
 	o.mu.Unlock()
 }
 
