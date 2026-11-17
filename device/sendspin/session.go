@@ -201,6 +201,9 @@ func (s *session) dispatch(env envelope) error {
 		var r streamRoles
 		json.Unmarshal(env.Payload, &r)
 		if r.covers("player") && s.isAdmitted() {
+			if s.c.place.logRaw {
+				log.Printf("[sendspin] stream/clear")
+			}
 			s.c.place.flush()
 		}
 	case "stream/end":
@@ -545,6 +548,17 @@ func (s *session) onStreamStart(f streamFormat) {
 	s.dec, s.streaming = d, true
 	log.Printf("[sendspin] stream: %s %dHz %dch", f.Codec, f.SampleRate, f.Channels)
 	s.c.changed()
+}
+
+// playing says whether the server is playing and the audio is coming.
+//
+// It is not whether the queue happens to have audio in it: the queue is
+// empty between two chunks and after a clear, and the speaker's source is
+// attached on this answer.
+func (s *session) playing() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.streaming && s.dec != nil
 }
 
 func (s *session) endStream() {

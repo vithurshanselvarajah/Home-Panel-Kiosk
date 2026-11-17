@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -112,6 +113,7 @@ func New(cfg Config) (*Client, error) {
 		requiredLeadMs:   int(cfg.RequiredLeadTime.Milliseconds()),
 	}
 	c.place = newPlacement(newTimeFilter())
+	c.place.logRaw = os.Getenv("HOME_PANEL_SENDSPIN_RAW") != ""
 
 	set := st.settings()
 	c.place.setGain(c.gainVolume(set.Volume), set.Muted)
@@ -479,6 +481,9 @@ func (c *Client) transport(cmd *controllerCommand) bool {
 	if s == nil {
 		return false
 	}
+	if c.place.logRaw {
+		log.Printf("[sendspin] transport %q", cmd.Command)
+	}
 	return s.send("client/command", clientCommand{Controller: cmd}) == nil
 }
 
@@ -512,9 +517,23 @@ func (c *Client) Render(from uint64, out []int16) {
 	c.place.Render(from, out)
 }
 
-// Active reports whether Sendspin has audio queued: the speaker's cue that
-// the music plane is taken.
-func (c *Client) Active() bool { return c.place.queuedMs() > 0 }
+// Active reports whether the music plane is taken: whether the server is
+// playing and there is audio coming.
+//
+// It is not whether the queue happens to have audio in it right now. The
+// queue is empty between two chunks, and after a clear, and the speaker's
+// source is attached and detached on this answer: a source detached because
+// the queue was momentarily empty is never attached again, because the
+// queue stays empty while nothing is pulling from it.
+func (c *Client) Active() bool {
+	c.mu.Lock()
+	s := c.admitted
+	c.mu.Unlock()
+	if s == nil {
+		return false
+	}
+	return s.playing()
+}
 
 // Buffered is how much audio is queued and not yet played.
 func (c *Client) Buffered() time.Duration {
