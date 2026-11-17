@@ -55,6 +55,14 @@ const holdMax = 60 * outRate
 //
 // maxSnap is the largest correction that can be one, above which the anchor
 // predates a change of clock rather than having drifted.
+// heldChunk is a chunk that arrived before the anchor could be laid.
+type heldChunk struct {
+	// at is the chunk's server timestamp.
+	at int64
+	// samples are its frames, interleaved stereo.
+	samples []int16
+}
+
 // maxDelayMs is the longest a room may be held back, in milliseconds.
 const maxDelayMs = 1000
 
@@ -157,6 +165,11 @@ type placement struct {
 
 	// position is the speaker's own frame counter and latency.
 	position func() (uint64, time.Duration)
+	// started says whether the speaker has written to the card yet. The
+	// anchor is not laid before it has: a card that has written nothing
+	// has no position, and an anchor laid against no position is the
+	// send-ahead alone.
+	started func() bool
 	// latency is how long until a frame written now is heard.
 	latency func() time.Duration
 
@@ -168,6 +181,10 @@ type placement struct {
 	// they carried.
 	chunks  int
 	samples int64
+	// pending is what arrived before the anchor could be laid: each
+	// chunk's timestamp and its samples, held until the speaker has
+	// started.
+	pending []heldChunk
 	// rms is how loud the last period handed over was.
 	rms float64
 	// playedPeriods is how many periods were filled and playedFrames how
@@ -291,6 +308,26 @@ func (o *placement) write(at int64, samples []int16) {
 	}
 
 	frame := o.frameFor(at) + o.delay
+	if !o.anchored {
+		// The anchor is not laid yet: the speaker has not started. The
+		// chunk is held rather than dropped, because the anchor will be
+		// laid against the card and this chunk is the first of the
+		// stream.
+		o.pending = append(o.pending, heldChunk{at: at, samples: samples})
+		return
+	}
+	// The chunks that arrived before the speaker started are placed now,
+	// against the anchor that has just been laid.
+	if len(o.pending) > 0 {
+		held := o.pending
+		o.pending = nil
+		o.mu.Unlock()
+		for _, c := range held {
+			o.write(c.at, c.samples)
+		}
+		o.mu.Lock()
+		frame = o.frameFor(at) + o.delay
+	}
 	if frame > int64(o.played) && frame-int64(o.played) > holdMax {
 		o.dropped++
 		return
@@ -339,6 +376,17 @@ func (o *placement) frameFor(at int64) int64 {
 	// intended moment falls. It has to be the real latency rather than a
 	// margin: a room next to one that measures its own is only in step if
 	// both mean the same moment by "play at".
+	// The anchor waits for the speaker.
+	//
+	// A speaker that has not written to the card has no position and no
+	// latency reading, so an anchor laid against it is the send-ahead
+	// alone: the audio is a moment ahead of a card that has not started,
+	// and the drift correction spends the first seconds of the track
+	// pulling it back. That is the jitter at the start of a track.
+	if o.started != nil && !o.started() {
+		return o.frame
+	}
+
 	written, latency := o.position()
 	ahead := time.Until(o.serverToLocal(at)) - latency
 	// The offset is clamped at zero: the audio the server sends may
