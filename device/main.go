@@ -752,7 +752,7 @@ func main() {
 			"frames", status.Player.Frames, "leadUs", status.Player.LeadUs,
 			"spanUs", status.Player.SpanUs, "headAgeUs", status.Player.HeadAgeUs,
 			"tailAgeUs", status.Player.TailAgeUs, "offsetUs", status.Player.OffsetUs,
-			"driftPpm", status.Player.DriftPpm,
+			"driftPpm", status.Player.DriftPpm, "rms", status.Player.RMS,
 			"speed", status.Metadata.Speed, "title", status.Metadata.Title)
 		// A music server that starts playing takes the turn from Home
 		// Assistant's music.
