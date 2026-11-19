@@ -257,12 +257,7 @@ async function main(argv) {
   }
 
   const wanted = args.filter((argument) => !argument.startsWith("--"));
-  const architectures =
-    wanted.length === 0
-      ? [hostArchitecture()]
-      : wanted.includes("all")
-        ? Object.keys(ARCHITECTURES)
-        : wanted;
+  const architectures = architecturesToFetch(wanted);
 
   for (const architecture of architectures) {
     await ensureRuntime(architecture);
@@ -271,6 +266,23 @@ async function main(argv) {
   // A workflow that runs the tests needs the flags to link against the
   // runtime, so they are written where the workflow can pick them up.
   writeOutput("ldflags", ldflags(hostArchitecture()));
+}
+
+/**
+ * The architectures to fetch.
+ *
+ * No argument means the machine this is running on. "all" means every
+ * architecture the device program is built for. Anything else is taken as
+ * the architectures named.
+ */
+function architecturesToFetch(wanted) {
+  if (wanted.length === 0) {
+    return [hostArchitecture()];
+  }
+  if (wanted.includes("all")) {
+    return Object.keys(ARCHITECTURES);
+  }
+  return wanted;
 }
 
 /**
