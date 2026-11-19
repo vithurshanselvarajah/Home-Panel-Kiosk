@@ -161,6 +161,33 @@ npm start
 
 Settings live in Electron's per-user application data directory. Use `npm run make -- --arch=arm64` or `--arch=x64` to create a Linux package.
 
+### The Go tests
+
+The device program and the audio library are Go, and each is its own
+module with its own tests:
+
+```sh
+(cd device && go test ./...)
+(cd audio && go test ./...)
+```
+
+Both build without the ONNX Runtime, which is the C library the wake word
+is scored with. The binding is behind the `onnxruntime` build tag, so the
+default build has no local wake word in it and the tests that need the
+runtime are skipped.
+
+To test the wake word binding itself, the runtime has to be fetched and
+the tag has to be on:
+
+```sh
+node tools/fetch-onnxruntime.js
+(cd device && CGO_LDFLAGS="$(node tools/fetch-onnxruntime.js --ldflags)" \
+  go test -tags onnxruntime ./...)
+```
+
+The runtime is cached in `~/.cache/home-panel/onnxruntime`, so it is
+fetched once.
+
 ### Running against a Home Assistant server
 
 The panel is a voice satellite to Home Assistant, and it finds Home

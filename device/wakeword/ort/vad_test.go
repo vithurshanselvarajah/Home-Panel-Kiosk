@@ -15,10 +15,7 @@ func TestVADMatchesPython(t *testing.T) {
 	if lib == "" || path == "" {
 		t.Skip("set EM_ORT_LIB and EM_VAD_MODEL to run the VAD test")
 	}
-	rt, err := ort.Open(lib)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := openRuntime(t, lib)
 	v, err := rt.NewVAD(path, ort.DefaultOptions())
 	if err != nil {
 		t.Fatal(err)

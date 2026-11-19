@@ -12,6 +12,21 @@ import (
 	"github.com/vithurshanselvarajah/Home-Panel-Kiosk/device/wakeword/ort"
 )
 
+// openRuntime opens the runtime, or skips the test.
+//
+// The binding needs the ONNX Runtime, so a build without it has nothing to
+// open. The tests that need the runtime are skipped rather than failed:
+// the build without the runtime is the one that cross compiles, and it is
+// checked in CI too.
+func openRuntime(t *testing.T, lib string) *ort.Runtime {
+	t.Helper()
+	rt, err := ort.Open(lib)
+	if err != nil {
+		t.Skipf("the onnx runtime is not in this build: %v", err)
+	}
+	return rt
+}
+
 func models(t *testing.T) (lib string, m ort.Models) {
 	t.Helper()
 	dir := os.Getenv("EM_OWW_MODELS")
@@ -54,10 +69,7 @@ func loadFixture(t *testing.T) *fixture.ORT {
 func newInferer(t *testing.T) *ort.Inferer {
 	t.Helper()
 	lib, m := models(t)
-	rt, err := ort.Open(lib)
-	if err != nil {
-		t.Fatalf("Open(%s): %v", lib, err)
-	}
+	rt := openRuntime(t, lib)
 	t.Logf("onnxruntime %s", rt.Version())
 	inf, err := rt.NewInferer(m, ort.DefaultOptions())
 	if err != nil {
@@ -162,10 +174,7 @@ func TestRejectsWrongTensorSizes(t *testing.T) {
 
 func TestUseAfterCloseFails(t *testing.T) {
 	lib, m := models(t)
-	rt, err := ort.Open(lib)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	rt := openRuntime(t, lib)
 	inf, err := rt.NewInferer(m, ort.DefaultOptions())
 	if err != nil {
 		t.Fatalf("NewInferer: %v", err)
@@ -185,14 +194,8 @@ func TestUseAfterCloseFails(t *testing.T) {
 }
 
 func TestOpenTwiceReturnsTheSameRuntime(t *testing.T) {
-	first, err := ort.Open("onnxruntime")
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	second, err := ort.Open("onnxruntime")
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	first := openRuntime(t, "onnxruntime")
+	second := openRuntime(t, "onnxruntime")
 	if first != second {
 		t.Error("opening the same runtime twice gave two runtimes")
 	}
@@ -200,10 +203,7 @@ func TestOpenTwiceReturnsTheSameRuntime(t *testing.T) {
 
 func TestThreadsMustBePositive(t *testing.T) {
 	lib, m := models(t)
-	rt, err := ort.Open(lib)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+	rt := openRuntime(t, lib)
 	o := ort.DefaultOptions()
 	o.Threads = 0
 	if _, err := rt.NewInferer(m, o); err == nil {
@@ -245,10 +245,7 @@ func TestStreamStepsEqualStockWindows(t *testing.T) {
 
 func TestAStreamModelThatIsNotOneIsRefused(t *testing.T) {
 	lib, m := models(t)
-	rt, err := ort.Open(lib)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := openRuntime(t, lib)
 	for _, wrong := range []string{m.Embedding, m.Classifier, filepath.Join(t.TempDir(), "absent.onnx")} {
 		m.EmbeddingStream = wrong
 		inf, err := rt.NewInferer(m, ort.DefaultOptions())
@@ -274,10 +271,7 @@ func TestAWrongStreamModelFailsTheSelfCheck(t *testing.T) {
 	if wrong == "" {
 		t.Skip("set EM_OWW_STREAM_WRONG to a perturbed streaming model")
 	}
-	rt, err := ort.Open(lib)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rt := openRuntime(t, lib)
 	m.EmbeddingStream = wrong
 	inf, err := rt.NewInferer(m, ort.DefaultOptions())
 	if err != nil {

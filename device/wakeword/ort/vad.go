@@ -1,3 +1,5 @@
+//go:build onnxruntime
+
 package ort
 
 /*

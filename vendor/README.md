@@ -44,6 +44,13 @@ so a device that has the binary has the wake word: there is nothing to
 install on the device and nothing that can be missing. The runtime is
 cached in `~/.cache/home-panel/onnxruntime`, so it is fetched once.
 
+The runtime comes from the ONNX Runtime project's own PyPI package, which
+carries the same shared object as the project's release tarballs did. The
+GitHub releases it used to come from are gone: `microsoft/onnxruntime`
+answers 404, and so does every release asset URL under it, so those
+tarballs cannot be downloaded any more. The library is pinned by the
+SHA-256 of the shared object, which is checked on every fetch.
+
 CGO is on, because the ONNX Runtime is a C library. The arm64 build uses
 the `aarch64-linux-gnu-gcc` cross-compiler, so it needs one:
 

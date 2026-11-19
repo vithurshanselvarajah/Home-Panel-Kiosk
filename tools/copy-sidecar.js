@@ -1,7 +1,8 @@
 
 
+const { libraryDirectory } = require("./fetch-onnxruntime");
+
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
@@ -17,10 +18,6 @@ const BINARY_NAMES = {
 const ARCHITECTURES = ["x64", "arm64"];
 
 const RUNTIME_PACKAGE_NAME = "libonnxruntime.so.1";
-
-const RUNTIME_CACHE = path.join(
-  require("node:os").homedir(), ".cache", "home-panel", "onnxruntime"
-);
 
 function copySidecar(outputPath) {
   const architecture = ARCHITECTURES.find((name) => outputPath.endsWith(`-linux-${name}`));
@@ -58,23 +55,16 @@ function copySidecar(outputPath) {
 function findRuntime(architecture) {
   const goarch = architecture === "x64" ? "amd64" : "arm64";
 
-  const built = path.join(
-    VENDOR_DIRECTORY, goarch, RUNTIME_PACKAGE_NAME
-  );
+  // The runtime the build put beside the binary is the one that goes in the
+  // package: it is the one the binary was linked against.
+  const built = path.join(VENDOR_DIRECTORY, goarch, RUNTIME_PACKAGE_NAME);
   if (fs.existsSync(built)) return built;
 
-  const release = architecture === "x64" ? "onnxruntime-linux-x64" : "onnxruntime-linux-aarch64";
-  if (!fs.existsSync(RUNTIME_CACHE)) return null;
-  for (const entry of fs.readdirSync(RUNTIME_CACHE)) {
-    if (!entry.startsWith(release)) continue;
-    const libraryDirectory = path.join(RUNTIME_CACHE, entry, "lib");
-    if (!fs.existsSync(libraryDirectory)) continue;
-    for (const file of fs.readdirSync(libraryDirectory)) {
-      if (file.startsWith("libonnxruntime.so.1")) {
-        return path.join(libraryDirectory, file);
-      }
-    }
-  }
+  // Otherwise it is the one that was fetched. The fetch tool knows where
+  // that is and what it is called.
+  const cached = path.join(libraryDirectory(goarch), RUNTIME_PACKAGE_NAME);
+  if (fs.existsSync(cached)) return cached;
+
   return null;
 }
 

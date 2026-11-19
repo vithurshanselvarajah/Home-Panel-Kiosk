@@ -47,6 +47,26 @@ jobs:
         run: go test ./...
         working-directory: audio
 
+  go-tests-with-runtime:
+    name: Go tests with the wake word runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.27"
+          cache-dependency-path: device/go.sum
+      - name: Fetch the ONNX Runtime
+        id: runtime
+        run: node tools/fetch-onnxruntime.js
+      - name: Run the device program tests
+        run: go test -tags onnxruntime ./...
+        working-directory: device
+        env:
+          CGO_LDFLAGS: ${{ steps.runtime.outputs.ldflags }}
+
   codeql:
     name: CodeQL
     runs-on: ubuntu-latest
